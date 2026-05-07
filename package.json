@@ -1,0 +1,16 @@
+{
+  "name": "@zhimma/grove",
+  "private": true,
+  "scripts": {
+    "dev:admin": "pnpm --dir web/admin-vben dev:console",
+    "build:admin": "pnpm --dir web/admin-vben build:console",
+    "typecheck:admin": "pnpm --dir web/admin-vben --filter @grove/console typecheck",
+    "install:admin-vben": "pnpm --dir web/admin-vben install --no-frozen-lockfile",
+    "dev:console-vben": "pnpm --dir web/admin-vben dev:console",
+    "dev:admin-vben": "pnpm --dir web/admin-vben dev:console",
+    "build:console-vben": "pnpm --dir web/admin-vben build:console",
+    "build:admin-vben": "pnpm --dir web/admin-vben build:console",
+    "typecheck:console-vben": "pnpm --dir web/admin-vben --filter @grove/console typecheck",
+    "typecheck:admin-vben": "pnpm --dir web/admin-vben --filter @grove/console typecheck"
+  }
+}

@@ -1,0 +1,132 @@
+app:
+  name: ${APP_NAME:grove}
+  env: ${APP_ENV:development}
+
+port: ${APP_PORT:8080}
+console_port: ${CONSOLE_PORT:8081}
+
+server:
+  shutdown_timeout: ${SERVER_SHUTDOWN_TIMEOUT:30}
+  read_timeout: ${SERVER_READ_TIMEOUT:30}
+  write_timeout: ${SERVER_WRITE_TIMEOUT:30}
+  max_header_bytes: ${SERVER_MAX_HEADER_BYTES:1048576}
+
+log:
+  level: ${LOG_LEVEL:info}
+  path: ${LOG_PATH:./logs}
+  console: ${LOG_CONSOLE:true}
+  service: ${LOG_SERVICE:grove}
+
+databases:
+  default:
+    enabled: ${DB_ENABLED:false}
+    driver: ${DB_DRIVER:postgres}
+    host: ${DB_HOST:127.0.0.1}
+    port: ${DB_PORT:5432}
+    user: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    dbname: ${DB_NAME:golang_web}
+    ssl_mode: ${DB_SSLMODE:disable}
+    max_connections: ${DB_MAX_CONNECTIONS:20}
+    max_idle_conns: ${DB_MAX_IDLE_CONNS:10}
+    conn_max_lifetime: ${DB_CONN_MAX_LIFETIME:3600}
+  resources: {}
+
+redis:
+  enabled: ${REDIS_ENABLED:false}
+  addr: ${REDIS_ADDR:127.0.0.1:6379}
+  password: ${REDIS_PASSWORD:}
+  db: ${REDIS_DB:0}
+
+jwt:
+  secret: ${JWT_SECRET:change-me}
+  issuer: ${JWT_ISSUER:grove}
+  access_expiry_hours: ${JWT_ACCESS_EXPIRY_HOURS:24}
+  refresh_expiry_hours: ${JWT_REFRESH_EXPIRY_HOURS:168}
+
+job:
+  enabled: ${WORKER_ENABLED:false}
+  concurrency: ${JOB_CONCURRENCY:10}
+  queues:
+    default: ${JOB_QUEUE_DEFAULT:5}
+    critical: ${JOB_QUEUE_CRITICAL:3}
+    low: ${JOB_QUEUE_LOW:1}
+
+casbin:
+  enforcers:
+    api:
+      enabled: ${CASBIN_API_ENABLED:false}
+      database: ${CASBIN_API_DATABASE:default}
+      mode: ${CASBIN_API_MODE:rbac}
+      table_name: ${CASBIN_API_TABLE:casbin_rules}
+    console:
+      enabled: ${CASBIN_CONSOLE_ENABLED:false}
+      database: ${CASBIN_CONSOLE_DATABASE:default}
+      mode: ${CASBIN_CONSOLE_MODE:rbac}
+      table_name: ${CASBIN_CONSOLE_TABLE:console_casbin_rules}
+
+storage:
+  default: ${STORAGE_DEFAULT:local}
+  disks:
+    local:
+      driver: ${STORAGE_LOCAL_DRIVER:local}
+      root: ${STORAGE_LOCAL_ROOT:./storage}
+      base_url: ${STORAGE_LOCAL_BASE_URL:/storage}
+      prefix: ${STORAGE_LOCAL_PREFIX:console}
+    s3:
+      driver: ${STORAGE_S3_DRIVER:s3}
+      endpoint: ${STORAGE_S3_ENDPOINT:s3.ap-southeast-1.amazonaws.com}
+      region: ${STORAGE_S3_REGION:ap-southeast-1}
+      bucket: ${STORAGE_S3_BUCKET:demo-bucket}
+      access_key: ${STORAGE_S3_ACCESS_KEY:}
+      secret_key: ${STORAGE_S3_SECRET_KEY:}
+      secure: ${STORAGE_S3_SECURE:true}
+      base_url: ${STORAGE_S3_BASE_URL:}
+      prefix: ${STORAGE_S3_PREFIX:console}
+      sts:
+        enabled: ${STORAGE_STS_ENABLED:false}
+        endpoint: ${STORAGE_STS_ENDPOINT:}
+        region: ${STORAGE_STS_REGION:ap-southeast-1}
+        role_arn: ${STORAGE_STS_ROLE_ARN:}
+        role_session_name: ${STORAGE_STS_ROLE_SESSION_NAME:grove-console}
+        duration: ${STORAGE_STS_DURATION:3600}
+        allow_prefix:
+          - ${STORAGE_STS_ALLOW_PREFIX:console/${user_id}}
+        allow_actions:
+          - ${STORAGE_STS_ALLOW_ACTION_1:s3:PutObject}
+          - ${STORAGE_STS_ALLOW_ACTION_2:s3:GetObject}
+          - ${STORAGE_STS_ALLOW_ACTION_3:s3:AbortMultipartUpload}
+          - ${STORAGE_STS_ALLOW_ACTION_4:s3:ListBucketMultipartUploads}
+          - ${STORAGE_STS_ALLOW_ACTION_5:s3:ListMultipartUploadParts}
+
+docs:
+  enabled: ${DOCS_ENABLED:true}
+  title: ${DOCS_TITLE:Grove API}
+  description: ${DOCS_DESCRIPTION:API framework scaffold for interface-driven services}
+  version: ${DOCS_VERSION:1.0.0}
+  base_path: ${DOCS_BASE_PATH:/api/v1}
+  schemes:
+    - ${DOCS_SCHEME_1:http}
+
+cors:
+  enabled: ${CORS_ENABLED:true}
+  allowed_origins:
+    - ${CORS_ALLOWED_ORIGIN_1:*}
+  allowed_methods:
+    - ${CORS_ALLOWED_METHOD_1:GET}
+    - ${CORS_ALLOWED_METHOD_2:POST}
+    - ${CORS_ALLOWED_METHOD_3:PUT}
+    - ${CORS_ALLOWED_METHOD_4:PATCH}
+    - ${CORS_ALLOWED_METHOD_5:DELETE}
+    - ${CORS_ALLOWED_METHOD_6:OPTIONS}
+  allowed_headers:
+    - ${CORS_ALLOWED_HEADER_1:Authorization}
+    - ${CORS_ALLOWED_HEADER_2:Content-Type}
+    - ${CORS_ALLOWED_HEADER_3:X-Request-Id}
+  allow_credentials: ${CORS_ALLOW_CREDENTIALS:false}
+  max_age: ${CORS_MAX_AGE:600}
+
+api:
+  prefix: ${API_PREFIX:/api/v1}
+  default_per_page: ${API_DEFAULT_PER_PAGE:20}
+  max_per_page: ${API_MAX_PER_PAGE:100}
