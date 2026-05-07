@@ -1,6 +1,6 @@
 # Console 新增模块指南
 
-本文档说明：如果你要在当前基础框架里给 `console` 新增一个业务模块，推荐的最小路径是什么。
+本文档说明在 `console` 中新增业务模块的最小实施路径。
 
 示例场景：
 
@@ -17,8 +17,7 @@
 3. service
 4. 前端页面与菜单
 
-如果只是补一个操作接口，不一定需要新增页面。  
-如果只是补一个页面，也不一定需要新增完整 CRUD。
+补充操作接口时不一定需要新增页面；补充页面时也不一定需要完整 CRUD。
 
 ## 2. 后端推荐步骤
 
@@ -75,7 +74,7 @@ articles.DELETE("/:id", h.Delete).Name("内容管理.删除文章")
 
 ### 3.1 API 权限
 
-不需要手工同步，也不需要写 catalog 表。
+无需手工同步权限清单，也无需维护 catalog 表。
 
 只要路由满足：
 
@@ -86,9 +85,9 @@ articles.DELETE("/:id", h.Delete).Name("内容管理.删除文章")
 
 ### 3.2 展示名
 
-推荐总是补 `.Name("模块.动作")`。
+建议为受保护接口补充 `.Name("模块.动作")`。
 
-这样角色授权页里会看到清晰的中文文案，而不是 fallback 文案。
+角色授权页会优先展示该文案。
 
 ### 3.3 按钮权限
 
@@ -100,7 +99,7 @@ permissionStore.hasApiPermission('PUT', '/console/v1/articles/:id')
 permissionStore.hasApiPermission('DELETE', '/console/v1/articles/:id')
 ```
 
-不要再写旧的字符串权限，例如：
+不要使用旧式字符串权限，例如：
 
 ```ts
 console.articles.post
@@ -141,7 +140,7 @@ web/admin-vben/apps/console/src/router/routes/modules/
 
 前端路由 `name` 就是菜单权限 key。
 
-所以要注意：
+约束如下：
 
 - `name` 要稳定
 - 改 `path` 问题不大
@@ -157,13 +156,13 @@ web/admin-vben/apps/console/src/router/routes/modules/
 GET /console/v1/permissions/apis
 ```
 
-角色页会自动看到它。
+角色授权页会自动展示该接口权限项。
 
 ### 菜单权限部分
 
 只要你把新页面加进本地路由树，角色页菜单树也会自动看到它。
 
-不需要菜单同步。
+无需菜单同步。
 
 ## 6. 数据库与迁移
 
@@ -180,7 +179,7 @@ go run ./cmd/artisan/main.go migrate create create_articles_table
 go run ./cmd/artisan/main.go make:model Article
 ```
 
-如果只是业务代码，不一定每次都需要用脚手架生成。
+仅补充业务代码时不要求每次都使用脚手架。
 
 ## 7. 测试建议
 
@@ -200,7 +199,7 @@ go run ./cmd/artisan/main.go make:model Article
 
 ## 8. 一套最小新增清单
 
-如果你只是新增一个标准 CRUD 模块，通常需要：
+标准 CRUD 模块通常包含以下内容：
 
 1. migration
 2. model
@@ -240,7 +239,7 @@ go run ./cmd/artisan/main.go make:model Article
 
 ## 10. 当前建议
 
-如果你给当前框架新增 `console` 模块，请优先遵守这三个约定：
+新增 `console` 模块时，应优先遵守以下约定：
 
 1. API 权限只认 `METHOD + path`
 2. 菜单权限只认前端路由 `name`

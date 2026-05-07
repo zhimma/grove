@@ -1,6 +1,6 @@
 # Grove 文档
 
-Grove 是一个面向现代全栈 Go 应用的 monorepo Web 框架，当前主线是 `console-first` 管理后台模板。
+Grove 文档分为总览、规范、指南和部署测试说明四类。
 
 ## 推荐阅读顺序
 
@@ -12,7 +12,14 @@ Grove 是一个面向现代全栈 Go 应用的 monorepo Web 框架，当前主�
 - [响应与错误处理规范](04-响应与错误处理规范.md)
 - [部署指南](deployment/deploy.md)
 
-## 指南
+## 开发规范
+
+- [开发规范](01-开发规范.md)
+- [Console 架构与权限](02-console-架构与权限.md)
+- [Console 新增模块指南](03-console-新增模块指南.md)
+- [响应与错误处理规范](04-响应与错误处理规范.md)
+
+## 使用指南
 
 - [项目结构](guide/structure.md)
 - [快速上手](guide/quickstart.md)
@@ -28,12 +35,8 @@ Grove 是一个面向现代全栈 Go 应用的 monorepo Web 框架，当前主�
 - [计划任务](guide/scheduler.md)
 - [HTTP 客户端](guide/httpclient.md)
 
-## 模板约定
+## 部署与测试
 
-- `app/console` 是当前最完整的业务模板。
-- `app/api` 保持对外 API 示例定位。
-- `cmd/artisan` 是唯一保留的 CLI 入口。
-- 优先使用 `go run ./cmd/artisan/main.go about` 查看当前框架约定。
-- 默认验收命令是 `make verify`。
-- 管理后台菜单来自前端本地路由，后端不做菜单同步。
-- 运行时日志统一使用 `pkg/logger`，底层基于 zerolog，日志文案尽量使用中文。
+- [部署指南](deployment/deploy.md)
+- [错误处理实践](development/error-handling.md)
+- [测试策略](development/testing.md)
