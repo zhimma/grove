@@ -17,14 +17,14 @@ type RoleHandler struct {
 type ListRolesRequest struct {
 	Page        int      `form:"page" binding:"omitempty,min=1" label:"页码"`
 	PageSize    int      `form:"page_size" binding:"omitempty,min=1,max=100" label:"每页条数"`
-	Offset      int      `form:"offset"`
-	Limit       int      `form:"limit"`
-	ListAll     bool     `form:"list_all"`
+	Offset      int      `form:"offset" label:"偏移量"`
+	Limit       int      `form:"limit" label:"限制条数"`
+	ListAll     bool     `form:"list_all" label:"是否返回全部"`
 	Keyword     string   `form:"keyword" label:"关键词"`
-	OrderBy     []string `form:"order_by"`
+	OrderBy     []string `form:"order_by" label:"排序字段"`
 	Status      *int     `form:"status" label:"状态"`
-	CreatedFrom string   `form:"created_from"`
-	CreatedTo   string   `form:"created_to"`
+	CreatedFrom string   `form:"created_from" label:"创建开始时间"`
+	CreatedTo   string   `form:"created_to" label:"创建结束时间"`
 }
 
 type ListRolesResponse struct {
@@ -69,12 +69,12 @@ type CreateRoleRequest struct {
 }
 
 type UpdateRoleRequest struct {
-	Name        *string `json:"name"`
-	Code        *string `json:"code"`
-	DisplayName *string `json:"display_name"`
-	Description *string `json:"description"`
-	Status      *int    `json:"status"`
-	Sort        *int    `json:"sort"`
+	Name        *string `json:"name" binding:"omitempty" label:"角色名称"`
+	Code        *string `json:"code" binding:"omitempty" label:"角色编码"`
+	DisplayName *string `json:"display_name" binding:"omitempty" label:"显示名称"`
+	Description *string `json:"description" binding:"omitempty" label:"角色描述"`
+	Status      *int    `json:"status" binding:"omitempty" label:"状态"`
+	Sort        *int    `json:"sort" binding:"omitempty" label:"排序"`
 }
 
 type AssignPermissionsRequest struct {

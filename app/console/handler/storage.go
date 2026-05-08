@@ -16,7 +16,7 @@ type StorageHandler struct {
 }
 
 type StorageConfigRequest struct {
-	Disk string `form:"disk"`
+	Disk string `form:"disk" label:"存储磁盘"`
 }
 
 func RegisterStorageRoutes(protected *gin.RouterGroup, p *provider.Provider) {

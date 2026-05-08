@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"strings"
-
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
@@ -18,7 +16,7 @@ type StarterHandler struct {
 }
 
 type PingRequest struct {
-	Name string `form:"name"`
+	Name string `form:"name" label:"名称"`
 }
 
 type PingResponse struct {
@@ -35,11 +33,7 @@ type ProfileResponse struct {
 }
 
 type DispatchEchoJobRequest struct {
-	Message string `json:"message"`
-}
-
-func (r DispatchEchoJobRequest) Validate() error {
-	return validation.Require(strings.TrimSpace(r.Message) != "", "message is required")
+	Message string `json:"message" binding:"required" label:"消息内容"`
 }
 
 type DispatchEchoJobResponse struct {

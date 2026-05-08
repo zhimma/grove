@@ -6,6 +6,7 @@ import (
 	"github.com/zhimma/grove/app/api/service"
 	"github.com/zhimma/grove/internal/provider"
 	"github.com/zhimma/grove/pkg/response"
+	"github.com/zhimma/grove/pkg/validation"
 )
 
 type AuthHandler struct {
@@ -13,7 +14,7 @@ type AuthHandler struct {
 }
 
 type IssueAccessTokenRequest struct {
-	UserID string `json:"user_id"`
+	UserID string `json:"user_id" binding:"required" label:"用户ID"`
 }
 
 type IssueAccessTokenResponse struct {
@@ -32,7 +33,7 @@ func RegisterAuthRoutes(public *gin.RouterGroup, p *provider.Provider) {
 func (h *AuthHandler) IssueAccessToken(c *gin.Context) {
 	var req IssueAccessTokenRequest
 	if c.Request.ContentLength > 0 {
-		if err := c.ShouldBindJSON(&req); err != nil {
+		if err := validation.BindJSON(c, &req); err != nil {
 			response.Fail(c, err)
 			return
 		}

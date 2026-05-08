@@ -25,7 +25,7 @@ type RefreshTokenRequest struct {
 }
 
 type LogoutRequest struct {
-	RefreshToken string `json:"refresh_token"`
+	RefreshToken string `json:"refresh_token" label:"刷新令牌"`
 }
 
 type ChangePasswordRequest struct {
