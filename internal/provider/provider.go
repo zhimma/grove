@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -48,16 +50,23 @@ func APIOptions() []Option {
 		WithCasbin(),
 		WithStorage(),
 		WithTransaction(),
+		WithCache(),
+		WithHTTPClient(),
+		WithEvent(),
 	}
 }
 
 func ConsoleOptions() []Option {
 	return []Option{
 		WithDatabase(),
+		WithRedis(),
 		WithAuth(),
 		WithCasbin(),
 		WithStorage(),
 		WithTransaction(),
+		WithCache(),
+		WithHTTPClient(),
+		WithEvent(),
 	}
 }
 
@@ -182,6 +191,14 @@ func WithRedis() Option {
 			Password: p.Config.Redis.Password,
 			DB:       p.Config.Redis.DB,
 		})
+		if strings.EqualFold(p.Config.App.Env, "production") {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if err := client.Ping(ctx).Err(); err != nil {
+				_ = client.Close()
+				return fmt.Errorf("redis ping: %w", err)
+			}
+		}
 		p.RedisClient = client
 		return nil
 	}
@@ -287,7 +304,7 @@ func WithStorage() Option {
 					})
 				}
 			default:
-				continue
+				return fmt.Errorf("storage disk %q unsupported driver %q", diskName, diskCfg.Driver)
 			}
 			if err != nil {
 				return fmt.Errorf("init storage disk %q: %w", diskName, err)
@@ -303,6 +320,12 @@ func WithStorage() Option {
 				Prefix:    diskCfg.Prefix,
 				IsDefault: diskName == strings.TrimSpace(strings.ToLower(p.Config.Storage.Default)),
 			}, stsIssuer)
+		}
+		if len(manager.Names()) == 0 {
+			return fmt.Errorf("no storage disks configured")
+		}
+		if _, err := manager.Get(p.Config.Storage.Default); err != nil {
+			return err
 		}
 		p.Storage = manager
 		return nil
@@ -372,6 +395,7 @@ func (p *Provider) Close() error {
 	if p == nil {
 		return nil
 	}
+	var errs []error
 	if p.Scheduler != nil {
 		p.Scheduler.Stop()
 	}
@@ -379,15 +403,21 @@ func (p *Provider) Close() error {
 		p.JobServer.Shutdown()
 	}
 	if p.JobClient != nil {
-		_ = p.JobClient.Close()
+		if err := p.JobClient.Close(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	if p.RedisClient != nil {
-		_ = p.RedisClient.Close()
+		if err := p.RedisClient.Close(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	if p.DB != nil {
-		return p.DB.Close()
+		if err := p.DB.Close(); err != nil {
+			errs = append(errs, err)
+		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (p *Provider) GetEnforcer(name string) *pkgcasbin.Enforcer {

@@ -15,6 +15,7 @@ type MemoryStore struct {
 	data   map[string]*memoryItem
 	mutex  sync.RWMutex
 	stopCh chan struct{}
+	close  sync.Once
 }
 
 // memoryItem 内存缓存项
@@ -46,7 +47,9 @@ func NewMemoryStore() *MemoryStore {
 
 // Close 关闭内存缓存
 func (m *MemoryStore) Close() {
-	close(m.stopCh)
+	m.close.Do(func() {
+		close(m.stopCh)
+	})
 }
 
 // gc 定期清理过期项

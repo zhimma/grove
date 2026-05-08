@@ -76,7 +76,7 @@ type SystemConfigGroupPathRequest struct {
 
 func RegisterSystemConfigRoutes(protected *gin.RouterGroup, p *provider.Provider) {
 	h := &SystemConfigHandler{
-		service: consoleservice.NewSystemConfigService(p.DB.Default()),
+		service: consoleservice.NewSystemConfigService(p.DB),
 	}
 
 	group := route.Wrap(protected.Group("/system-configs"))

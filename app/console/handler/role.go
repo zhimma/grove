@@ -15,7 +15,7 @@ type RoleHandler struct {
 }
 
 type ListRolesRequest struct {
-	Page        int      `form:"page" binding:"omitempty,min=1" lebel:"页码"`
+	Page        int      `form:"page" binding:"omitempty,min=1" label:"页码"`
 	PageSize    int      `form:"page_size" binding:"omitempty,min=1,max=100" label:"每页条数"`
 	Offset      int      `form:"offset"`
 	Limit       int      `form:"limit"`
@@ -91,7 +91,7 @@ type RolePathRequest struct {
 
 func RegisterRoleRoutes(protected *gin.RouterGroup, p *provider.Provider, runtimeCatalog *consoleservice.RuntimePermissionCatalog) {
 	h := &RoleHandler{
-		roleSvc: consoleservice.NewRoleService(p.DB, p.GetEnforcer("console"), runtimeCatalog),
+		roleSvc: consoleservice.NewRoleService(p.DB, p.GetEnforcer("console"), runtimeCatalog).WithTransaction(p.TxManager),
 	}
 
 	roles := route.Wrap(protected.Group("/roles"))

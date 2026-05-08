@@ -33,6 +33,14 @@ func AuditOperation(db *gorm.DB) gin.HandlerFunc {
 			route = c.Request.URL.Path
 		}
 
+		status := c.Writer.Status()
+		errorMessage := http.StatusText(status)
+		if status >= http.StatusBadRequest {
+			if errMeta := reqctx.GetErrorMeta(c); strings.TrimSpace(errMeta.Message) != "" {
+				errorMessage = errMeta.Message
+			}
+		}
+
 		record := model.ConsoleOperationLog{
 			AdminID:      identity.AdminID,
 			Method:       c.Request.Method,
@@ -41,9 +49,9 @@ func AuditOperation(db *gorm.DB) gin.HandlerFunc {
 			Module:       detectLogModule(route),
 			Action:       buildAuditAction(c.Request.Method, route),
 			RequestID:    meta.RequestID,
-			StatusCode:   c.Writer.Status(),
-			Success:      c.Writer.Status() < http.StatusBadRequest,
-			ErrorMessage: http.StatusText(c.Writer.Status()),
+			StatusCode:   status,
+			Success:      status < http.StatusBadRequest,
+			ErrorMessage: errorMessage,
 			DurationMS:   time.Since(startedAt).Milliseconds(),
 			ClientIP:     meta.ClientIP,
 			UserAgent:    truncateString(meta.UserAgent, 500),

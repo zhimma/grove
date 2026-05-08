@@ -9,6 +9,7 @@ import (
 const (
 	RequestIDKey   = "request_id"
 	RequestMetaKey = "request_meta"
+	ErrorMetaKey   = "error_meta"
 	IdentityKey    = "identity"
 	AuthTokenKey   = "auth_token"
 	AuditMetaKey   = "audit_meta"
@@ -24,11 +25,20 @@ const (
 type RequestMeta struct {
 	RequestID string
 	App       string
+	Debug     bool
 	Method    string
 	Path      string
 	Route     string
 	ClientIP  string
 	UserAgent string
+}
+
+type ErrorMeta struct {
+	HTTPStatus    int
+	Code          string
+	Message       string
+	InternalError bool
+	HasCause      bool
 }
 
 type Identity struct {
@@ -91,6 +101,25 @@ func GetRequestMetaFromContext(ctx context.Context) RequestMeta {
 		return meta
 	}
 	return RequestMeta{}
+}
+
+func SetErrorMeta(c *gin.Context, meta ErrorMeta) {
+	if c == nil {
+		return
+	}
+	c.Set(ErrorMetaKey, meta)
+}
+
+func GetErrorMeta(c *gin.Context) ErrorMeta {
+	if c == nil {
+		return ErrorMeta{}
+	}
+	if value, exists := c.Get(ErrorMetaKey); exists {
+		if meta, ok := value.(ErrorMeta); ok {
+			return meta
+		}
+	}
+	return ErrorMeta{}
 }
 
 func SetIdentity(c *gin.Context, identity Identity) {

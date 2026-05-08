@@ -23,8 +23,9 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Name string `yaml:"name"`
-	Env  string `yaml:"env"`
+	Name  string `yaml:"name"`
+	Env   string `yaml:"env"`
+	Debug bool   `yaml:"debug"`
 }
 
 type ServerConfig struct {

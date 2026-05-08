@@ -93,7 +93,11 @@ func AdminAuthn(tokenManager *auth.Manager, resolver consoleservice.AdminAuthSta
 	}
 }
 
-func AdminPermission(enforcer *pkgcasbin.Enforcer) gin.HandlerFunc {
+func AdminPermission(enforcer *pkgcasbin.Enforcer, env ...string) gin.HandlerFunc {
+	appEnv := ""
+	if len(env) > 0 {
+		appEnv = strings.TrimSpace(env[0])
+	}
 	return func(c *gin.Context) {
 		if reqctx.IsSuper(c) {
 			c.Next()
@@ -111,13 +115,22 @@ func AdminPermission(enforcer *pkgcasbin.Enforcer) gin.HandlerFunc {
 		if resource == "" {
 			resource = c.Request.URL.Path
 		}
-		if enforcer == nil || pkgroute.IsIgnored(c.Request.Method, resource) {
+		if pkgroute.IsIgnored(c.Request.Method, resource) {
+			c.Next()
+			return
+		}
+		if enforcer == nil {
+			if strings.EqualFold(appEnv, "production") {
+				response.Fail(c, pkgerrors.ServiceUnavailable().WithMessage("权限控制器未配置"))
+				c.Abort()
+				return
+			}
 			c.Next()
 			return
 		}
 
 		permissionIdentifier := permission.BuildAPIIdentifier(c.Request.Method, resource)
-		allowed, err := enforcer.CheckConsolePermission(adminID, permissionIdentifier)
+		allowed, err := enforcer.Can(adminID, permissionIdentifier)
 		if err != nil {
 			response.Fail(c, pkgerrors.Internal().WithCause(err))
 			c.Abort()

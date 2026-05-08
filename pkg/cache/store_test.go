@@ -193,6 +193,13 @@ func TestManager(t *testing.T) {
 	}
 }
 
+func TestMemoryStoreCloseIsIdempotent(t *testing.T) {
+	store := NewMemoryStore()
+
+	store.Close()
+	store.Close()
+}
+
 func TestManagerGetReturnsExplicitErrors(t *testing.T) {
 	manager := NewManager()
 

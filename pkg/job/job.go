@@ -83,11 +83,18 @@ func NewServer(redisCfg RedisConfig, cfg ServerConfig) *Server {
 	}
 }
 
-func (s *Server) Register(taskType string, handler func(context.Context, *asynq.Task) error) {
+func (s *Server) Register(taskType string, handler func(context.Context, *asynq.Task) error) error {
 	if s == nil || s.mux == nil {
-		return
+		return errors.New("任务服务未初始化")
+	}
+	if taskType == "" {
+		return errors.New("任务类型不能为空")
+	}
+	if handler == nil {
+		return errors.New("任务处理器不能为空")
 	}
 	s.mux.HandleFunc(taskType, handler)
+	return nil
 }
 
 func (s *Server) Run() error {

@@ -8,11 +8,12 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/model"
+	"github.com/zhimma/grove/pkg/database"
 	pkgerrors "github.com/zhimma/grove/pkg/errors"
 )
 
 type SystemConfigService struct {
-	db *gorm.DB
+	dbRepo database.Repo
 }
 
 type ListSystemConfigsInput struct {
@@ -56,16 +57,17 @@ type GetGroupConfigsInput struct {
 	Group string
 }
 
-func NewSystemConfigService(db *gorm.DB) *SystemConfigService {
-	return &SystemConfigService{db: db}
+func NewSystemConfigService(dbRepo database.Repo) *SystemConfigService {
+	return &SystemConfigService{dbRepo: dbRepo}
 }
 
 func (s *SystemConfigService) ListConfigs(ctx context.Context, in ListSystemConfigsInput) (*ListSystemConfigsOutput, error) {
-	if s.db == nil {
-		return nil, pkgerrors.ServiceUnavailable().WithMessage("默认数据库未配置")
+	db, err := s.defaultDB(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	query := s.db.WithContext(ctx).Model(&model.SystemConfig{})
+	query := db.Model(&model.SystemConfig{})
 	if group := strings.TrimSpace(in.ConfigGroup); group != "" {
 		query = query.Where("config_group = ?", group)
 	}
@@ -77,7 +79,6 @@ func (s *SystemConfigService) ListConfigs(ctx context.Context, in ListSystemConf
 		query = query.Where("is_editable = ?", *in.IsEditable)
 	}
 
-	var err error
 	query, err = applyTimeRange(query, "created_at", in.CreatedFrom, in.CreatedTo)
 	if err != nil {
 		return nil, pkgerrors.InvalidParams().WithMessage("时间范围格式不正确")
@@ -127,12 +128,13 @@ func (s *SystemConfigService) ListConfigs(ctx context.Context, in ListSystemConf
 }
 
 func (s *SystemConfigService) GetGroupConfigs(ctx context.Context, in GetGroupConfigsInput) ([]model.SystemConfig, error) {
-	if s.db == nil {
-		return nil, pkgerrors.ServiceUnavailable().WithMessage("默认数据库未配置")
+	db, err := s.defaultDB(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	var items []model.SystemConfig
-	if err := s.db.WithContext(ctx).
+	if err := db.
 		Where("config_group = ?", strings.TrimSpace(in.Group)).
 		Order("sort_order ASC, created_at ASC").
 		Find(&items).Error; err != nil {
@@ -142,8 +144,9 @@ func (s *SystemConfigService) GetGroupConfigs(ctx context.Context, in GetGroupCo
 }
 
 func (s *SystemConfigService) CreateConfig(ctx context.Context, in CreateSystemConfigInput) (*model.SystemConfig, error) {
-	if s.db == nil {
-		return nil, pkgerrors.ServiceUnavailable().WithMessage("默认数据库未配置")
+	db, dbErr := s.defaultDB(ctx)
+	if dbErr != nil {
+		return nil, dbErr
 	}
 
 	record := model.SystemConfig{
@@ -172,7 +175,7 @@ func (s *SystemConfigService) CreateConfig(ctx context.Context, in CreateSystemC
 	}
 
 	var count int64
-	if err := s.db.WithContext(ctx).Model(&model.SystemConfig{}).
+	if err := db.Model(&model.SystemConfig{}).
 		Where("config_group = ? AND config_key = ?", record.ConfigGroup, record.ConfigKey).
 		Count(&count).Error; err != nil {
 		return nil, pkgerrors.Internal().WithCause(err)
@@ -181,7 +184,7 @@ func (s *SystemConfigService) CreateConfig(ctx context.Context, in CreateSystemC
 		return nil, pkgerrors.Conflict().WithCode("system_config_exists").WithMessage("系统配置已存在")
 	}
 
-	if err := s.db.WithContext(ctx).Create(&record).Error; err != nil {
+	if err := db.Create(&record).Error; err != nil {
 		return nil, pkgerrors.Internal().WithCause(err)
 	}
 	return &record, nil
@@ -199,7 +202,11 @@ func (s *SystemConfigService) UpdateConfigByID(ctx context.Context, in UpdateSys
 	if err := validateSystemConfigValue(record.ValueType, value); err != nil {
 		return nil, err
 	}
-	if err := s.db.WithContext(ctx).Model(&model.SystemConfig{}).
+	db, dbErr := s.defaultDB(ctx)
+	if dbErr != nil {
+		return nil, dbErr
+	}
+	if err := db.Model(&model.SystemConfig{}).
 		Where("id = ?", record.ID).
 		Update("value", value).Error; err != nil {
 		return nil, pkgerrors.Internal().WithCause(err)
@@ -216,24 +223,36 @@ func (s *SystemConfigService) DeleteConfig(ctx context.Context, id string) error
 	if record.IsSystem {
 		return pkgerrors.Forbidden().WithMessage("系统配置不允许删除")
 	}
-	if err := s.db.WithContext(ctx).Delete(&model.SystemConfig{}, "id = ?", record.ID).Error; err != nil {
+	db, dbErr := s.defaultDB(ctx)
+	if dbErr != nil {
+		return dbErr
+	}
+	if err := db.Delete(&model.SystemConfig{}, "id = ?", record.ID).Error; err != nil {
 		return pkgerrors.Internal().WithCause(err)
 	}
 	return nil
 }
 
 func (s *SystemConfigService) getByID(ctx context.Context, id string) (*model.SystemConfig, error) {
-	if s.db == nil {
-		return nil, pkgerrors.ServiceUnavailable().WithMessage("默认数据库未配置")
+	db, err := s.defaultDB(ctx)
+	if err != nil {
+		return nil, err
 	}
 	var record model.SystemConfig
-	if err := s.db.WithContext(ctx).First(&record, "id = ?", strings.TrimSpace(id)).Error; err != nil {
+	if err := db.First(&record, "id = ?", strings.TrimSpace(id)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, pkgerrors.NotFound().WithMessage("系统配置不存在")
 		}
 		return nil, pkgerrors.Internal().WithCause(err)
 	}
 	return &record, nil
+}
+
+func (s *SystemConfigService) defaultDB(ctx context.Context) (*gorm.DB, error) {
+	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+		return nil, pkgerrors.ServiceUnavailable().WithMessage("默认数据库未配置")
+	}
+	return s.dbRepo.Default().WithContext(ctx), nil
 }
 
 func normalizeConfigValueType(valueType string) string {

@@ -41,11 +41,13 @@ if err != nil {
 - 业务可预期错误返回明确的 `pkg/errors` 类型
 - 底层异常应通过 `WithCause(err)` 保留原始错误
 - 日志记录放在统一日志链路，不在每个返回点重复打印
+- `app.debug=false` 时，`Internal().WithCause(err)` 对前端只返回通用提示；`app.debug=true` 时仅在 `data.debug` 返回底层错误文本和类型
 
 ## 边界
 
 - service 不直接决定 JSON 结构
 - panic 由 recovery 中间件统一接管
+- panic stack 只进入日志，不返回给前端
 - 客户端展示文案依赖 `message`，流程控制依赖 HTTP 状态码
 
 ## 相关文档

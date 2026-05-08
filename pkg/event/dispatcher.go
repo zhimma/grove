@@ -35,9 +35,9 @@ type Dispatcher struct {
 	mutex     sync.RWMutex
 	async     bool
 	queue     chan *eventJob
-	stopCh    chan struct{}
 	wg        sync.WaitGroup
 	closeOnce sync.Once
+	closed    bool
 }
 
 // eventJob 异步事件任务
@@ -68,10 +68,15 @@ func NewDispatcher(config Config) *Dispatcher {
 	d := &Dispatcher{
 		listeners: make(map[string][]Listener),
 		async:     config.Async,
-		stopCh:    make(chan struct{}),
 	}
 
 	if config.Async {
+		if config.QueueSize <= 0 {
+			config.QueueSize = DefaultConfig().QueueSize
+		}
+		if config.WorkerNum <= 0 {
+			config.WorkerNum = DefaultConfig().WorkerNum
+		}
 		d.queue = make(chan *eventJob, config.QueueSize)
 		for i := 0; i < config.WorkerNum; i++ {
 			go d.worker()
@@ -99,7 +104,10 @@ func NewAsync(queueSize, workerNum int) *Dispatcher {
 func (d *Dispatcher) Close() {
 	if d.async {
 		d.closeOnce.Do(func() {
-			close(d.stopCh)
+			d.mutex.Lock()
+			d.closed = true
+			d.mutex.Unlock()
+			close(d.queue)
 			d.wg.Wait()
 		})
 	}
@@ -107,17 +115,12 @@ func (d *Dispatcher) Close() {
 
 // worker 异步工作协程
 func (d *Dispatcher) worker() {
-	for {
-		select {
-		case job := <-d.queue:
-			if job == nil {
-				return
-			}
-			d.executeListener(job.ctx, job.event, job.listener)
-			d.wg.Done()
-		case <-d.stopCh:
-			return
+	for job := range d.queue {
+		if job == nil {
+			continue
 		}
+		d.executeListener(job.ctx, job.event, job.listener)
+		d.wg.Done()
 	}
 }
 
@@ -168,6 +171,11 @@ func (d *Dispatcher) DispatchAsync(ctx context.Context, event Event) error {
 	}
 
 	for _, listener := range listeners {
+		d.mutex.RLock()
+		if d.closed {
+			d.mutex.RUnlock()
+			return fmt.Errorf("event dispatcher is closed")
+		}
 		d.wg.Add(1)
 		select {
 		case d.queue <- &eventJob{ctx: ctx, event: event, listener: listener}:
@@ -178,6 +186,7 @@ func (d *Dispatcher) DispatchAsync(ctx context.Context, event Event) error {
 				Str("event", event.EventName()).
 				Msg("事件队列已满，事件已丢弃")
 		}
+		d.mutex.RUnlock()
 	}
 
 	return nil

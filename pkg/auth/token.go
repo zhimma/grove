@@ -142,6 +142,9 @@ func (m *Manager) ParseRefreshToken(tokenString string) (*Claims, error) {
 
 func (m *Manager) ValidateToken(tokenString string) (*Claims, error) {
 	parsed, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
 		return m.secret, nil
 	})
 	if err != nil {
@@ -159,6 +162,9 @@ func (m *Manager) ValidateToken(tokenString string) (*Claims, error) {
 
 func (m *Manager) Revoke(tokenString string) error {
 	parsed, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
 		return m.secret, nil
 	})
 	if err != nil {

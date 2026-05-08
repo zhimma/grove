@@ -1,6 +1,9 @@
 package errors
 
-import "net/http"
+import (
+	stderrors "errors"
+	"net/http"
+)
 
 type HTTPError struct {
 	HTTPStatus int
@@ -115,7 +118,8 @@ func Normalize(err error) *HTTPError {
 	if err == nil {
 		return nil
 	}
-	if httpErr, ok := err.(*HTTPError); ok {
+	var httpErr *HTTPError
+	if stderrors.As(err, &httpErr) {
 		return httpErr
 	}
 	return Internal().WithCause(err)

@@ -14,6 +14,20 @@ import (
 	"github.com/zhimma/grove/pkg/database"
 )
 
+type countingTxManager struct {
+	count int
+}
+
+func (m *countingTxManager) Execute(ctx context.Context, fn func(ctx context.Context) error) error {
+	m.count++
+	return fn(ctx)
+}
+
+func (m *countingTxManager) ExecuteWithResult(ctx context.Context, fn func(ctx context.Context) (any, error)) (any, error) {
+	m.count++
+	return fn(ctx)
+}
+
 func TestRoleServiceFiltersAndValidatesMenuKeys(t *testing.T) {
 	repo, _, roleID := openRoleServiceTestContext(t)
 	service := NewRoleService(repo, nil)
@@ -57,6 +71,28 @@ func TestRoleServiceValidatesRuntimeAPIPermissions(t *testing.T) {
 		APIPermissions: []string{"GET /console/v1/roles", "POST /console/v1/unknown"},
 	}); err == nil {
 		t.Fatal("expected invalid api permission error")
+	}
+}
+
+func TestRoleServiceSetPermissionsUsesInjectedTransaction(t *testing.T) {
+	repo, enforcer, roleID := openRoleServiceTestContext(t)
+
+	engine := gin.New()
+	engine.GET("/console/v1/roles", func(*gin.Context) {})
+
+	catalog := NewRuntimePermissionCatalog()
+	catalog.LoadRoutes(engine.Routes())
+
+	txManager := &countingTxManager{}
+	service := NewRoleService(repo, enforcer, catalog).WithTransaction(txManager)
+	if err := service.SetRolePermissions(context.Background(), SetRolePermissionsInput{
+		RoleID:         roleID,
+		APIPermissions: []string{"GET /console/v1/roles"},
+	}); err != nil {
+		t.Fatalf("set role permissions: %v", err)
+	}
+	if txManager.count != 1 {
+		t.Fatalf("expected transaction manager to execute once, got %d", txManager.count)
 	}
 }
 

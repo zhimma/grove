@@ -37,7 +37,7 @@ func (r *Router) InstallToEngine(engine *gin.Engine) {
 	protected.Use(
 		consolemiddleware.AdminAuthn(r.p.TokenManager, authStateResolver),
 		consolemiddleware.AuditOperation(auditDB),
-		consolemiddleware.AdminPermission(r.p.GetEnforcer("console")),
+		consolemiddleware.AdminPermission(r.p.GetEnforcer("console"), r.cfg.App.Env),
 	)
 
 	handler.RegisterAuthRoutes(public, authed, r.p)

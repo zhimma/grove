@@ -260,32 +260,43 @@ func (c *Client) Request(ctx context.Context, method, path string, body any) (*R
 	fullURL := c.buildURL(path)
 
 	// 构建请求体
+	var bodyBytes []byte
 	var bodyReader io.Reader
 	var contentType string
 
 	if body != nil {
 		switch v := body.(type) {
 		case string:
-			bodyReader = strings.NewReader(v)
+			bodyBytes = []byte(v)
 		case []byte:
-			bodyReader = bytes.NewReader(v)
+			bodyBytes = v
 		case io.Reader:
-			bodyReader = v
+			var err error
+			bodyBytes, err = io.ReadAll(v)
+			if err != nil {
+				return nil, fmt.Errorf("read request body: %w", err)
+			}
 		default:
 			// 默认JSON编码
 			jsonBody, err := json.Marshal(body)
 			if err != nil {
 				return nil, fmt.Errorf("marshal request body: %w", err)
 			}
-			bodyReader = bytes.NewReader(jsonBody)
+			bodyBytes = jsonBody
 			contentType = "application/json"
 		}
+		bodyReader = bytes.NewReader(bodyBytes)
 	}
 
 	// 创建请求
 	req, err := http.NewRequestWithContext(ctx, method, fullURL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
+	}
+	if bodyBytes != nil {
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(bodyBytes)), nil
+		}
 	}
 
 	// 设置请求头
@@ -327,6 +338,16 @@ func (c *Client) doWithRetry(req *http.Request) (*Response, error) {
 	var lastErr error
 
 	for i := 0; i <= c.retryCount; i++ {
+		attemptReq := req
+		if i > 0 && req.GetBody != nil {
+			body, err := req.GetBody()
+			if err != nil {
+				return nil, fmt.Errorf("reset request body: %w", err)
+			}
+			attemptReq = req.Clone(req.Context())
+			attemptReq.Body = body
+			attemptReq.GetBody = req.GetBody
+		}
 		if i > 0 {
 			logger.Debug().
 				Str("url", req.URL.String()).
@@ -335,7 +356,7 @@ func (c *Client) doWithRetry(req *http.Request) (*Response, error) {
 			time.Sleep(c.retryDelay * time.Duration(i))
 		}
 
-		resp, err := c.do(req)
+		resp, err := c.do(attemptReq)
 		if err == nil {
 			return resp, nil
 		}
@@ -579,10 +600,7 @@ func (c *Client) PostFormWithContext(ctx context.Context, path string, data map[
 func (c *Client) PostMultipart(path string, fields map[string]string, files map[string]FileField) (*Response, error) {
 	builder := c.NewRequest(http.MethodPost, path)
 
-	// 添加表单字段
-	for k, v := range fields {
-		builder.WithQueryParam(k, v)
-	}
+	builder.Body(fields)
 
 	// 添加文件
 	for _, file := range files {

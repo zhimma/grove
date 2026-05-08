@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"testing"
@@ -279,6 +281,35 @@ func TestClientRetry(t *testing.T) {
 	}
 }
 
+func TestClientRetryReusesRequestBody(t *testing.T) {
+	attemptCount := 0
+	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
+		attemptCount++
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if string(body) != `{"name":"John"}` {
+			t.Fatalf("attempt %d got body %q", attemptCount, string(body))
+		}
+		if attemptCount == 1 {
+			return jsonResponse(http.StatusServiceUnavailable, `{}`), nil
+		}
+		return jsonResponse(http.StatusOK, `{}`), nil
+	}).WithRetry(1, time.Millisecond)
+
+	resp, err := client.Post("/users", map[string]string{"name": "John"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !resp.IsSuccess() {
+		t.Fatalf("expected success, got %d", resp.StatusCode)
+	}
+	if attemptCount != 2 {
+		t.Fatalf("expected 2 attempts, got %d", attemptCount)
+	}
+}
+
 func TestClientClone(t *testing.T) {
 	client := New().
 		BaseURL("https://api.example.com").
@@ -334,6 +365,51 @@ func TestRequestBuilder(t *testing.T) {
 		JSON(map[string]string{"name": "test"}).
 		Do()
 
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !resp.IsSuccess() {
+		t.Fatalf("expected success, got %d", resp.StatusCode)
+	}
+}
+
+func TestPostMultipartWritesFieldsInMultipartBody(t *testing.T) {
+	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
+		if r.URL.RawQuery != "" {
+			t.Fatalf("expected no query fields, got %q", r.URL.RawQuery)
+		}
+
+		mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err != nil {
+			t.Fatalf("parse content type: %v", err)
+		}
+		if mediaType != "multipart/form-data" {
+			t.Fatalf("expected multipart/form-data, got %q", mediaType)
+		}
+
+		reader := multipart.NewReader(r.Body, params["boundary"])
+		form, err := reader.ReadForm(1024)
+		if err != nil {
+			t.Fatalf("read multipart form: %v", err)
+		}
+		if got := form.Value["name"]; len(got) != 1 || got[0] != "john" {
+			t.Fatalf("expected multipart field name=john, got %#v", got)
+		}
+		if files := form.File["avatar"]; len(files) != 1 || files[0].Filename != "avatar.txt" {
+			t.Fatalf("expected avatar file, got %#v", files)
+		}
+		return jsonResponse(http.StatusOK, `{}`), nil
+	})
+
+	resp, err := client.PostMultipart("/upload", map[string]string{
+		"name": "john",
+	}, map[string]FileField{
+		"avatar": {
+			FieldName: "avatar",
+			FileName:  "avatar.txt",
+			Content:   []byte("hello"),
+		},
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

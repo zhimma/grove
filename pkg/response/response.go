@@ -1,9 +1,11 @@
 package response
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog"
 
 	pkgerrors "github.com/zhimma/grove/pkg/errors"
 	"github.com/zhimma/grove/pkg/logger"
@@ -32,27 +34,42 @@ func Fail(c *gin.Context, input interface{}) {
 		return
 	}
 
-	if httpErr.Cause != nil {
-		logger.Error().
-			Err(httpErr.Cause).
-			Str("request_id", reqctx.GetRequestID(c)).
-			Str("path", c.Request.URL.Path).
-			Msg("请求处理失败")
-	}
+	message := responseMessage(httpErr)
+	reqctx.SetErrorMeta(c, reqctx.ErrorMeta{
+		HTTPStatus:    httpErr.HTTPStatus,
+		Code:          httpErr.Code,
+		Message:       message,
+		InternalError: httpErr.HTTPStatus >= http.StatusInternalServerError,
+		HasCause:      httpErr.Cause != nil,
+	})
+	logFailure(c, httpErr, message)
 
 	resp := Response{
 		Code:      -1,
-		Message:   httpErr.Message,
+		Message:   message,
 		RequestID: reqctx.GetRequestID(c),
 	}
-	if data := buildErrorData(httpErr); len(data) > 0 {
+	if data := buildErrorData(httpErr, reqctx.GetRequestMeta(c).Debug); len(data) > 0 {
 		resp.Data = data
 	}
 
 	c.JSON(httpErr.HTTPStatus, resp)
 }
 
-func buildErrorData(httpErr *pkgerrors.HTTPError) map[string]interface{} {
+func responseMessage(httpErr *pkgerrors.HTTPError) string {
+	if httpErr == nil {
+		return ""
+	}
+	if httpErr.HTTPStatus == http.StatusInternalServerError || httpErr.Code == "internal_error" {
+		return pkgerrors.Internal().Message
+	}
+	if httpErr.Message != "" {
+		return httpErr.Message
+	}
+	return http.StatusText(httpErr.HTTPStatus)
+}
+
+func buildErrorData(httpErr *pkgerrors.HTTPError, debug bool) map[string]interface{} {
 	if httpErr == nil {
 		return nil
 	}
@@ -73,8 +90,57 @@ func buildErrorData(httpErr *pkgerrors.HTTPError) map[string]interface{} {
 			data["error_code"] = httpErr.Code
 		}
 	}
+	if debug && httpErr.Cause != nil {
+		if data == nil {
+			data = make(map[string]interface{}, 1)
+		}
+		data["debug"] = map[string]interface{}{
+			"error": httpErr.Cause.Error(),
+			"type":  fmt.Sprintf("%T", httpErr.Cause),
+		}
+	}
 
 	return data
+}
+
+func logFailure(c *gin.Context, httpErr *pkgerrors.HTTPError, message string) {
+	if c == nil || httpErr == nil {
+		return
+	}
+	level := failureLogLevel(httpErr)
+	if level == zerolog.NoLevel {
+		return
+	}
+
+	log := logger.Logger()
+	event := log.WithLevel(level)
+	if httpErr.Cause != nil {
+		event = event.Err(httpErr.Cause).Str("cause", httpErr.Cause.Error())
+	}
+	identity := reqctx.GetIdentity(c)
+	event.
+		Str("request_id", reqctx.GetRequestID(c)).
+		Str("method", c.Request.Method).
+		Str("path", c.Request.URL.Path).
+		Str("route", c.FullPath()).
+		Int("status", httpErr.HTTPStatus).
+		Str("error_code", httpErr.Code).
+		Str("message", message).
+		Str("admin_id", identity.AdminID).
+		Str("user_id", identity.UserID).
+		Msg("请求处理失败")
+}
+
+func failureLogLevel(httpErr *pkgerrors.HTTPError) zerolog.Level {
+	if httpErr.HTTPStatus >= http.StatusInternalServerError {
+		return zerolog.ErrorLevel
+	}
+	switch httpErr.HTTPStatus {
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusTooManyRequests:
+		return zerolog.WarnLevel
+	default:
+		return zerolog.NoLevel
+	}
 }
 
 func normalize(input interface{}) *pkgerrors.HTTPError {

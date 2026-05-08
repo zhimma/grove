@@ -81,6 +81,10 @@ func Logger() zerolog.Logger {
 	return appLogger
 }
 
+func InitForTest(log zerolog.Logger) {
+	appLogger = log
+}
+
 func Debug() *zerolog.Event {
 	return appLogger.Debug()
 }

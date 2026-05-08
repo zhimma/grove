@@ -33,6 +33,16 @@ func TestAPIDocsRoutes(t *testing.T) {
 		API: config.APIConfig{
 			Prefix: "/api/v1",
 		},
+		Storage: config.StorageConfig{
+			Default: "local",
+			Disks: map[string]config.StorageDiskConfig{
+				"local": {
+					Driver:  "local",
+					Root:    t.TempDir(),
+					BaseURL: "/storage",
+				},
+			},
+		},
 	}
 
 	app, cleanup, err := NewServer(cfg)

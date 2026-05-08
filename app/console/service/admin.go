@@ -11,11 +11,13 @@ import (
 	pkgcasbin "github.com/zhimma/grove/pkg/casbin"
 	"github.com/zhimma/grove/pkg/database"
 	pkgerrors "github.com/zhimma/grove/pkg/errors"
+	"github.com/zhimma/grove/pkg/transaction"
 )
 
 type AdminService struct {
-	dbRepo   database.Repo
-	enforcer *pkgcasbin.Enforcer
+	dbRepo    database.Repo
+	enforcer  *pkgcasbin.Enforcer
+	txManager transaction.Manager
 }
 
 type ListAdminsInput struct {
@@ -87,6 +89,11 @@ type ResetAdminPasswordInput struct {
 
 func NewAdminService(dbRepo database.Repo, enforcer *pkgcasbin.Enforcer) *AdminService {
 	return &AdminService{dbRepo: dbRepo, enforcer: enforcer}
+}
+
+func (s *AdminService) WithTransaction(manager transaction.Manager) *AdminService {
+	s.txManager = manager
+	return s
 }
 
 func (s *AdminService) ListAdmins(ctx context.Context, in ListAdminsInput) (*ListAdminsResult, error) {
@@ -217,10 +224,16 @@ func (s *AdminService) CreateAdmin(ctx context.Context, in CreateAdminInput) (*m
 		admin.Status = in.Status
 	}
 
-	if err := s.dbRepo.Default().WithContext(ctx).Create(&admin).Error; err != nil {
-		return nil, pkgerrors.Internal().WithCause(err)
-	}
-	if err := s.syncAdminRoleBinding(admin.ID, admin.RoleID); err != nil {
+	if err := s.execute(ctx, func(txCtx context.Context) error {
+		db := transaction.GetDB(txCtx, s.dbRepo.Default())
+		if db == nil {
+			return pkgerrors.ServiceUnavailable().WithMessage("默认数据库未配置")
+		}
+		if err := db.Create(&admin).Error; err != nil {
+			return pkgerrors.Internal().WithCause(err)
+		}
+		return s.syncAdminRoleBinding(admin.ID, admin.RoleID)
+	}); err != nil {
 		return nil, err
 	}
 	return s.GetAdmin(ctx, GetAdminInput{AdminID: admin.ID})
@@ -298,18 +311,25 @@ func (s *AdminService) UpdateAdmin(ctx context.Context, in UpdateAdminInput) (*m
 	if err := s.ensureAdminUnique(ctx, in.AdminID, newAccount, newEmail, newPhone); err != nil {
 		return nil, err
 	}
-	if len(updates) > 0 {
-		if err := s.dbRepo.Default().WithContext(ctx).
-			Model(&model.ConsoleAdmin{}).
-			Where("id = ?", in.AdminID).
-			Updates(updates).Error; err != nil {
-			return nil, pkgerrors.Internal().WithCause(err)
+	if err := s.execute(ctx, func(txCtx context.Context) error {
+		db := transaction.GetDB(txCtx, s.dbRepo.Default())
+		if db == nil {
+			return pkgerrors.ServiceUnavailable().WithMessage("默认数据库未配置")
 		}
-	}
-	if newRoleID != admin.RoleID {
-		if err := s.syncAdminRoleBinding(in.AdminID, newRoleID); err != nil {
-			return nil, err
+		if len(updates) > 0 {
+			if err := db.
+				Model(&model.ConsoleAdmin{}).
+				Where("id = ?", in.AdminID).
+				Updates(updates).Error; err != nil {
+				return pkgerrors.Internal().WithCause(err)
+			}
 		}
+		if newRoleID != admin.RoleID {
+			return s.syncAdminRoleBinding(in.AdminID, newRoleID)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	return s.GetAdmin(ctx, GetAdminInput{AdminID: in.AdminID})
@@ -348,15 +368,21 @@ func (s *AdminService) DeleteAdmin(ctx context.Context, in DeleteAdminInput) err
 		return pkgerrors.Forbidden().WithMessage("当前管理员不能删除自己")
 	}
 
-	if err := s.dbRepo.Default().WithContext(ctx).Delete(&model.ConsoleAdmin{}, "id = ?", in.AdminID).Error; err != nil {
-		return pkgerrors.Internal().WithCause(err)
-	}
-	if s.enforcer != nil {
-		if _, err := s.enforcer.RemoveFilteredGroupingPolicy(0, in.AdminID); err != nil {
+	return s.execute(ctx, func(txCtx context.Context) error {
+		db := transaction.GetDB(txCtx, s.dbRepo.Default())
+		if db == nil {
+			return pkgerrors.ServiceUnavailable().WithMessage("默认数据库未配置")
+		}
+		if err := db.Delete(&model.ConsoleAdmin{}, "id = ?", in.AdminID).Error; err != nil {
 			return pkgerrors.Internal().WithCause(err)
 		}
-	}
-	return nil
+		if s.enforcer != nil {
+			if _, err := s.enforcer.RemoveFilteredGroupingPolicy(0, in.AdminID); err != nil {
+				return pkgerrors.Internal().WithCause(err)
+			}
+		}
+		return nil
+	})
 }
 
 func (s *AdminService) ResetPassword(ctx context.Context, in ResetAdminPasswordInput) error {
@@ -478,4 +504,11 @@ func (s *AdminService) syncAdminRoleBinding(adminID, roleID string) error {
 		return pkgerrors.Internal().WithCause(err)
 	}
 	return nil
+}
+
+func (s *AdminService) execute(ctx context.Context, fn func(context.Context) error) error {
+	if s.txManager == nil {
+		return fn(ctx)
+	}
+	return s.txManager.Execute(ctx, fn)
 }

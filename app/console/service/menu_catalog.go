@@ -1,10 +1,11 @@
-package permission
+package service
 
 import (
 	"sort"
 	"strings"
 
 	pkgerrors "github.com/zhimma/grove/pkg/errors"
+	"github.com/zhimma/grove/pkg/permission"
 )
 
 type StaticMenuCatalogItem struct {
@@ -27,7 +28,7 @@ func ConsoleMenuCatalog() []StaticMenuCatalogItem {
 			Title:   "工作台",
 			Path:    "/dashboard",
 			Icon:    "lucide:layout-dashboard",
-			Scope:   ScopeGlobal,
+			Scope:   permission.ScopeGlobal,
 			Sort:    10,
 			Visible: true,
 		},
@@ -37,7 +38,7 @@ func ConsoleMenuCatalog() []StaticMenuCatalogItem {
 			Name:      "ConsoleOverview",
 			Title:     "工作台",
 			Path:      "/dashboard/overview",
-			Scope:     ScopeGlobal,
+			Scope:     permission.ScopeGlobal,
 			Sort:      11,
 			Visible:   true,
 		},
@@ -47,7 +48,7 @@ func ConsoleMenuCatalog() []StaticMenuCatalogItem {
 			Title:   "配置管理",
 			Path:    "/configs",
 			Icon:    "lucide:settings-2",
-			Scope:   ScopeGlobal,
+			Scope:   permission.ScopeGlobal,
 			Sort:    20,
 			Visible: true,
 		},
@@ -57,7 +58,7 @@ func ConsoleMenuCatalog() []StaticMenuCatalogItem {
 			Name:      "ConsoleSystemConfigs",
 			Title:     "系统配置",
 			Path:      "/configs/system",
-			Scope:     ScopeGlobal,
+			Scope:     permission.ScopeGlobal,
 			Sort:      21,
 			Visible:   true,
 		},
@@ -67,7 +68,7 @@ func ConsoleMenuCatalog() []StaticMenuCatalogItem {
 			Title:   "系统管理",
 			Path:    "/system",
 			Icon:    "lucide:settings",
-			Scope:   ScopeGlobal,
+			Scope:   permission.ScopeGlobal,
 			Sort:    30,
 			Visible: true,
 		},
@@ -77,7 +78,7 @@ func ConsoleMenuCatalog() []StaticMenuCatalogItem {
 			Name:      "ConsoleAdmins",
 			Title:     "管理员管理",
 			Path:      "/system/admins",
-			Scope:     ScopeGlobal,
+			Scope:     permission.ScopeGlobal,
 			Sort:      31,
 			Visible:   true,
 		},
@@ -87,7 +88,7 @@ func ConsoleMenuCatalog() []StaticMenuCatalogItem {
 			Name:      "ConsoleRoles",
 			Title:     "角色权限",
 			Path:      "/system/role",
-			Scope:     ScopeGlobal,
+			Scope:     permission.ScopeGlobal,
 			Sort:      32,
 			Visible:   true,
 		},
@@ -158,16 +159,16 @@ func ValidateConsoleMenuKeys(keys []string) error {
 	return pkgerrors.InvalidParams().WithHTTPStatus(422).WithMessage("存在未注册的菜单权限标识: " + strings.Join(uniqueStrings(invalid), ", "))
 }
 
-func BuildConsoleMenuTree() []MenuTreeItem {
+func BuildConsoleMenuTree() []permission.MenuTreeItem {
 	return buildStaticMenuTree(ConsoleMenuCatalog())
 }
 
-func buildStaticMenuTree(catalogs []StaticMenuCatalogItem) []MenuTreeItem {
-	nodes := make(map[string]*MenuTreeItem, len(catalogs))
+func buildStaticMenuTree(catalogs []StaticMenuCatalogItem) []permission.MenuTreeItem {
+	nodes := make(map[string]*permission.MenuTreeItem, len(catalogs))
 	order := make([]string, 0, len(catalogs))
 
 	for _, catalog := range catalogs {
-		node := &MenuTreeItem{
+		node := &permission.MenuTreeItem{
 			MenuKey:   catalog.MenuKey,
 			ParentKey: catalog.ParentKey,
 			Name:      catalog.Name,
@@ -182,7 +183,7 @@ func buildStaticMenuTree(catalogs []StaticMenuCatalogItem) []MenuTreeItem {
 		order = append(order, catalog.MenuKey)
 	}
 
-	roots := make([]*MenuTreeItem, 0)
+	roots := make([]*permission.MenuTreeItem, 0)
 	for _, key := range order {
 		node := nodes[key]
 		if node == nil {
@@ -200,8 +201,8 @@ func buildStaticMenuTree(catalogs []StaticMenuCatalogItem) []MenuTreeItem {
 		parent.Children = append(parent.Children, *node)
 	}
 
-	sortTreeItems(roots)
-	result := make([]MenuTreeItem, 0, len(roots))
+	sortMenuTreeItems(roots)
+	result := make([]permission.MenuTreeItem, 0, len(roots))
 	for _, root := range roots {
 		result = append(result, *root)
 	}
@@ -246,4 +247,23 @@ func uniqueStrings(items []string) []string {
 		result = append(result, item)
 	}
 	return result
+}
+
+func sortMenuTreeItems(items []*permission.MenuTreeItem) {
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Sort == items[j].Sort {
+			return items[i].MenuKey < items[j].MenuKey
+		}
+		return items[i].Sort < items[j].Sort
+	})
+	for _, item := range items {
+		if len(item.Children) == 0 {
+			continue
+		}
+		children := make([]*permission.MenuTreeItem, 0, len(item.Children))
+		for i := range item.Children {
+			children = append(children, &item.Children[i])
+		}
+		sortMenuTreeItems(children)
+	}
 }

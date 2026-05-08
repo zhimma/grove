@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/zhimma/grove/internal/config"
@@ -16,6 +17,15 @@ func TestServiceOptionSets(t *testing.T) {
 	}
 	if len(WorkerOptions()) == 0 {
 		t.Fatal("expected worker options")
+	}
+}
+
+func TestAPIAndConsoleOptionsIncludeCoreConveniences(t *testing.T) {
+	if !optionSetContainsAtLeast(APIOptions(), 10) {
+		t.Fatalf("expected api options to include core convenience components")
+	}
+	if !optionSetContainsAtLeast(ConsoleOptions(), 9) {
+		t.Fatalf("expected console options to include redis/cache/http/event components")
 	}
 }
 
@@ -100,4 +110,10 @@ func TestNewFallsBackToAppNameWhenServiceNameEmpty(t *testing.T) {
 	if provider.Config.App.Name != "grove" {
 		t.Fatalf("expected app name grove, got %s", provider.Config.App.Name)
 	}
+}
+
+func optionSetContainsAtLeast(options []Option, count int) bool {
+	return len(options) >= count && slices.ContainsFunc(options, func(opt Option) bool {
+		return opt != nil
+	})
 }

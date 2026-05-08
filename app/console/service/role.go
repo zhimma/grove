@@ -11,13 +11,14 @@ import (
 	pkgcasbin "github.com/zhimma/grove/pkg/casbin"
 	"github.com/zhimma/grove/pkg/database"
 	pkgerrors "github.com/zhimma/grove/pkg/errors"
-	"github.com/zhimma/grove/pkg/permission"
+	"github.com/zhimma/grove/pkg/transaction"
 )
 
 type RoleService struct {
 	dbRepo            database.Repo
 	enforcer          *pkgcasbin.Enforcer
 	runtimePermission *RuntimePermissionCatalog
+	txManager         transaction.Manager
 }
 
 type ListRolesInput struct {
@@ -106,6 +107,11 @@ func NewRoleService(dbRepo database.Repo, enforcer *pkgcasbin.Enforcer, runtimeP
 		enforcer:          enforcer,
 		runtimePermission: catalog,
 	}
+}
+
+func (s *RoleService) WithTransaction(manager transaction.Manager) *RoleService {
+	s.txManager = manager
+	return s
 }
 
 func (s *RoleService) ListRoles(ctx context.Context, in ListRolesInput) (*ListRolesOutput, error) {
@@ -304,18 +310,24 @@ func (s *RoleService) DeleteRole(ctx context.Context, in DeleteRoleInput) error 
 		return pkgerrors.Conflict().WithCode("role_in_use").WithMessage("该角色已被管理员使用，无法删除")
 	}
 
-	if err := s.dbRepo.Default().WithContext(ctx).Delete(&model.ConsoleRole{}, "id = ?", in.RoleID).Error; err != nil {
-		return pkgerrors.Internal().WithCause(err)
-	}
-	if s.enforcer != nil {
-		if err := s.enforcer.RemoveConsolePoliciesForRole(in.RoleID); err != nil {
+	return s.execute(ctx, func(txCtx context.Context) error {
+		db := transaction.GetDB(txCtx, s.dbRepo.Default())
+		if db == nil {
+			return pkgerrors.ServiceUnavailable().WithMessage("默认数据库未配置")
+		}
+		if err := db.Delete(&model.ConsoleRole{}, "id = ?", in.RoleID).Error; err != nil {
 			return pkgerrors.Internal().WithCause(err)
 		}
-		if _, err := s.enforcer.RemoveFilteredGroupingPolicy(1, in.RoleID); err != nil {
-			return pkgerrors.Internal().WithCause(err)
+		if s.enforcer != nil {
+			if err := s.enforcer.RemoveConsolePoliciesForRole(in.RoleID); err != nil {
+				return pkgerrors.Internal().WithCause(err)
+			}
+			if _, err := s.enforcer.RemoveFilteredGroupingPolicy(1, in.RoleID); err != nil {
+				return pkgerrors.Internal().WithCause(err)
+			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func (s *RoleService) GetRolePermissions(ctx context.Context, in GetRolePermissionsInput) ([]string, error) {
@@ -354,21 +366,23 @@ func (s *RoleService) SetRolePermissions(ctx context.Context, in SetRolePermissi
 	if err := s.validateAPIIdentifiers(keys); err != nil {
 		return err
 	}
-	if err := s.enforcer.RemoveConsolePoliciesForRole(in.RoleID); err != nil {
-		return pkgerrors.Internal().WithCause(err)
-	}
-	if len(keys) == 0 {
-		return nil
-	}
+	return s.execute(ctx, func(txCtx context.Context) error {
+		if err := s.enforcer.RemoveConsolePoliciesForRole(in.RoleID); err != nil {
+			return pkgerrors.Internal().WithCause(err)
+		}
+		if len(keys) == 0 {
+			return nil
+		}
 
-	rules := make([][]string, 0, len(keys))
-	for _, key := range keys {
-		rules = append(rules, []string{in.RoleID, key})
-	}
-	if err := s.enforcer.AddConsolePolicies(rules); err != nil {
-		return pkgerrors.Internal().WithCause(err)
-	}
-	return nil
+		rules := make([][]string, 0, len(keys))
+		for _, key := range keys {
+			rules = append(rules, []string{in.RoleID, key})
+		}
+		if err := s.enforcer.AddConsolePolicies(rules); err != nil {
+			return pkgerrors.Internal().WithCause(err)
+		}
+		return nil
+	})
 }
 
 func (s *RoleService) validateAPIIdentifiers(keys []string) error {
@@ -396,7 +410,7 @@ func (s *RoleService) GetRoleMenus(ctx context.Context, in GetRoleMenusInput) ([
 	if err != nil {
 		return nil, err
 	}
-	return permission.FilterConsoleMenuKeys(role.MenuKeys), nil
+	return FilterConsoleMenuKeys(role.MenuKeys), nil
 }
 
 func (s *RoleService) SetRoleMenus(ctx context.Context, in SetRoleMenusInput) error {
@@ -409,13 +423,13 @@ func (s *RoleService) SetRoleMenus(ctx context.Context, in SetRoleMenusInput) er
 	}
 
 	keys := uniqueNonEmptyStrings(in.MenuKeys)
-	if err := permission.ValidateConsoleMenuKeys(keys); err != nil {
+	if err := ValidateConsoleMenuKeys(keys); err != nil {
 		return err
 	}
 	if err := s.dbRepo.Default().WithContext(ctx).
 		Model(&model.ConsoleRole{}).
 		Where("id = ?", in.RoleID).
-		Update("menu_keys", datatype.NewStringArray(permission.FilterConsoleMenuKeys(keys))).Error; err != nil {
+		Update("menu_keys", datatype.NewStringArray(FilterConsoleMenuKeys(keys))).Error; err != nil {
 		return pkgerrors.Internal().WithCause(err)
 	}
 	return nil
@@ -468,4 +482,11 @@ func toRoleOutput(role model.ConsoleRole) Role {
 		CreatedAt:   formatTime(role.CreatedAt),
 		UpdatedAt:   formatTime(role.UpdatedAt),
 	}
+}
+
+func (s *RoleService) execute(ctx context.Context, fn func(context.Context) error) error {
+	if s.txManager == nil {
+		return fn(ctx)
+	}
+	return s.txManager.Execute(ctx, fn)
 }

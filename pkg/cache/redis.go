@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/zhimma/grove/pkg/logger"
 )
 
 // RedisStore Redis缓存实现
@@ -266,8 +268,7 @@ func (r *RedisStore) Remember(ctx context.Context, key string, seconds int, call
 
 	// 缓存结果
 	if err := r.Put(ctx, key, result, seconds); err != nil {
-		// 记录日志但不返回错误
-		fmt.Printf("failed to cache remember result: %v\n", err)
+		logger.Warn().Err(err).Str("key", key).Msg("缓存 Remember 结果写入失败")
 	}
 
 	return result, nil
@@ -287,23 +288,9 @@ func (r *RedisStore) Add(ctx context.Context, key string, value any, seconds int
 
 	prefixedKey := r.prefixKey(key)
 
-	// 使用SET NX
-	var setErr error
-	if seconds > 0 {
-		setErr = r.client.SetNX(ctx, prefixedKey, data, secondsToTTL(seconds)).Err()
-	} else {
-		setErr = r.client.SetNX(ctx, prefixedKey, data, 0).Err()
-	}
-
-	if setErr != nil {
-		return false, fmt.Errorf("redis setnx: %w", setErr)
-	}
-
-	// 检查是否设置成功
-	exists, err := r.Has(ctx, key)
+	added, err := r.client.SetNX(ctx, prefixedKey, data, secondsToTTL(seconds)).Result()
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("redis setnx: %w", err)
 	}
-
-	return exists, nil
+	return added, nil
 }

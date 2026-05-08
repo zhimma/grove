@@ -20,9 +20,20 @@ func TestServerRegisterAllowsNilServerState(t *testing.T) {
 		t.Fatal("expected initialized server mux")
 	}
 
-	server.Register(TaskEcho, func(context.Context, *asynq.Task) error {
+	if err := server.Register(TaskEcho, func(context.Context, *asynq.Task) error {
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("register task: %v", err)
+	}
+}
+
+func TestServerRegisterReturnsErrorForNilServer(t *testing.T) {
+	var server *Server
+	if err := server.Register(TaskEcho, func(context.Context, *asynq.Task) error {
+		return nil
+	}); err == nil {
+		t.Fatal("expected nil server register error")
+	}
 }
 
 func TestParsePayloadDecodesJSON(t *testing.T) {

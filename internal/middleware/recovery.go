@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"runtime/debug"
+
 	"github.com/gin-gonic/gin"
 
 	pkgerrors "github.com/zhimma/grove/pkg/errors"
@@ -14,6 +16,7 @@ func Recovery() gin.HandlerFunc {
 		logger.Error().
 			Interface("panic", recovered).
 			Str("request_id", reqctx.GetRequestID(c)).
+			Bytes("stack", debug.Stack()).
 			Msg("异常已恢复")
 
 		response.Fail(c, pkgerrors.Internal())

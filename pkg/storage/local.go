@@ -144,7 +144,11 @@ func (d *LocalDriver) fullPath(objectPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve local path: %w", err)
 	}
-	if !strings.HasPrefix(absPath, absRoot) {
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve local relative path: %w", err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 		return "", fmt.Errorf("local path escapes storage root")
 	}
 	return absPath, nil

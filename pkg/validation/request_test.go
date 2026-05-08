@@ -57,11 +57,11 @@ func TestBindJSONUsesLabelForValidationMessage(t *testing.T) {
 	}
 }
 
-func TestBindJSONSupportsLegacyLebelTag(t *testing.T) {
+func TestBindJSONUsesLabelTag(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	type listRequest struct {
-		Page int `json:"page" binding:"required,min=2" lebel:"页码"`
+		Page int `json:"page" binding:"required,min=2" label:"页码"`
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/list", bytes.NewBufferString(`{"page":1}`))

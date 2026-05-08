@@ -7,18 +7,18 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/model"
-	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/database"
 	pkgErr "github.com/zhimma/grove/pkg/errors"
 )
 
 // OperationLogService 操作日志服务
 type OperationLogService struct {
-	provider *provider.Provider
+	dbRepo database.Repo
 }
 
 // NewOperationLogService 创建操作日志服务
-func NewOperationLogService(p *provider.Provider) *OperationLogService {
-	return &OperationLogService{provider: p}
+func NewOperationLogService(dbRepo database.Repo) *OperationLogService {
+	return &OperationLogService{dbRepo: dbRepo}
 }
 
 // ListInput 列表输入参数
@@ -42,41 +42,45 @@ type OperationLogListOutput struct {
 
 // List 获取操作日志列表
 func (s *OperationLogService) List(ctx context.Context, in *OperationLogListInput) (*OperationLogListOutput, error) {
-	db := s.provider.DB.Default().WithContext(ctx).Model(&model.ConsoleOperationLog{})
+	db, err := s.defaultDB(ctx)
+	if err != nil {
+		return nil, err
+	}
+	query := db.Model(&model.ConsoleOperationLog{})
 
 	// 筛选条件
 	if in.AdminID != "" {
-		db = db.Where("admin_id = ?", in.AdminID)
+		query = query.Where("admin_id = ?", in.AdminID)
 	}
 	if in.Action != "" {
-		db = db.Where("action LIKE ?", "%"+in.Action+"%")
+		query = query.Where("action LIKE ?", "%"+in.Action+"%")
 	}
 	if in.Method != "" {
-		db = db.Where("method = ?", in.Method)
+		query = query.Where("method = ?", in.Method)
 	}
 	if in.Path != "" {
-		db = db.Where("path LIKE ?", "%"+in.Path+"%")
+		query = query.Where("path LIKE ?", "%"+in.Path+"%")
 	}
 	if in.Status > 0 {
-		db = db.Where("status = ?", in.Status)
+		query = query.Where("status = ?", in.Status)
 	}
 	if in.StartTime != "" {
-		db = db.Where("created_at >= ?", in.StartTime)
+		query = query.Where("created_at >= ?", in.StartTime)
 	}
 	if in.EndTime != "" {
-		db = db.Where("created_at <= ?", in.EndTime)
+		query = query.Where("created_at <= ?", in.EndTime)
 	}
 
 	// 统计总数
 	var total int64
-	if err := db.Count(&total).Error; err != nil {
+	if err := query.Count(&total).Error; err != nil {
 		return nil, pkgErr.Internal().WithCause(err)
 	}
 
 	// 分页查询
 	var logs []model.ConsoleOperationLog
 	offset := (in.Page - 1) * in.PageSize
-	if err := db.Order("created_at DESC").Offset(offset).Limit(in.PageSize).Find(&logs).Error; err != nil {
+	if err := query.Order("created_at DESC").Offset(offset).Limit(in.PageSize).Find(&logs).Error; err != nil {
 		return nil, pkgErr.Internal().WithCause(err)
 	}
 
@@ -93,8 +97,12 @@ type OperationLogGetInput struct {
 
 // Get 获取操作日志详情
 func (s *OperationLogService) Get(ctx context.Context, in *OperationLogGetInput) (*model.ConsoleOperationLog, error) {
+	db, dbErr := s.defaultDB(ctx)
+	if dbErr != nil {
+		return nil, dbErr
+	}
 	var log model.ConsoleOperationLog
-	if err := s.provider.DB.Default().WithContext(ctx).First(&log, "id = ?", in.ID).Error; err != nil {
+	if err := db.First(&log, "id = ?", in.ID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, pkgErr.NotFound().WithMessage("操作日志不存在")
 		}
@@ -110,7 +118,11 @@ type OperationLogDeleteInput struct {
 
 // Delete 删除操作日志
 func (s *OperationLogService) Delete(ctx context.Context, in *OperationLogDeleteInput) error {
-	if err := s.provider.DB.Default().WithContext(ctx).Delete(&model.ConsoleOperationLog{}, "id = ?", in.ID).Error; err != nil {
+	db, err := s.defaultDB(ctx)
+	if err != nil {
+		return err
+	}
+	if err := db.Delete(&model.ConsoleOperationLog{}, "id = ?", in.ID).Error; err != nil {
 		return pkgErr.Internal().WithCause(err)
 	}
 	return nil
@@ -123,15 +135,26 @@ type OperationLogClearInput struct {
 
 // Clear 清空操作日志
 func (s *OperationLogService) Clear(ctx context.Context, in *OperationLogClearInput) error {
-	db := s.provider.DB.Default().WithContext(ctx).Model(&model.ConsoleOperationLog{})
+	db, err := s.defaultDB(ctx)
+	if err != nil {
+		return err
+	}
+	query := db.Model(&model.ConsoleOperationLog{})
 
 	if in.Days > 0 {
 		// 删除指定天数前的日志
-		db = db.Where("created_at < DATE_SUB(NOW(), INTERVAL ? DAY)", in.Days)
+		query = query.Where("created_at < DATE_SUB(NOW(), INTERVAL ? DAY)", in.Days)
 	}
 
-	if err := db.Delete(&model.ConsoleOperationLog{}).Error; err != nil {
+	if err := query.Delete(&model.ConsoleOperationLog{}).Error; err != nil {
 		return pkgErr.Internal().WithCause(err)
 	}
 	return nil
+}
+
+func (s *OperationLogService) defaultDB(ctx context.Context) (*gorm.DB, error) {
+	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+		return nil, pkgErr.ServiceUnavailable().WithMessage("默认数据库未配置")
+	}
+	return s.dbRepo.Default().WithContext(ctx), nil
 }

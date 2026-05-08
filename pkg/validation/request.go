@@ -301,9 +301,6 @@ func resolveFieldMeta(target any, fieldRef string) fieldMeta {
 	}
 
 	label := strings.TrimSpace(field.Tag.Get("label"))
-	if label == "" {
-		label = strings.TrimSpace(field.Tag.Get("lebel"))
-	}
 	if label != "" {
 		meta.Label = label
 		return meta

@@ -8,11 +8,12 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/model"
+	"github.com/zhimma/grove/pkg/database"
 	pkgerrors "github.com/zhimma/grove/pkg/errors"
 )
 
 type LogService struct {
-	db *gorm.DB
+	dbRepo database.Repo
 }
 
 type ListOperationLogsInput struct {
@@ -64,16 +65,17 @@ type OperationLogDetail struct {
 	Detail map[string]any
 }
 
-func NewLogService(db *gorm.DB) *LogService {
-	return &LogService{db: db}
+func NewLogService(dbRepo database.Repo) *LogService {
+	return &LogService{dbRepo: dbRepo}
 }
 
 func (s *LogService) ListOperationLogs(ctx context.Context, in ListOperationLogsInput) (*ListOperationLogsOutput, error) {
-	if s.db == nil {
-		return nil, pkgerrors.ServiceUnavailable().WithMessage("默认数据库未配置")
+	db, err := s.defaultDB(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	query := s.db.WithContext(ctx).Model(&model.ConsoleOperationLog{}).Preload("Operator")
+	query := db.Model(&model.ConsoleOperationLog{}).Preload("Operator")
 	if keyword := strings.TrimSpace(in.Keyword); keyword != "" {
 		like := "%" + keyword + "%"
 		query = query.Where("path LIKE ? OR route LIKE ? OR action LIKE ? OR error_message LIKE ?", like, like, like, like)
@@ -91,7 +93,6 @@ func (s *LogService) ListOperationLogs(ctx context.Context, in ListOperationLogs
 		query = query.Where("admin_id = ?", adminID)
 	}
 
-	var err error
 	query, err = applyTimeRange(query, "created_at", in.CreatedFrom, in.CreatedTo)
 	if err != nil {
 		return nil, pkgerrors.InvalidParams().WithMessage("时间范围格式不正确")
@@ -105,11 +106,12 @@ func (s *LogService) ListOperationLogs(ctx context.Context, in ListOperationLogs
 }
 
 func (s *LogService) ListLoginLogs(ctx context.Context, in ListLoginLogsInput) (*ListLoginLogsOutput, error) {
-	if s.db == nil {
-		return nil, pkgerrors.ServiceUnavailable().WithMessage("默认数据库未配置")
+	db, err := s.defaultDB(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	query := s.db.WithContext(ctx).Model(&model.ConsoleLoginLog{}).Preload("Operator")
+	query := db.Model(&model.ConsoleLoginLog{}).Preload("Operator")
 	if keyword := strings.TrimSpace(in.Keyword); keyword != "" {
 		like := "%" + keyword + "%"
 		query = query.Where("account LIKE ? OR failure_reason LIKE ?", like, like)
@@ -121,7 +123,6 @@ func (s *LogService) ListLoginLogs(ctx context.Context, in ListLoginLogsInput) (
 		query = query.Where("admin_id = ?", adminID)
 	}
 
-	var err error
 	query, err = applyTimeRange(query, "created_at", in.CreatedFrom, in.CreatedTo)
 	if err != nil {
 		return nil, pkgerrors.InvalidParams().WithMessage("时间范围格式不正确")
@@ -135,12 +136,13 @@ func (s *LogService) ListLoginLogs(ctx context.Context, in ListLoginLogsInput) (
 }
 
 func (s *LogService) GetOperationLogDetail(ctx context.Context, in GetOperationLogDetailInput) (*OperationLogDetail, error) {
-	if s.db == nil {
-		return nil, pkgerrors.ServiceUnavailable().WithMessage("默认数据库未配置")
+	db, dbErr := s.defaultDB(ctx)
+	if dbErr != nil {
+		return nil, dbErr
 	}
 
 	var item model.ConsoleOperationLog
-	if err := s.db.WithContext(ctx).Preload("Operator").First(&item, "id = ?", strings.TrimSpace(in.LogID)).Error; err != nil {
+	if err := db.Preload("Operator").First(&item, "id = ?", strings.TrimSpace(in.LogID)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, pkgerrors.NotFound().WithMessage("操作日志不存在")
 		}
@@ -212,4 +214,11 @@ func queryConsoleLogs[T any, R any](
 		return zero, pkgerrors.Internal().WithCause(err)
 	}
 	return assemble(list, NewListMeta(total, page, pageSize)), nil
+}
+
+func (s *LogService) defaultDB(ctx context.Context) (*gorm.DB, error) {
+	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+		return nil, pkgerrors.ServiceUnavailable().WithMessage("默认数据库未配置")
+	}
+	return s.dbRepo.Default().WithContext(ctx), nil
 }

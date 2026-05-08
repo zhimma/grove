@@ -13,7 +13,7 @@ import (
 	pkgcasbin "github.com/zhimma/grove/pkg/casbin"
 	"github.com/zhimma/grove/pkg/database"
 	pkgerrors "github.com/zhimma/grove/pkg/errors"
-	"github.com/zhimma/grove/pkg/permission"
+	"github.com/zhimma/grove/pkg/logger"
 	"github.com/zhimma/grove/pkg/reqctx"
 )
 
@@ -201,6 +201,10 @@ func (s *AuthService) Logout(_ context.Context, input LogoutInput) error {
 
 func (s *AuthService) writeLoginLog(ctx context.Context, adminID, account string, success bool, failureReason string) {
 	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+		logger.Warn().
+			Str("module", "console_login").
+			Str("account", strings.TrimSpace(account)).
+			Msg("登录日志写入跳过：默认数据库未配置")
 		return
 	}
 	meta := reqctx.GetRequestMetaFromContext(ctx)
@@ -213,7 +217,15 @@ func (s *AuthService) writeLoginLog(ctx context.Context, adminID, account string
 		ClientIP:      truncateLoginIP(meta.ClientIP),
 		UserAgent:     truncateLoginUA(meta.UserAgent),
 	}
-	_ = s.dbRepo.Default().WithContext(ctx).Create(&record).Error
+	if err := s.dbRepo.Default().WithContext(ctx).Create(&record).Error; err != nil {
+		logger.Warn().
+			Err(err).
+			Str("module", "console_login").
+			Str("request_id", record.RequestID).
+			Str("admin_id", record.AdminID).
+			Str("account", record.Account).
+			Msg("登录日志写入失败")
+	}
 }
 
 func truncateLoginIP(value string) string {
@@ -355,7 +367,7 @@ func (s *AuthService) GetAuthorizationOverview(ctx context.Context, input GetAut
 	}
 
 	if admin.Role != nil {
-		output.MenuKeys = permission.FilterConsoleMenuKeys(admin.Role.MenuKeys)
+		output.MenuKeys = FilterConsoleMenuKeys(admin.Role.MenuKeys)
 	}
 
 	return output, nil

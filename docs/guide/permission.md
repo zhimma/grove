@@ -84,10 +84,7 @@ casbin:
 
 ```go
 enforcer := p.GetEnforcer("console")
-allowed, err := enforcer.CheckConsolePermission(
-    adminID,
-    "GET /console/v1/roles",
-)
+allowed, err := enforcer.Can(adminID, "GET /console/v1/roles")
 ```
 
 ## 权限清单来源

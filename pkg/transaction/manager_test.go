@@ -51,6 +51,20 @@ func TestExecuteReusesExistingTransaction(t *testing.T) {
 	}
 }
 
+func TestGetDBHandlesNilDefault(t *testing.T) {
+	if db := GetDB(context.Background(), nil); db != nil {
+		t.Fatal("expected nil when no transaction, override, or default database exists")
+	}
+
+	defaultDB := openTransactionTestDB(t)
+	overrideDB := openTransactionTestDB(t)
+	ctx := WithDB(context.Background(), overrideDB)
+
+	if db := GetDB(ctx, defaultDB); db == nil || db.Statement.ConnPool != overrideDB.Statement.ConnPool {
+		t.Fatal("expected override database from context")
+	}
+}
+
 func openTransactionTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 

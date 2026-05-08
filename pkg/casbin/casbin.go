@@ -99,8 +99,9 @@ func (e *Enforcer) CanInDomain(domain, subject, permission string) (bool, error)
 	return e.Enforce(domain, subject, permission)
 }
 
+// Deprecated: Use Can instead.
 func (e *Enforcer) CheckConsolePermission(userID, permission string) (bool, error) {
-	return e.Enforce(userID, permission)
+	return e.Can(userID, permission)
 }
 
 func (e *Enforcer) AddConsolePolicies(rules [][]string) error {

@@ -123,7 +123,7 @@ type AdminPathRequest struct {
 
 func RegisterAdminRoutes(protected *gin.RouterGroup, p *provider.Provider) {
 	h := &AdminHandler{
-		adminSvc: consoleservice.NewAdminService(p.DB, p.GetEnforcer("console")),
+		adminSvc: consoleservice.NewAdminService(p.DB, p.GetEnforcer("console")).WithTransaction(p.TxManager),
 	}
 
 	admins := route.Wrap(protected.Group("/admins"))

@@ -20,9 +20,13 @@ func NewMiddlewareLoader(cfg *config.Config, serviceName string) *MiddlewareLoad
 }
 
 func (l *MiddlewareLoader) Global() []gin.HandlerFunc {
+	debug := true
+	if l.cfg != nil {
+		debug = l.cfg.App.Debug
+	}
 	middlewares := []gin.HandlerFunc{
 		appmiddleware.RequestID(),
-		appmiddleware.RequestMeta(l.serviceName),
+		appmiddleware.RequestMeta(l.serviceName, debug),
 		appmiddleware.AccessLog(),
 		appmiddleware.Recovery(),
 	}

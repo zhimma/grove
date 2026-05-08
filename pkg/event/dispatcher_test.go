@@ -111,6 +111,43 @@ func TestDispatcher_CloseIsIdempotent(t *testing.T) {
 	dispatcher.Close()
 }
 
+func TestDispatcherCloseDrainsQueuedAsyncJobs(t *testing.T) {
+	dispatcher := NewAsync(10, 1)
+	done := make(chan struct{}, 2)
+
+	dispatcher.ListenFunc("test.event", func(ctx context.Context, event Event) error {
+		done <- struct{}{}
+		return nil
+	})
+
+	if err := dispatcher.DispatchAsync(context.Background(), TestEvent{}); err != nil {
+		t.Fatalf("dispatch first event: %v", err)
+	}
+	if err := dispatcher.DispatchAsync(context.Background(), TestEvent{}); err != nil {
+		t.Fatalf("dispatch second event: %v", err)
+	}
+
+	closed := make(chan struct{})
+	go func() {
+		dispatcher.Close()
+		close(closed)
+	}()
+
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		t.Fatal("close should not hang with queued jobs")
+	}
+
+	for i := 0; i < 2; i++ {
+		select {
+		case <-done:
+		default:
+			t.Fatalf("expected queued job %d to be drained", i+1)
+		}
+	}
+}
+
 func TestDispatcher_NoListeners(t *testing.T) {
 	dispatcher := New()
 

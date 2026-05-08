@@ -13,7 +13,9 @@ func RegisterDefaultJobs(server *job.Server) {
 	if server == nil {
 		return
 	}
-	server.Register(job.TaskEcho, handleEcho)
+	if err := server.Register(job.TaskEcho, handleEcho); err != nil {
+		logger.Error().Err(err).Str("task_type", job.TaskEcho).Msg("注册默认任务失败")
+	}
 }
 
 func handleEcho(_ context.Context, task *asynq.Task) error {

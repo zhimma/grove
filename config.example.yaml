@@ -1,6 +1,9 @@
 app:
   name: ${APP_NAME:grove}
   env: ${APP_ENV:development}
+  # app.debug defaults to true outside production and false in production when omitted.
+  # Set APP_DEBUG explicitly to override. Supported values: true/false/1/0/yes/no.
+  debug: ${APP_DEBUG:}
 
 port: ${APP_PORT:8080}
 console_port: ${CONSOLE_PORT:8081}

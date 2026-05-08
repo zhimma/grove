@@ -103,7 +103,7 @@ type LoginLogItem struct {
 
 func RegisterLogRoutes(protected *gin.RouterGroup, p *provider.Provider) {
 	h := &LogHandler{
-		logSvc: consoleservice.NewLogService(p.DB.Default()),
+		logSvc: consoleservice.NewLogService(p.DB),
 	}
 	group := route.Wrap(protected.Group("/logs"))
 	group.GET("/operations", h.OperationLogs).Name("系统日志.操作日志列表")

@@ -20,6 +20,7 @@ Grove 默认按以下顺序读取配置：
 app:
   name: grove
   env: development
+  debug: true
 
 port: 8080
 console_port: 8081
@@ -57,6 +58,7 @@ if err != nil {
 
 - `name`：应用名称
 - `env`：运行环境
+- `debug`：调试开关；未显式配置时，`production` 默认为 `false`，其他环境默认为 `true`。可用 `APP_DEBUG=true/false/1/0/yes/no` 覆盖。
 
 ### `port` / `console_port`
 
@@ -93,6 +95,7 @@ Redis 连接配置。启用缓存、队列或 worker 时需要。
 ## 使用约定
 
 - 生产环境必须替换 `jwt.secret`。
+- 生产环境建议保持 `app.debug=false`，避免响应体暴露底层错误信息。
 - 推荐把敏感信息放到环境变量，不直接写入版本库。
 - 多数据库资源命名应体现业务语义，例如 `orders`、`crm`。
 - 未启用的组件应显式保持 `enabled: false`。
