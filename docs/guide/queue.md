@@ -45,7 +45,7 @@ if err != nil {
 
 ### worker 处理任务
 
-任务处理逻辑放在 `app/worker/handler`，并由 worker 服务启动时注册。
+任务处理逻辑放在 `app/worker/internal/handler`，并由 worker 服务启动时注册。
 
 ## 使用约定
 

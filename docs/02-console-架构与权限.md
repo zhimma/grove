@@ -52,7 +52,7 @@
 1. 客户端携带 `Bearer access_token`
 2. `AdminAuthn` 校验 token 有效性
 3. `AdminAuthStateResolver` 按 `admin_id` 回库恢复当前授权态
-4. 将当前身份写入 `reqctx.Identity`
+4. 将当前身份写入 `request.Identity`
 5. `AdminPermission` 生成 `METHOD + path`
 6. Casbin 根据 `admin -> role -> permission` 判断是否放行
 7. 业务 handler / service 执行

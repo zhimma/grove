@@ -44,7 +44,7 @@ grove/
 
 `cmd/` 用于放置独立 CLI。当前保留：
 
-- `cmd/artisan`：迁移、seed、代码生成与环境信息查看
+- `cmd/grove`：迁移、seed、代码生成与环境信息查看
 
 ### `internal/`
 
@@ -63,21 +63,23 @@ grove/
 
 - `auth`
 - `cache`
-- `casbin`
+- `rbac`
 - `database`
 - `event`
+- `errx`
 - `httpclient`
 - `job`
 - `logger`
 - `migrate`
 - `permission`
-- `reqctx`
+- `request`
 - `response`
 - `route`
 - `scheduler`
 - `server`
 - `storage`
 - `transaction`
+- `ulid`
 - `validation`
 
 ### `database/`

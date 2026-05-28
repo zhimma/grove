@@ -28,7 +28,7 @@ return store.Put(ctx, "dashboard:summary", summary, 60)
 ```go
 store := p.Cache.Store("memory")
 if store == nil {
-	return pkgerrors.ServiceUnavailable().WithMessage("缓存未配置")
+	return errx.ServiceUnavailable().WithMessage("缓存未配置")
 }
 ```
 

@@ -38,5 +38,5 @@ func (r *Router) InstallToEngine(engine *gin.Engine) {
 
 	handler.RegisterAuthRoutes(public, r.p)
 	handler.RegisterStarterRoutes(public, protected, r.p)
-	// artisan:register-routes
+	// grove:register-routes
 }

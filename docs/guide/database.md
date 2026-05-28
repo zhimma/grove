@@ -58,7 +58,7 @@ type Article struct {
 ### 执行迁移
 
 ```bash
-go run ./cmd/artisan/main.go migrate up
+go run ./cmd/grove migrate up
 ```
 
 ## 使用约定

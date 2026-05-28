@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	pkgerrors "github.com/zhimma/grove/pkg/errors"
-	"github.com/zhimma/grove/pkg/reqctx"
+	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/request"
 )
 
 func TestFailIncludesErrorCodeInData(t *testing.T) {
@@ -19,9 +19,9 @@ func TestFailIncludesErrorCodeInData(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodGet, "/roles", nil)
-	reqctx.SetRequestID(c, "req-1")
+	request.SetRequestID(c, "req-1")
 
-	Fail(c, pkgerrors.Conflict().WithCode("role_code_exists").WithMessage("角色编码已存在"))
+	Fail(c, errx.Conflict().WithCode("role_code_exists").WithMessage("角色编码已存在"))
 
 	if recorder.Code != http.StatusConflict {
 		t.Fatalf("expected status 409, got %d", recorder.Code)
@@ -54,9 +54,9 @@ func TestFailPreservesValidationErrors(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/roles", nil)
-	reqctx.SetRequestID(c, "req-2")
+	request.SetRequestID(c, "req-2")
 
-	Fail(c, pkgerrors.InvalidParams().WithHTTPStatus(http.StatusUnprocessableEntity).WithMessage("请求参数校验失败").WithData(map[string]interface{}{
+	Fail(c, errx.InvalidParams().WithHTTPStatus(http.StatusUnprocessableEntity).WithMessage("请求参数校验失败").WithData(map[string]interface{}{
 		"errors": map[string][]string{
 			"code": {"角色编码不能为空"},
 		},
@@ -87,10 +87,10 @@ func TestFailHidesInternalCauseWhenDebugDisabled(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodGet, "/admins", nil)
-	reqctx.SetRequestID(c, "req-3")
-	reqctx.SetRequestMeta(c, reqctx.RequestMeta{RequestID: "req-3", Debug: false})
+	request.SetRequestID(c, "req-3")
+	request.SetRequestMeta(c, request.RequestMeta{RequestID: "req-3", Debug: false})
 
-	Fail(c, pkgerrors.Internal().WithMessage("database exploded").WithCause(stderrors.New("pq: duplicate key")))
+	Fail(c, errx.Internal().WithMessage("database exploded").WithCause(stderrors.New("pq: duplicate key")))
 
 	if recorder.Code != http.StatusInternalServerError {
 		t.Fatalf("expected status 500, got %d", recorder.Code)
@@ -108,7 +108,7 @@ func TestFailHidesInternalCauseWhenDebugDisabled(t *testing.T) {
 		t.Fatalf("expected debug data to be hidden, got %#v", data["debug"])
 	}
 
-	meta := reqctx.GetErrorMeta(c)
+	meta := request.GetErrorMeta(c)
 	if meta.HTTPStatus != http.StatusInternalServerError {
 		t.Fatalf("unexpected error meta status: %#v", meta)
 	}
@@ -126,8 +126,8 @@ func TestFailIncludesDebugCauseWhenDebugEnabled(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodGet, "/admins", nil)
-	reqctx.SetRequestID(c, "req-4")
-	reqctx.SetRequestMeta(c, reqctx.RequestMeta{RequestID: "req-4", Debug: true})
+	request.SetRequestID(c, "req-4")
+	request.SetRequestMeta(c, request.RequestMeta{RequestID: "req-4", Debug: true})
 
 	Fail(c, stderrors.New("driver: connection refused"))
 

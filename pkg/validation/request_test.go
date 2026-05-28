@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	pkgerrors "github.com/zhimma/grove/pkg/errors"
+	"github.com/zhimma/grove/pkg/errx"
 )
 
 type customValidatePayload struct {
@@ -39,9 +39,9 @@ func TestBindJSONUsesLabelForValidationMessage(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	httpErr, ok := err.(*pkgerrors.HTTPError)
+	httpErr, ok := err.(*errx.HTTPError)
 	if !ok {
-		t.Fatalf("expected *pkgerrors.HTTPError, got %T", err)
+		t.Fatalf("expected *errx.HTTPError, got %T", err)
 	}
 	if httpErr.HTTPStatus != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d", httpErr.HTTPStatus)
@@ -76,7 +76,7 @@ func TestBindJSONUsesLabelTag(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	httpErr := err.(*pkgerrors.HTTPError)
+	httpErr := err.(*errx.HTTPError)
 	if httpErr.HTTPStatus != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d", httpErr.HTTPStatus)
 	}
@@ -103,7 +103,7 @@ func TestBindQueryUsesLabelForTypeError(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	httpErr := err.(*pkgerrors.HTTPError)
+	httpErr := err.(*errx.HTTPError)
 	if httpErr.HTTPStatus != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", httpErr.HTTPStatus)
 	}
@@ -132,7 +132,7 @@ func TestBindJSONUsesBadRequestForJSONSyntaxError(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	httpErr := err.(*pkgerrors.HTTPError)
+	httpErr := err.(*errx.HTTPError)
 	if httpErr.HTTPStatus != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", httpErr.HTTPStatus)
 	}
@@ -158,7 +158,7 @@ func TestBindJSONUsesValidationStatusForCustomValidate(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	httpErr := err.(*pkgerrors.HTTPError)
+	httpErr := err.(*errx.HTTPError)
 	if httpErr.HTTPStatus != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d", httpErr.HTTPStatus)
 	}

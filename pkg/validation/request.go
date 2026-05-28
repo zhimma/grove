@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 
-	pkgerrors "github.com/zhimma/grove/pkg/errors"
+	"github.com/zhimma/grove/pkg/errx"
 )
 
 const validationMessage = "请求参数校验失败"
@@ -59,7 +59,7 @@ func Require(condition bool, message string) error {
 func runRequestHooks(target any) error {
 	if validatable, ok := target.(interface{ Validate() error }); ok {
 		if err := validatable.Validate(); err != nil {
-			return pkgerrors.InvalidParams().
+			return errx.InvalidParams().
 				WithHTTPStatus(http.StatusUnprocessableEntity).
 				WithMessage(validationMessage).
 				WithData(map[string]interface{}{
@@ -73,7 +73,7 @@ func runRequestHooks(target any) error {
 }
 
 func newValidationError(c *gin.Context, err error, target any, source string) error {
-	return pkgerrors.InvalidParams().
+	return errx.InvalidParams().
 		WithHTTPStatus(http.StatusUnprocessableEntity).
 		WithMessage(validationMessage).
 		WithData(map[string]interface{}{
@@ -82,7 +82,7 @@ func newValidationError(c *gin.Context, err error, target any, source string) er
 }
 
 func newBindingError(c *gin.Context, err error, target any, source string) error {
-	return pkgerrors.InvalidParams().WithMessage(invalidParamsMessage).WithData(map[string]interface{}{
+	return errx.InvalidParams().WithMessage(invalidParamsMessage).WithData(map[string]interface{}{
 		"errors": formatErrors(c, err, target, source),
 	})
 }

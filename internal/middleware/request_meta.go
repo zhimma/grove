@@ -3,7 +3,7 @@ package middleware
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/zhimma/grove/pkg/reqctx"
+	"github.com/zhimma/grove/pkg/request"
 )
 
 func RequestMeta(serviceName string, debug ...bool) gin.HandlerFunc {
@@ -12,8 +12,8 @@ func RequestMeta(serviceName string, debug ...bool) gin.HandlerFunc {
 		if len(debug) > 0 {
 			appDebug = debug[0]
 		}
-		reqctx.SetRequestMeta(c, reqctx.RequestMeta{
-			RequestID: reqctx.GetRequestID(c),
+		request.SetRequestMeta(c, request.RequestMeta{
+			RequestID: request.GetRequestID(c),
 			App:       serviceName,
 			Debug:     appDebug,
 			Method:    c.Request.Method,

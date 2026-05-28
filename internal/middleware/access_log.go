@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/zhimma/grove/pkg/logger"
-	"github.com/zhimma/grove/pkg/reqctx"
+	"github.com/zhimma/grove/pkg/request"
 )
 
 func AccessLog() gin.HandlerFunc {
@@ -23,11 +23,11 @@ func AccessLog() gin.HandlerFunc {
 		} else if status >= http.StatusBadRequest {
 			level = zerolog.WarnLevel
 		}
-		meta := reqctx.GetErrorMeta(c)
-		identity := reqctx.GetIdentity(c)
+		meta := request.GetErrorMeta(c)
+		identity := request.GetIdentity(c)
 		log := logger.Logger()
 		log.WithLevel(level).
-			Str("request_id", reqctx.GetRequestID(c)).
+			Str("request_id", request.GetRequestID(c)).
 			Str("method", c.Request.Method).
 			Str("path", c.Request.URL.Path).
 			Str("route", c.FullPath()).

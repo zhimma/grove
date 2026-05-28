@@ -12,7 +12,7 @@ import (
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/pkg/auth"
 	"github.com/zhimma/grove/pkg/cache"
-	pkgcasbin "github.com/zhimma/grove/pkg/casbin"
+	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/event"
 	"github.com/zhimma/grove/pkg/httpclient"
@@ -30,7 +30,7 @@ type Provider struct {
 	TokenManager *auth.Manager
 	JobClient    *job.Client
 	JobServer    *job.Server
-	Enforcers    map[string]*pkgcasbin.Enforcer
+	Enforcers    map[string]*rbac.Enforcer
 	Storage      *storage.Manager
 	TxManager    transaction.Manager
 	Cache        *cache.Manager
@@ -148,7 +148,7 @@ func WithDatabase() Option {
 func WithCasbin() Option {
 	return func(p *Provider) error {
 		if p.Enforcers == nil {
-			p.Enforcers = map[string]*pkgcasbin.Enforcer{}
+			p.Enforcers = map[string]*rbac.Enforcer{}
 		}
 		if p.DB == nil {
 			return fmt.Errorf("权限控制依赖数据库仓储")
@@ -166,8 +166,8 @@ func WithCasbin() Option {
 			if err != nil {
 				return fmt.Errorf("casbin enforcer %q database %q: %w", name, resourceName, err)
 			}
-			enforcer, err := pkgcasbin.New(db, &pkgcasbin.Config{
-				Mode:      pkgcasbin.Mode(cfg.Mode),
+			enforcer, err := rbac.New(db, &rbac.Config{
+				Mode:      rbac.Mode(cfg.Mode),
 				TableName: cfg.TableName,
 				ModelPath: cfg.ModelPath,
 			})
@@ -420,7 +420,7 @@ func (p *Provider) Close() error {
 	return errors.Join(errs...)
 }
 
-func (p *Provider) GetEnforcer(name string) *pkgcasbin.Enforcer {
+func (p *Provider) GetEnforcer(name string) *rbac.Enforcer {
 	if p == nil || p.Enforcers == nil {
 		return nil
 	}

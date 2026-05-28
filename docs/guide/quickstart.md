@@ -70,18 +70,18 @@ make admin.dev
 
 ## 6. 新增一个 Console 模块
 
-推荐使用 `artisan make:module` 生成当前约定的最小模板：
+推荐使用 `grove make:module` 生成当前约定的最小模板：
 
 ```bash
-go run ./cmd/artisan/main.go migrate create create_articles_table
-go run ./cmd/artisan/main.go make:module Article
+go run ./cmd/grove migrate create create_articles_table
+go run ./cmd/grove make:module Article
 ```
 
 命令会生成：
 
 - `internal/model/article.go`
-- `app/console/service/article.go`
-- `app/console/handler/article.go`
+- `app/console/internal/service/article.go`
+- `app/console/internal/handler/article.go`
 - `app/console/internal/router/router.go` 中的路由注册
 
 生成后继续补齐：

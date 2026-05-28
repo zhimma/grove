@@ -13,7 +13,7 @@
 ### Service 返回业务错误
 
 ```go
-return nil, pkgerrors.Conflict().WithMessage("角色编码已存在")
+return nil, errx.Conflict().WithMessage("角色编码已存在")
 ```
 
 ### Handler 输出错误响应
@@ -38,7 +38,7 @@ if err != nil {
 ## 使用约定
 
 - 参数校验错误优先使用 `validation` 层返回
-- 业务可预期错误返回明确的 `pkg/errors` 类型
+- 业务可预期错误返回明确的 `pkg/errx` 类型
 - 底层异常应通过 `WithCause(err)` 保留原始错误
 - 日志记录放在统一日志链路，不在每个返回点重复打印
 - `app.debug=false` 时，`Internal().WithCause(err)` 对前端只返回通用提示；`app.debug=true` 时仅在 `data.debug` 返回底层错误文本和类型
