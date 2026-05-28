@@ -4,9 +4,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/zhimma/grove/app/console/handler"
-	consolemiddleware "github.com/zhimma/grove/app/console/middleware"
-	consoleservice "github.com/zhimma/grove/app/console/service"
+	"github.com/zhimma/grove/app/console/internal/handler"
+	consolemiddleware "github.com/zhimma/grove/app/console/internal/middleware"
+	consoleservice "github.com/zhimma/grove/app/console/internal/service"
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/internal/provider"
 )
@@ -48,7 +48,7 @@ func (r *Router) InstallToEngine(engine *gin.Engine) {
 	handler.RegisterSystemConfigRoutes(protected, r.p)
 	handler.RegisterStorageRoutes(protected, r.p)
 	handler.RegisterLogRoutes(protected, r.p)
-	// artisan:register-routes
+	// grove:register-routes
 
 	runtimeCatalog.LoadRoutes(engine.Routes())
 }

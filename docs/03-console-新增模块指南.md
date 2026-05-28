@@ -26,7 +26,7 @@
 放在：
 
 ```text
-app/console/service/
+app/console/internal/service/
 ```
 
 推荐模式：
@@ -40,13 +40,13 @@ app/console/service/
 放在：
 
 ```text
-app/console/handler/
+app/console/internal/handler/
 ```
 
 handler 负责：
 
 - 参数绑定
-- 从 `reqctx` 读取身份
+- 从 `request` 读取身份
 - 调用 service
 - 输出 `response.Success / response.Fail`
 
@@ -175,8 +175,8 @@ GET /console/v1/permissions/apis
 推荐命令：
 
 ```bash
-go run ./cmd/artisan/main.go migrate create create_articles_table
-go run ./cmd/artisan/main.go make:model Article
+go run ./cmd/grove migrate create create_articles_table
+go run ./cmd/grove make:model Article
 ```
 
 仅补充业务代码时不要求每次都使用脚手架。

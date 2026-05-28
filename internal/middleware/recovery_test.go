@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/zhimma/grove/pkg/reqctx"
+	"github.com/zhimma/grove/pkg/request"
 )
 
 func TestRecoveryUsesUnifiedErrorResponse(t *testing.T) {
@@ -16,7 +16,7 @@ func TestRecoveryUsesUnifiedErrorResponse(t *testing.T) {
 
 	engine := gin.New()
 	engine.Use(func(c *gin.Context) {
-		reqctx.SetRequestID(c, "req-panic")
+		request.SetRequestID(c, "req-panic")
 		c.Next()
 	})
 	engine.Use(Recovery())

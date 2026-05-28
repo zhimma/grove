@@ -11,8 +11,8 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/zhimma/grove/pkg/casbin"
-	"github.com/zhimma/grove/pkg/reqctx"
+	"github.com/zhimma/grove/pkg/rbac"
+	"github.com/zhimma/grove/pkg/request"
 )
 
 func TestPermissionSetRequiresEnforcer(t *testing.T) {
@@ -33,7 +33,7 @@ func TestPermissionSetRequiresEnforcer(t *testing.T) {
 func TestPermissionSetRequiresUserIdentity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	enforcer := openPermissionTestEnforcer(t, casbin.ModeRBAC)
+	enforcer := openPermissionTestEnforcer(t, rbac.ModeRBAC)
 	engine := gin.New()
 	engine.GET("/ping", NewPermissionSet(enforcer, nil).Require("api.ping"), func(c *gin.Context) {
 		c.Status(http.StatusOK)
@@ -49,10 +49,10 @@ func TestPermissionSetRequiresUserIdentity(t *testing.T) {
 func TestPermissionSetRejectsWithoutPermission(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	enforcer := openPermissionTestEnforcer(t, casbin.ModeRBAC)
+	enforcer := openPermissionTestEnforcer(t, rbac.ModeRBAC)
 	engine := gin.New()
 	engine.Use(func(c *gin.Context) {
-		reqctx.SetUserID(c, "user-1")
+		request.SetUserID(c, "user-1")
 		c.Next()
 	})
 	engine.GET("/ping", NewPermissionSet(enforcer, nil).Require("api.ping"), func(c *gin.Context) {
@@ -69,7 +69,7 @@ func TestPermissionSetRejectsWithoutPermission(t *testing.T) {
 func TestPermissionSetAllowsWhenPermissionGranted(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	enforcer := openPermissionTestEnforcer(t, casbin.ModeRBAC)
+	enforcer := openPermissionTestEnforcer(t, rbac.ModeRBAC)
 	if _, err := enforcer.AddPolicy("member", "api.ping"); err != nil {
 		t.Fatalf("add policy: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestPermissionSetAllowsWhenPermissionGranted(t *testing.T) {
 
 	engine := gin.New()
 	engine.Use(func(c *gin.Context) {
-		reqctx.SetUserID(c, "user-1")
+		request.SetUserID(c, "user-1")
 		c.Next()
 	})
 	engine.GET("/ping", NewPermissionSet(enforcer, nil).Require("api.ping"), func(c *gin.Context) {
@@ -95,10 +95,10 @@ func TestPermissionSetAllowsWhenPermissionGranted(t *testing.T) {
 func TestPermissionSetRequiresDomainResolverInDomainMode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	enforcer := openPermissionTestEnforcer(t, casbin.ModeRBACDomains)
+	enforcer := openPermissionTestEnforcer(t, rbac.ModeRBACDomains)
 	engine := gin.New()
 	engine.Use(func(c *gin.Context) {
-		reqctx.SetUserID(c, "user-1")
+		request.SetUserID(c, "user-1")
 		c.Next()
 	})
 	engine.GET("/ping", NewPermissionSet(enforcer, nil).Require("api.ping"), func(c *gin.Context) {
@@ -115,10 +115,10 @@ func TestPermissionSetRequiresDomainResolverInDomainMode(t *testing.T) {
 func TestPermissionSetReturnsResolverError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	enforcer := openPermissionTestEnforcer(t, casbin.ModeRBACDomains)
+	enforcer := openPermissionTestEnforcer(t, rbac.ModeRBACDomains)
 	engine := gin.New()
 	engine.Use(func(c *gin.Context) {
-		reqctx.SetUserID(c, "user-1")
+		request.SetUserID(c, "user-1")
 		c.Next()
 	})
 	engine.GET("/ping", NewPermissionSet(enforcer, func(*gin.Context) (string, error) {
@@ -134,7 +134,7 @@ func TestPermissionSetReturnsResolverError(t *testing.T) {
 	assertPermissionMessage(t, resp, "租户标识不能为空")
 }
 
-func openPermissionTestEnforcer(t *testing.T, mode casbin.Mode) *casbin.Enforcer {
+func openPermissionTestEnforcer(t *testing.T, mode rbac.Mode) *rbac.Enforcer {
 	t.Helper()
 
 	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/permission.db"), &gorm.Config{})
@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS casbin_rules (
 		t.Fatalf("create casbin table: %v", err)
 	}
 
-	enforcer, err := casbin.New(db, &casbin.Config{Mode: mode, TableName: "casbin_rules"})
+	enforcer, err := rbac.New(db, &rbac.Config{Mode: mode, TableName: "casbin_rules"})
 	if err != nil {
 		t.Fatalf("new enforcer: %v", err)
 	}

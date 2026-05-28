@@ -6,7 +6,7 @@ import (
 
 	"github.com/zhimma/grove/app/api/service"
 	"github.com/zhimma/grove/internal/provider"
-	"github.com/zhimma/grove/pkg/reqctx"
+	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/validation"
 )
@@ -77,7 +77,7 @@ func (h *StarterHandler) Ping(c *gin.Context) {
 
 func (h *StarterHandler) Profile(c *gin.Context) {
 	out, err := h.starterSvc.Profile(c.Request.Context(), service.ProfileInput{
-		UserID: reqctx.GetUserID(c),
+		UserID: request.GetUserID(c),
 	})
 	if err != nil {
 		response.Fail(c, err)
@@ -100,9 +100,9 @@ func (h *StarterHandler) DispatchEchoJob(c *gin.Context) {
 	}
 
 	out, err := h.starterSvc.DispatchEchoJob(c.Request.Context(), service.DispatchEchoJobInput{
-		UserID:    reqctx.GetUserID(c),
+		UserID:    request.GetUserID(c),
 		Message:   req.Message,
-		RequestID: reqctx.GetRequestID(c),
+		RequestID: request.GetRequestID(c),
 	})
 	if err != nil {
 		response.Fail(c, err)

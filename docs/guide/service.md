@@ -50,7 +50,7 @@ func (s *ArticleService) Create(ctx context.Context, input CreateArticleInput) (
 		Content: input.Content,
 	}
 	if err := s.provider.DB.Default().Create(article).Error; err != nil {
-		return nil, pkgerrors.Internal().WithCause(err)
+		return nil, errx.Internal().WithCause(err)
 	}
 	return article, nil
 }
@@ -61,7 +61,7 @@ func (s *ArticleService) Create(ctx context.Context, input CreateArticleInput) (
 - `service` 方法统一接收 `context.Context`
 - 推荐使用 `Input` / `Output` 结构体
 - 事务、缓存、事件、任务都在 service 中协调
-- 业务错误返回 `pkg/errors` 定义的错误类型
+- 业务错误返回 `pkg/errx` 定义的错误类型
 
 ## 边界
 

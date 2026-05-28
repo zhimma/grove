@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/zhimma/grove/pkg/reqctx"
+	"github.com/zhimma/grove/pkg/request"
 )
 
 func RequestID() gin.HandlerFunc {
@@ -14,7 +14,7 @@ func RequestID() gin.HandlerFunc {
 			requestID = uuid.NewString()
 		}
 		c.Writer.Header().Set("X-Request-Id", requestID)
-		reqctx.SetRequestID(c, requestID)
+		request.SetRequestID(c, requestID)
 		c.Next()
 	}
 }

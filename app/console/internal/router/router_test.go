@@ -14,13 +14,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
-	consoleservice "github.com/zhimma/grove/app/console/service"
+	consoleservice "github.com/zhimma/grove/app/console/internal/service"
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/internal/datatype"
 	appmiddleware "github.com/zhimma/grove/internal/middleware"
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/internal/provider"
-	pkgcasbin "github.com/zhimma/grove/pkg/casbin"
+	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/database"
 )
 
@@ -68,7 +68,7 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 	t.Cleanup(func() { _ = p.Close() })
 
 	p.DB = database.NewRepoWithConnections(db, nil)
-	p.Enforcers = map[string]*pkgcasbin.Enforcer{
+	p.Enforcers = map[string]*rbac.Enforcer{
 		"console": enforcer,
 	}
 
@@ -277,10 +277,10 @@ CREATE TABLE IF NOT EXISTS console_casbin_rules (
 	return db
 }
 
-func openConsoleTestEnforcer(t *testing.T, db *gorm.DB) *pkgcasbin.Enforcer {
+func openConsoleTestEnforcer(t *testing.T, db *gorm.DB) *rbac.Enforcer {
 	t.Helper()
 
-	enforcer, err := pkgcasbin.New(db, &pkgcasbin.Config{
+	enforcer, err := rbac.New(db, &rbac.Config{
 		TableName: "console_casbin_rules",
 	})
 	if err != nil {
@@ -289,7 +289,7 @@ func openConsoleTestEnforcer(t *testing.T, db *gorm.DB) *pkgcasbin.Enforcer {
 	return enforcer
 }
 
-func seedConsoleTestData(t *testing.T, db *gorm.DB, enforcer *pkgcasbin.Enforcer) {
+func seedConsoleTestData(t *testing.T, db *gorm.DB, enforcer *rbac.Enforcer) {
 	t.Helper()
 
 	password, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
@@ -542,7 +542,7 @@ func TestConsoleRouterRejectsDisabledAdminEvenWithOldToken(t *testing.T) {
 	t.Cleanup(func() { _ = p.Close() })
 
 	p.DB = database.NewRepoWithConnections(db, nil)
-	p.Enforcers = map[string]*pkgcasbin.Enforcer{"console": enforcer}
+	p.Enforcers = map[string]*rbac.Enforcer{"console": enforcer}
 
 	engine := gin.New()
 	engine.Use(appmiddleware.RequestID(), appmiddleware.RequestMeta("console"), appmiddleware.Recovery())
@@ -598,7 +598,7 @@ func TestConsoleRouterCreateRoleValidationErrorUsesFieldMessages(t *testing.T) {
 	t.Cleanup(func() { _ = p.Close() })
 
 	p.DB = database.NewRepoWithConnections(db, nil)
-	p.Enforcers = map[string]*pkgcasbin.Enforcer{"console": enforcer}
+	p.Enforcers = map[string]*rbac.Enforcer{"console": enforcer}
 
 	engine := gin.New()
 	engine.Use(appmiddleware.RequestID(), appmiddleware.RequestMeta("console"), appmiddleware.Recovery())
@@ -661,7 +661,7 @@ func TestConsoleRouterCreateRoleConflictReturnsStableErrorCode(t *testing.T) {
 	t.Cleanup(func() { _ = p.Close() })
 
 	p.DB = database.NewRepoWithConnections(db, nil)
-	p.Enforcers = map[string]*pkgcasbin.Enforcer{"console": enforcer}
+	p.Enforcers = map[string]*rbac.Enforcer{"console": enforcer}
 
 	engine := gin.New()
 	engine.Use(appmiddleware.RequestID(), appmiddleware.RequestMeta("console"), appmiddleware.Recovery())

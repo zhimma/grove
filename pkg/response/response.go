@@ -7,9 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 
-	pkgerrors "github.com/zhimma/grove/pkg/errors"
+	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/logger"
-	"github.com/zhimma/grove/pkg/reqctx"
+	"github.com/zhimma/grove/pkg/request"
 )
 
 type Response struct {
@@ -24,7 +24,7 @@ func Success(c *gin.Context, data interface{}) {
 		Code:      0,
 		Message:   "ok",
 		Data:      data,
-		RequestID: reqctx.GetRequestID(c),
+		RequestID: request.GetRequestID(c),
 	})
 }
 
@@ -35,7 +35,7 @@ func Fail(c *gin.Context, input interface{}) {
 	}
 
 	message := responseMessage(httpErr)
-	reqctx.SetErrorMeta(c, reqctx.ErrorMeta{
+	request.SetErrorMeta(c, request.ErrorMeta{
 		HTTPStatus:    httpErr.HTTPStatus,
 		Code:          httpErr.Code,
 		Message:       message,
@@ -47,21 +47,21 @@ func Fail(c *gin.Context, input interface{}) {
 	resp := Response{
 		Code:      -1,
 		Message:   message,
-		RequestID: reqctx.GetRequestID(c),
+		RequestID: request.GetRequestID(c),
 	}
-	if data := buildErrorData(httpErr, reqctx.GetRequestMeta(c).Debug); len(data) > 0 {
+	if data := buildErrorData(httpErr, request.GetRequestMeta(c).Debug); len(data) > 0 {
 		resp.Data = data
 	}
 
 	c.JSON(httpErr.HTTPStatus, resp)
 }
 
-func responseMessage(httpErr *pkgerrors.HTTPError) string {
+func responseMessage(httpErr *errx.HTTPError) string {
 	if httpErr == nil {
 		return ""
 	}
 	if httpErr.HTTPStatus == http.StatusInternalServerError || httpErr.Code == "internal_error" {
-		return pkgerrors.Internal().Message
+		return errx.Internal().Message
 	}
 	if httpErr.Message != "" {
 		return httpErr.Message
@@ -69,7 +69,7 @@ func responseMessage(httpErr *pkgerrors.HTTPError) string {
 	return http.StatusText(httpErr.HTTPStatus)
 }
 
-func buildErrorData(httpErr *pkgerrors.HTTPError, debug bool) map[string]interface{} {
+func buildErrorData(httpErr *errx.HTTPError, debug bool) map[string]interface{} {
 	if httpErr == nil {
 		return nil
 	}
@@ -103,7 +103,7 @@ func buildErrorData(httpErr *pkgerrors.HTTPError, debug bool) map[string]interfa
 	return data
 }
 
-func logFailure(c *gin.Context, httpErr *pkgerrors.HTTPError, message string) {
+func logFailure(c *gin.Context, httpErr *errx.HTTPError, message string) {
 	if c == nil || httpErr == nil {
 		return
 	}
@@ -117,9 +117,9 @@ func logFailure(c *gin.Context, httpErr *pkgerrors.HTTPError, message string) {
 	if httpErr.Cause != nil {
 		event = event.Err(httpErr.Cause).Str("cause", httpErr.Cause.Error())
 	}
-	identity := reqctx.GetIdentity(c)
+	identity := request.GetIdentity(c)
 	event.
-		Str("request_id", reqctx.GetRequestID(c)).
+		Str("request_id", request.GetRequestID(c)).
 		Str("method", c.Request.Method).
 		Str("path", c.Request.URL.Path).
 		Str("route", c.FullPath()).
@@ -131,7 +131,7 @@ func logFailure(c *gin.Context, httpErr *pkgerrors.HTTPError, message string) {
 		Msg("请求处理失败")
 }
 
-func failureLogLevel(httpErr *pkgerrors.HTTPError) zerolog.Level {
+func failureLogLevel(httpErr *errx.HTTPError) zerolog.Level {
 	if httpErr.HTTPStatus >= http.StatusInternalServerError {
 		return zerolog.ErrorLevel
 	}
@@ -143,17 +143,17 @@ func failureLogLevel(httpErr *pkgerrors.HTTPError) zerolog.Level {
 	}
 }
 
-func normalize(input interface{}) *pkgerrors.HTTPError {
+func normalize(input interface{}) *errx.HTTPError {
 	switch value := input.(type) {
 	case nil:
 		return nil
-	case *pkgerrors.HTTPError:
+	case *errx.HTTPError:
 		return value
 	case error:
-		return pkgerrors.Normalize(value)
+		return errx.Normalize(value)
 	case string:
-		return pkgerrors.InvalidParams().WithMessage(value)
+		return errx.InvalidParams().WithMessage(value)
 	default:
-		return pkgerrors.Internal()
+		return errx.Internal()
 	}
 }

@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	consoledocs "github.com/zhimma/grove/app/console/internal/docs"
-	consolerouter "github.com/zhimma/grove/app/console/internal/router"
+	"github.com/zhimma/grove/app/console/internal/docs"
+	"github.com/zhimma/grove/app/console/internal/router"
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/internal/provider"
 	pkgserver "github.com/zhimma/grove/pkg/server"
@@ -30,8 +30,8 @@ func NewServer(cfg *config.Config) (*ConsoleApp, func(), error) {
 
 	registerLocalStorageRoutes(base.Router, cfg)
 
-	consoledocs.RegisterDocs(base.Router, cfg)
-	consolerouter.New(cfg, base.Provider).InstallToEngine(base.Router)
+	docs.RegisterDocs(base.Router, cfg)
+	router.New(cfg, base.Provider).InstallToEngine(base.Router)
 
 	return &ConsoleApp{CoreServer: base}, cleanup, nil
 }

@@ -8,7 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
-	pkgerrors "github.com/zhimma/grove/pkg/errors"
+	"github.com/zhimma/grove/pkg/errx"
 )
 
 type User struct {
@@ -24,7 +24,7 @@ func (User) TableName() string {
 func FindUserByID(ctx context.Context, db *gorm.DB, userID string) (*User, error) {
 	userID = strings.TrimSpace(userID)
 	if userID == "" {
-		return nil, pkgerrors.Unauthorized().WithMessage("缺少用户身份信息")
+		return nil, errx.Unauthorized().WithMessage("缺少用户身份信息")
 	}
 
 	if db == nil {
@@ -38,9 +38,9 @@ func FindUserByID(ctx context.Context, db *gorm.DB, userID string) (*User, error
 	var user User
 	if err := db.WithContext(ctx).Where("id = ?", userID).First(&user).Error; err != nil {
 		if stderrors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, pkgerrors.NotFound().WithMessage("用户不存在")
+			return nil, errx.NotFound().WithMessage("用户不存在")
 		}
-		return nil, pkgerrors.Internal().WithCause(err)
+		return nil, errx.Internal().WithCause(err)
 	}
 
 	return &user, nil

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/zhimma/grove/pkg/auth"
-	pkgerrors "github.com/zhimma/grove/pkg/errors"
+	"github.com/zhimma/grove/pkg/errx"
 )
 
 type AuthService struct {
@@ -28,7 +28,7 @@ func NewAuthService(tokenManager *auth.Manager) *AuthService {
 
 func (s *AuthService) IssueAccessToken(_ context.Context, input IssueAccessTokenInput) (IssueAccessTokenOutput, error) {
 	if s.tokenManager == nil {
-		return IssueAccessTokenOutput{}, pkgerrors.ServiceUnavailable().WithMessage("令牌管理器未配置")
+		return IssueAccessTokenOutput{}, errx.ServiceUnavailable().WithMessage("令牌管理器未配置")
 	}
 
 	userID := strings.TrimSpace(input.UserID)
@@ -38,7 +38,7 @@ func (s *AuthService) IssueAccessToken(_ context.Context, input IssueAccessToken
 
 	token, err := s.tokenManager.IssueAccessToken(userID)
 	if err != nil {
-		return IssueAccessTokenOutput{}, pkgerrors.Internal().WithCause(err)
+		return IssueAccessTokenOutput{}, errx.Internal().WithCause(err)
 	}
 
 	return IssueAccessTokenOutput{

@@ -100,8 +100,8 @@ casbin:
 ### 3. 初始化数据库
 
 ```bash
-go run ./cmd/artisan/main.go migrate up
-go run ./cmd/artisan/main.go seed run
+go run ./cmd/grove migrate up
+go run ./cmd/grove seed run
 ```
 
 生产环境上线前应替换默认账号、默认密码和 JWT secret。

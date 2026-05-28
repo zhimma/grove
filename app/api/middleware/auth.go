@@ -6,8 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/zhimma/grove/pkg/auth"
-	pkgerrors "github.com/zhimma/grove/pkg/errors"
-	"github.com/zhimma/grove/pkg/reqctx"
+	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"
 )
 
@@ -32,7 +32,7 @@ func (s *UserAuthSet) authenticate(required bool) gin.HandlerFunc {
 		header := strings.TrimSpace(c.GetHeader("Authorization"))
 		if header == "" {
 			if required {
-				response.Fail(c, pkgerrors.Unauthorized().WithMessage("缺少访问令牌"))
+				response.Fail(c, errx.Unauthorized().WithMessage("缺少访问令牌"))
 				c.Abort()
 				return
 			}
@@ -46,7 +46,7 @@ func (s *UserAuthSet) authenticate(required bool) gin.HandlerFunc {
 		}
 		if tokenString == "" || s.tokenManager == nil {
 			if required {
-				response.Fail(c, pkgerrors.Unauthorized().WithMessage("访问令牌无效"))
+				response.Fail(c, errx.Unauthorized().WithMessage("访问令牌无效"))
 				c.Abort()
 				return
 			}
@@ -57,7 +57,7 @@ func (s *UserAuthSet) authenticate(required bool) gin.HandlerFunc {
 		claims, err := s.tokenManager.ParseAccessToken(tokenString)
 		if err != nil {
 			if required {
-				response.Fail(c, pkgerrors.Unauthorized().WithMessage("访问令牌无效").WithCause(err))
+				response.Fail(c, errx.Unauthorized().WithMessage("访问令牌无效").WithCause(err))
 				c.Abort()
 				return
 			}
@@ -65,8 +65,8 @@ func (s *UserAuthSet) authenticate(required bool) gin.HandlerFunc {
 			return
 		}
 
-		reqctx.SetAuthToken(c, tokenString)
-		reqctx.SetIdentity(c, reqctx.Identity{
+		request.SetAuthToken(c, tokenString)
+		request.SetIdentity(c, request.Identity{
 			SubjectID:   claims.UserID,
 			SubjectType: claims.UserType,
 			UserID:      claims.UserID,

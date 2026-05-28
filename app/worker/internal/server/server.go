@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 
-	"github.com/zhimma/grove/app/worker/handler"
+	"github.com/zhimma/grove/app/worker/internal/handler"
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/internal/provider"
 	"github.com/zhimma/grove/pkg/logger"

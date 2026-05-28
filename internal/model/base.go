@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	pkgid "github.com/zhimma/grove/pkg/id"
+	"github.com/zhimma/grove/pkg/ulid"
 )
 
 type Base struct {
@@ -17,7 +17,7 @@ type Base struct {
 
 func (b *Base) BeforeCreate(tx *gorm.DB) error {
 	if b.ID == "" {
-		b.ID = pkgid.New()
+		b.ID = ulid.New()
 	}
 	return nil
 }

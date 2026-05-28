@@ -106,7 +106,7 @@ func handlerGoFiles(t *testing.T) []string {
 	t.Helper()
 
 	var files []string
-	for _, root := range []string{"api/handler", "console/handler"} {
+	for _, root := range []string{"api/handler", "console/internal/handler"} {
 		err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 			if err != nil {
 				return err

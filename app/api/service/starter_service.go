@@ -7,9 +7,9 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/model"
-	pkgerrors "github.com/zhimma/grove/pkg/errors"
+	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/job"
-	"github.com/zhimma/grove/pkg/reqctx"
+	"github.com/zhimma/grove/pkg/request"
 )
 
 type StarterService struct {
@@ -61,7 +61,7 @@ func (s *StarterService) Ping(ctx context.Context, input PingInput) (PingOutput,
 		name = "world"
 	}
 
-	meta := reqctx.GetRequestMetaFromContext(ctx)
+	meta := request.GetRequestMetaFromContext(ctx)
 	return PingOutput{
 		Message:   "pong, " + name,
 		Service:   meta.App,
@@ -75,7 +75,7 @@ func (s *StarterService) Profile(ctx context.Context, input ProfileInput) (Profi
 		return ProfileOutput{}, err
 	}
 
-	meta := reqctx.GetRequestMetaFromContext(ctx)
+	meta := request.GetRequestMetaFromContext(ctx)
 	return ProfileOutput{
 		ID:        user.ID,
 		Name:      user.Name,
@@ -86,11 +86,11 @@ func (s *StarterService) Profile(ctx context.Context, input ProfileInput) (Profi
 
 func (s *StarterService) DispatchEchoJob(ctx context.Context, input DispatchEchoJobInput) (DispatchEchoJobOutput, error) {
 	if s.jobs == nil {
-		return DispatchEchoJobOutput{}, pkgerrors.ServiceUnavailable().WithMessage("任务客户端未启用")
+		return DispatchEchoJobOutput{}, errx.ServiceUnavailable().WithMessage("任务客户端未启用")
 	}
 	message := strings.TrimSpace(input.Message)
 	if message == "" {
-		return DispatchEchoJobOutput{}, pkgerrors.InvalidParams().WithMessage("消息内容不能为空")
+		return DispatchEchoJobOutput{}, errx.InvalidParams().WithMessage("消息内容不能为空")
 	}
 
 	taskID, err := s.jobs.Enqueue(ctx, job.TaskEcho, job.EchoPayload{
@@ -99,7 +99,7 @@ func (s *StarterService) DispatchEchoJob(ctx context.Context, input DispatchEcho
 		RequestID:   input.RequestID,
 	})
 	if err != nil {
-		return DispatchEchoJobOutput{}, pkgerrors.Internal().WithCause(err)
+		return DispatchEchoJobOutput{}, errx.Internal().WithCause(err)
 	}
 
 	return DispatchEchoJobOutput{TaskID: taskID}, nil
