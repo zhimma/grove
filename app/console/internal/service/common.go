@@ -1,9 +1,12 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"time"
 
+	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/errx"
 	"gorm.io/gorm"
 )
 
@@ -141,4 +144,43 @@ func uniqueNonEmptyStrings(items []string) []string {
 		result = append(result, key)
 	}
 	return result
+}
+
+// defaultDB returns the default database with the request context attached.
+// Returns ServiceUnavailable if the repo or default DB is not configured.
+func defaultDB(ctx context.Context, repo database.Repo) (*gorm.DB, error) {
+	if repo == nil || repo.Default() == nil {
+		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
+	}
+	return repo.Default().WithContext(ctx), nil
+}
+
+// UniqueCheck is a single column-level uniqueness rule.
+type UniqueCheck struct {
+	Column  string
+	Value   string
+	Code    string
+	Message string
+}
+
+// EnsureUniqueByColumns checks that no row in `model` matches any of the
+// supplied column/value pairs, excluding the row identified by excludeID.
+func EnsureUniqueByColumns(ctx context.Context, db *gorm.DB, model any, excludeID string, checks []UniqueCheck) error {
+	for _, check := range checks {
+		if check.Value == "" {
+			continue
+		}
+		q := db.WithContext(ctx).Model(model).Where(check.Column+" = ?", check.Value)
+		if strings.TrimSpace(excludeID) != "" {
+			q = q.Where("id <> ?", excludeID)
+		}
+		var count int64
+		if err := q.Count(&count).Error; err != nil {
+			return errx.Internal().WithCause(err)
+		}
+		if count > 0 {
+			return errx.Conflict().WithCode(check.Code).WithMessage(check.Message)
+		}
+	}
+	return nil
 }

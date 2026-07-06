@@ -1,8 +1,6 @@
 package middleware
 
 import (
-	"strings"
-
 	"github.com/gin-gonic/gin"
 
 	"github.com/zhimma/grove/pkg/auth"
@@ -29,28 +27,19 @@ func (s *UserAuthSet) Required() gin.HandlerFunc {
 
 func (s *UserAuthSet) authenticate(required bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		header := strings.TrimSpace(c.GetHeader("Authorization"))
-		if header == "" {
+		tokenString, ok := auth.ExtractBearer(c.GetHeader("Authorization"))
+		if !ok {
 			if required {
 				response.Fail(c, errx.Unauthorized().WithMessage("缺少访问令牌"))
 				c.Abort()
-				return
 			}
-			c.Next()
 			return
 		}
-
-		tokenString := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
-		if tokenString == header && strings.HasPrefix(strings.ToLower(header), "bearer ") {
-			tokenString = strings.TrimSpace(header[7:])
-		}
-		if tokenString == "" || s.tokenManager == nil {
+		if s.tokenManager == nil {
 			if required {
 				response.Fail(c, errx.Unauthorized().WithMessage("访问令牌无效"))
 				c.Abort()
-				return
 			}
-			c.Next()
 			return
 		}
 
@@ -59,9 +48,7 @@ func (s *UserAuthSet) authenticate(required bool) gin.HandlerFunc {
 			if required {
 				response.Fail(c, errx.Unauthorized().WithMessage("访问令牌无效").WithCause(err))
 				c.Abort()
-				return
 			}
-			c.Next()
 			return
 		}
 

@@ -129,13 +129,13 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (LoginOutput,
 		Where("id = ?", admin.ID).
 		Updates(map[string]any{
 			"last_login_at": now,
-			"last_login_ip": truncateLoginIP(request.GetRequestMetaFromContext(ctx).ClientIP),
+			"last_login_ip": capString(request.GetRequestMetaFromContext(ctx).ClientIP, 64),
 			"login_count":   gorm.Expr("login_count + 1"),
 		}).Error; err != nil {
 		return LoginOutput{}, errx.Internal().WithCause(err)
 	}
 	admin.LastLoginAt = &now
-	admin.LastLoginIP = truncateLoginIP(request.GetRequestMetaFromContext(ctx).ClientIP)
+	admin.LastLoginIP = capString(request.GetRequestMetaFromContext(ctx).ClientIP, 64)
 	admin.LoginCount++
 	s.writeLoginLog(ctx, admin.ID, admin.Account, true, "")
 
@@ -214,8 +214,8 @@ func (s *AuthService) writeLoginLog(ctx context.Context, adminID, account string
 		Success:       success,
 		FailureReason: strings.TrimSpace(failureReason),
 		RequestID:     strings.TrimSpace(meta.RequestID),
-		ClientIP:      truncateLoginIP(meta.ClientIP),
-		UserAgent:     truncateLoginUA(meta.UserAgent),
+		ClientIP:      capString(meta.ClientIP, 64),
+		UserAgent:     capString(meta.UserAgent, 500),
 	}
 	if err := s.dbRepo.Default().WithContext(ctx).Create(&record).Error; err != nil {
 		logger.Warn().
@@ -228,18 +228,11 @@ func (s *AuthService) writeLoginLog(ctx context.Context, adminID, account string
 	}
 }
 
-func truncateLoginIP(value string) string {
-	if len(value) <= 64 {
-		return value
+func capString(s string, max int) string {
+	if len(s) <= max {
+		return s
 	}
-	return value[:64]
-}
-
-func truncateLoginUA(value string) string {
-	if len(value) <= 500 {
-		return value
-	}
-	return value[:500]
+	return s[:max]
 }
 
 func (s *AuthService) GetCurrentAdmin(ctx context.Context, adminID string) (*model.ConsoleAdmin, error) {

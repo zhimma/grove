@@ -5,6 +5,7 @@ import (
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
 	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
@@ -59,7 +60,7 @@ func (h *StorageHandler) AllConfigs(c *gin.Context) {
 func (h *StorageHandler) Upload(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
-		response.Fail(c, "file is required")
+		response.Fail(c, errx.InvalidParams().WithMessage("file is required"))
 		return
 	}
 	result, serviceErr := h.service.UploadFile(c.Request.Context(), consoleservice.UploadStorageFileInput{

@@ -235,3 +235,22 @@ func tokenHash(tokenString string) string {
 	sum := sha256.Sum256([]byte(tokenString))
 	return hex.EncodeToString(sum[:])
 }
+
+// ExtractBearer pulls the token out of an Authorization header.
+// Returns ("", false) for an empty header, a missing Bearer prefix,
+// or any other scheme.
+func ExtractBearer(header string) (string, bool) {
+	h := strings.TrimSpace(header)
+	if h == "" {
+		return "", false
+	}
+	const scheme = "bearer "
+	if len(h) < len(scheme) || !strings.EqualFold(h[:len(scheme)], scheme) {
+		return "", false
+	}
+	tok := strings.TrimSpace(h[len(scheme):])
+	if tok == "" {
+		return "", false
+	}
+	return tok, true
+}
