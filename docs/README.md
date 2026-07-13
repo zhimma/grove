@@ -40,3 +40,7 @@ Grove 文档分为总览、规范、指南和部署测试说明四类。
 - [部署指南](deployment/deploy.md)
 - [错误处理实践](development/error-handling.md)
 - [测试策略](development/testing.md)
+
+## 开发计划
+
+- [基础可靠性与脚手架路线图](plans/2026-07-13-grove-foundation-roadmap.md)
