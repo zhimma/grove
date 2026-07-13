@@ -79,7 +79,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 ### Milestone 1：初始化与安全阻断项
 
 - [x] Task 1：修复 CLI 名称和文档漂移。
-- [ ] Task 2：补齐数据库 schema 和可回滚迁移。
+- [x] Task 2：补齐数据库 schema 和可回滚迁移。
 - [ ] Task 3：拆分安全 bootstrap seed 与 demo seed。
 - [ ] Task 4：替换迁移引擎并使用真实 PostgreSQL 验证生命周期。
 - [ ] Task 5：修复 `make:module` 生成代码和原子性。
@@ -207,7 +207,23 @@ git commit -m "fix: unify grove cli commands"
 
 ### Task 2：补齐数据库 schema 和可回滚迁移
 
-**Status:** `[ ] Planned`
+**Status:** `[x] Completed`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-13
+
+**Completed at:** 2026-07-13
+
+**Architecture note:** 003 是已发布且已包含完整管理字段的基线迁移，不改写历史文件。004 down 只回滚 004 实际改变的 email 可空性；不删除 003 已定义的列和索引。
+
+**Verification:**
+
+- `go test ./pkg/migrate -v`：PASS。
+- `go test -race ./pkg/migrate -v`：PASS。
+- 真实 PostgreSQL 的 up/down 生命周期验证归入 Task 4。
 
 **Depends on:** Task 1
 
@@ -216,8 +232,8 @@ git commit -m "fix: unify grove cli commands"
 - Create: `database/migrations/<timestamp>_create_system_configs.up.sql`
 - Create: `database/migrations/<timestamp>_create_system_configs.down.sql`
 - Create: `database/migrations/202604150004_expand_console_management.down.sql`
-- Modify: `database/migrations/202604150003_create_console_tables.up.sql`
-- Modify: `database/migrations/202604150003_create_console_tables.down.sql`
+- Review: `database/migrations/202604150003_create_console_tables.up.sql`
+- Review: `database/migrations/202604150003_create_console_tables.down.sql`
 - Test: `pkg/migrate/migrate_test.go`
 
 **Step 1：增加迁移文件完整性测试**
