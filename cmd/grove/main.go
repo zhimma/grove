@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/config"
@@ -17,6 +20,11 @@ import (
 )
 
 var configFile string
+
+const (
+	rootPasswordEnv         = "GROVE_ROOT_PASSWORD"
+	rootPasswordPlaceholder = "{{GROVE_ROOT_PASSWORD_HASH}}"
+)
 
 func main() {
 	rootCmd := newRootCmd()
@@ -209,25 +217,110 @@ func newSeedCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(&cobra.Command{
-		Use:   "run",
-		Short: "执行所有 SQL seed 文件",
+		Use:   "bootstrap",
+		Short: "执行生产安全的基础 seed",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, cleanup, err := openDefaultDB()
+			return runBootstrapSeeds(cmd)
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "demo",
+		Short: "执行仅供开发和测试使用的演示 seed",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadCLIConfig()
+			if err != nil {
+				return err
+			}
+			if strings.EqualFold(strings.TrimSpace(cfg.App.Env), "production") {
+				return fmt.Errorf("production 环境禁止执行 demo seed")
+			}
+
+			db, cleanup, err := openDefaultDBWithConfig(cfg)
 			if err != nil {
 				return err
 			}
 			defer cleanup()
 
-			count, err := migrate.RunSQLDir(db, "database/seeds")
+			count, err := migrate.RunSQLDir(db, "database/seeds/demo")
 			if err != nil {
 				return err
 			}
-			fmt.Printf("已执行 %d 个 seed 文件\n", count)
+			fmt.Fprintf(cmd.OutOrStdout(), "已执行 %d 个 demo seed 文件\n", count)
 			return nil
 		},
 	})
 
 	return cmd
+}
+
+func runBootstrapSeeds(cmd *cobra.Command) error {
+	cfg, err := loadCLIConfig()
+	if err != nil {
+		return err
+	}
+
+	password, generated, err := resolveRootPassword()
+	if err != nil {
+		return err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("生成 root 密码哈希: %w", err)
+	}
+
+	db, cleanup, err := openDefaultDBWithConfig(cfg)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	count, err := migrate.RunSQLDirWithReplacements(tx, "database/seeds/bootstrap", map[string]string{
+		rootPasswordPlaceholder: string(hash),
+	})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	var storedHash string
+	if err := tx.Raw(`SELECT password FROM console_admins WHERE id = ?`, "console-admin-root").Scan(&storedHash).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if storedHash == "" {
+		tx.Rollback()
+		return fmt.Errorf("bootstrap seed 未创建或找到 root 管理员")
+	}
+	createdWithCurrentPassword := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password)) == nil
+
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "已执行 %d 个 bootstrap seed 文件\n", count)
+	if generated && createdWithCurrentPassword {
+		fmt.Fprintln(out, "Root 一次性初始密码（仅显示本次，请立即保存并登录修改）：")
+		fmt.Fprintln(out, password)
+	}
+	return nil
+}
+
+func resolveRootPassword() (string, bool, error) {
+	if password := strings.TrimSpace(os.Getenv(rootPasswordEnv)); password != "" {
+		return password, false, nil
+	}
+
+	randomBytes := make([]byte, 24)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", false, fmt.Errorf("生成 root 初始密码: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(randomBytes), true, nil
 }
 
 func newMakeModelCmd() *cobra.Command {
@@ -416,14 +509,21 @@ func (h *%sHandler) List(c *gin.Context) {
 }
 
 func openDefaultDB() (*gorm.DB, func(), error) {
-	cfg, err := config.LoadWithOptions(config.LoadOptions{
-		Service:    "grove",
-		ConfigFile: configFile,
-	})
+	cfg, err := loadCLIConfig()
 	if err != nil {
 		return nil, nil, err
 	}
+	return openDefaultDBWithConfig(cfg)
+}
 
+func loadCLIConfig() (*config.Config, error) {
+	return config.LoadWithOptions(config.LoadOptions{
+		Service:    "grove",
+		ConfigFile: configFile,
+	})
+}
+
+func openDefaultDBWithConfig(cfg *config.Config) (*gorm.DB, func(), error) {
 	repo, err := database.NewRepo(database.Config{
 		Enabled:         cfg.Databases.Default.Enabled,
 		Driver:          cfg.Databases.Default.Driver,

@@ -183,6 +183,11 @@ func CreateFiles(dir, name string) (string, string, error) {
 }
 
 func RunSQLDir(db *gorm.DB, dir string) (int, error) {
+	return RunSQLDirWithReplacements(db, dir, nil)
+}
+
+// RunSQLDirWithReplacements executes SQL files after replacing trusted placeholders.
+func RunSQLDirWithReplacements(db *gorm.DB, dir string, replacements map[string]string) (int, error) {
 	files, err := listFiles(dir, ".sql")
 	if err != nil {
 		return 0, err
@@ -194,7 +199,11 @@ func RunSQLDir(db *gorm.DB, dir string) (int, error) {
 		if err != nil {
 			return count, err
 		}
-		if err := db.Exec(string(body)).Error; err != nil {
+		content := string(body)
+		for placeholder, value := range replacements {
+			content = strings.ReplaceAll(content, placeholder, value)
+		}
+		if err := db.Exec(content).Error; err != nil {
 			return count, err
 		}
 		count++

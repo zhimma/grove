@@ -80,7 +80,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 
 - [x] Task 1：修复 CLI 名称和文档漂移。
 - [x] Task 2：补齐数据库 schema 和可回滚迁移。
-- [ ] Task 3：拆分安全 bootstrap seed 与 demo seed。
+- [x] Task 3：拆分安全 bootstrap seed 与 demo seed。
 - [ ] Task 4：替换迁移引擎并使用真实 PostgreSQL 验证生命周期。
 - [ ] Task 5：修复 `make:module` 生成代码和原子性。
 - [ ] Task 6：明确软删除语义并增加数据库约束。
@@ -285,7 +285,28 @@ git commit -m "fix: complete database migration chain"
 
 ### Task 3：拆分安全 bootstrap seed 与 demo seed
 
-**Status:** `[ ] Planned`
+**Status:** `[x] Completed`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-13
+
+**Completed at:** 2026-07-13
+
+**Architecture note:** bootstrap 与 demo 使用显式目录和命令分界。bootstrap 在单个数据库事务中执行，root 密码由 CLI 注入 bcrypt 占位符；只有随机密码实际创建了 root 时才输出一次。管理员自行修改密码后清除 `must_change_password`，后台创建或重置密码时重新置为 `true`。
+
+**Verification:**
+
+- `go test ./cmd/grove -v`：PASS。
+- `go test ./pkg/migrate -v`：PASS。
+- `go test ./app/console/internal/service -run TestChangePasswordClearsMustChangePassword -v`：PASS。
+- `go test ./...`：PASS。
+- `go test -race ./cmd/grove ./pkg/migrate ./app/console/internal/service`：PASS。
+- `go vet ./cmd/grove ./pkg/migrate ./app/console/internal/service`：PASS。
+- production 环境执行 `go run ./cmd/grove seed demo`：按预期拒绝。
+- 真实 PostgreSQL 下重复 bootstrap 不改密码的集成验证归入 Task 4。
 
 **Depends on:** Task 2
 
@@ -293,12 +314,24 @@ git commit -m "fix: complete database migration chain"
 
 - Create: `database/seeds/bootstrap/`
 - Create: `database/seeds/demo/`
-- Modify: `database/seeds/202604150003_console_admin_seed.sql`
-- Modify: `database/seeds/202604270002_console_root_super_admin.sql`
+- Delete: `database/seeds/*.sql` 旧扁平 seed
+- Create: `database/migrations/202604150008_add_console_admin_password_state.*.sql`
 - Modify: `cmd/grove/main.go`
+- Modify: `pkg/migrate/migrate.go`
+- Modify: `internal/model/console_admin.go`
+- Modify: `app/console/internal/service/auth.go`
+- Modify: `app/console/internal/service/admin.go`
+- Modify: `app/console/internal/handler/auth.go`
+- Modify: `app/console/internal/handler/admin.go`
+- Modify: `Makefile`
+- Modify: `README.md`
+- Modify: `docs/guide/quickstart.md`
+- Modify: `docs/deployment/deploy.md`
 - Modify: `config.example.yaml`
 - Modify: `.env.example`
 - Test: `cmd/grove/main_test.go`
+- Test: `pkg/migrate/migrate_test.go`
+- Test: `app/console/internal/service/auth_password_test.go`
 
 **Step 1：定义命令行为测试**
 

@@ -101,10 +101,11 @@ casbin:
 
 ```bash
 go run ./cmd/grove migrate up
-go run ./cmd/grove seed run
+# 先通过部署平台或 secret manager 注入 GROVE_ROOT_PASSWORD
+go run ./cmd/grove seed bootstrap
 ```
 
-生产环境上线前应替换默认账号、默认密码和 JWT secret。
+生产环境上线前必须配置强 JWT secret，并通过 secret manager 注入 root 初始密码或安全保存 CLI 首次生成的一次性密码；首次登录后立即修改。
 
 ### 4. 启动服务
 

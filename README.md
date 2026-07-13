@@ -124,7 +124,9 @@ make build
 make verify
 make migrate.status
 make migrate.up
-make seed.run
+make seed.bootstrap
+# 仅开发/测试环境按需执行
+make seed.demo
 ```
 
 `make verify` 会执行 Go 测试、三个后端二进制构建和管理后台类型检查；CI 也使用同一组验证口径。
@@ -135,7 +137,8 @@ make seed.run
 
 - `about`
 - `migrate up/down/status/create`
-- `seed run`
+- `seed bootstrap`：创建基础配置和 root 管理员，不覆盖已有密码
+- `seed demo`：写入演示数据，production 环境禁止执行
 - `make:model`：生成共享 GORM model
 - `make:service`：生成 `console` service 模板
 - `make:handler`：生成 `console` handler 模板
@@ -152,6 +155,8 @@ go run ./cmd/grove about
 ```bash
 go run ./cmd/grove --help
 ```
+
+首次 bootstrap 可通过 `GROVE_ROOT_PASSWORD` 指定 root 初始密码；未指定时 CLI 会生成一次性随机密码并仅在首次创建 root 时输出一次。登录后应立即修改密码。
 
 ### 模板仓库约定
 

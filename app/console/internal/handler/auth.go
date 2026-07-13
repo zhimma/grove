@@ -51,18 +51,19 @@ type RoleSummary struct {
 }
 
 type AdminResponse struct {
-	ID          string       `json:"id"`
-	Account     string       `json:"account"`
-	Username    string       `json:"username"`
-	Email       string       `json:"email"`
-	Phone       string       `json:"phone"`
-	DisplayName string       `json:"display_name"`
-	RealName    string       `json:"real_name"`
-	Avatar      string       `json:"avatar"`
-	RoleID      string       `json:"role_id"`
-	Role        *RoleSummary `json:"role,omitempty"`
-	IsSuper     bool         `json:"is_super"`
-	Status      int          `json:"status"`
+	ID                 string       `json:"id"`
+	Account            string       `json:"account"`
+	Username           string       `json:"username"`
+	Email              string       `json:"email"`
+	Phone              string       `json:"phone"`
+	DisplayName        string       `json:"display_name"`
+	RealName           string       `json:"real_name"`
+	Avatar             string       `json:"avatar"`
+	RoleID             string       `json:"role_id"`
+	Role               *RoleSummary `json:"role,omitempty"`
+	IsSuper            bool         `json:"is_super"`
+	Status             int          `json:"status"`
+	MustChangePassword bool         `json:"must_change_password"`
 }
 
 type TokenResponse struct {
@@ -145,8 +146,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 					Code:        out.Admin.Role.Code,
 				}
 			}(),
-			IsSuper: out.Admin.HasSuperAccess(),
-			Status:  out.Admin.Status,
+			IsSuper:            out.Admin.HasSuperAccess(),
+			Status:             out.Admin.Status,
+			MustChangePassword: out.Admin.MustChangePassword,
 		},
 		Token: &TokenResponse{
 			AccessToken:  out.Token.AccessToken,
@@ -228,8 +230,9 @@ func (h *AuthHandler) Me(c *gin.Context) {
 				Code:        admin.Role.Code,
 			}
 		}(),
-		IsSuper: admin.HasSuperAccess(),
-		Status:  admin.Status,
+		IsSuper:            admin.HasSuperAccess(),
+		Status:             admin.Status,
+		MustChangePassword: admin.MustChangePassword,
 	})
 }
 
@@ -276,8 +279,9 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 				Code:        admin.Role.Code,
 			}
 		}(),
-		IsSuper: admin.HasSuperAccess(),
-		Status:  admin.Status,
+		IsSuper:            admin.HasSuperAccess(),
+		Status:             admin.Status,
+		MustChangePassword: admin.MustChangePassword,
 	})
 }
 

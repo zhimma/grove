@@ -1,0 +1,2 @@
+ALTER TABLE console_admins
+    ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;

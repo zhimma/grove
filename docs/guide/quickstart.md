@@ -40,10 +40,12 @@ databases:
 ```bash
 createdb golang_web
 make migrate.up
-make seed.run
+make seed.bootstrap
+# 仅开发/测试环境按需执行
+make seed.demo
 ```
 
-`seed.run` 会写入演示数据和基础权限数据。生产项目应在首次上线前替换默认账号、密码和 JWT secret。
+`seed.bootstrap` 只写入基础配置和 root 管理员，不覆盖已有密码。可通过 `GROVE_ROOT_PASSWORD` 指定初始密码；未指定时 CLI 仅在首次创建 root 时显示一次随机密码。`seed.demo` 会写入演示数据，并在 production 环境直接拒绝执行。
 
 ## 4. 启动服务
 

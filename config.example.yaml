@@ -1,6 +1,7 @@
 app:
   name: ${APP_NAME:grove}
   env: ${APP_ENV:development}
+  # grove seed bootstrap 直接读取 GROVE_ROOT_PASSWORD；该密码不进入应用配置对象。
   # app.debug defaults to true outside production and false in production when omitted.
   # Set APP_DEBUG explicitly to override. Supported values: true/false/1/0/yes/no.
   debug: ${APP_DEBUG:}

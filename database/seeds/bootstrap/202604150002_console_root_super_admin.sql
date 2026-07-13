@@ -39,6 +39,7 @@ INSERT INTO console_admins (
     email,
     phone,
     password,
+    must_change_password,
     real_name,
     display_name,
     avatar,
@@ -54,7 +55,8 @@ VALUES (
     'Root',
     'root@example.com',
     '',
-    '$2y$10$3MEQrW2sinDcE35UO9IVS.DmYStpeCZ4U8DpH/DkhoUN5OQmVf.HS',
+    '{{GROVE_ROOT_PASSWORD_HASH}}',
+    true,
     'Root Super Admin',
     'Root',
     '',
@@ -64,28 +66,17 @@ VALUES (
     false,
     'seeded root super admin'
 )
-ON CONFLICT (id) DO UPDATE
+ON CONFLICT DO NOTHING;
+
+UPDATE console_admins
 SET
-    account = EXCLUDED.account,
-    username = EXCLUDED.username,
-    email = EXCLUDED.email,
-    phone = EXCLUDED.phone,
-    password = EXCLUDED.password,
-    real_name = EXCLUDED.real_name,
-    display_name = EXCLUDED.display_name,
-    avatar = EXCLUDED.avatar,
-    role_id = EXCLUDED.role_id,
-    status = EXCLUDED.status,
-    email_verified = EXCLUDED.email_verified,
-    phone_verified = EXCLUDED.phone_verified,
-    remark = EXCLUDED.remark,
-    updated_at = NOW();
+    role_id = 'console-role-root',
+    updated_at = NOW()
+WHERE id = 'console-admin-root';
 
 DELETE FROM console_casbin_rules
 WHERE ptype = 'g'
   AND v0 = 'console-admin-root';
 
 INSERT INTO console_casbin_rules (ptype, v0, v1)
-VALUES
-    ('g', 'console-admin-root', 'console-role-root')
-ON CONFLICT DO NOTHING;
+VALUES ('g', 'console-admin-root', 'console-role-root');

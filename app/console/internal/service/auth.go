@@ -10,10 +10,10 @@ import (
 
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/auth"
-	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/logger"
+	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/request"
 )
 
@@ -283,7 +283,10 @@ func (s *AuthService) ChangePassword(ctx context.Context, input ChangePasswordIn
 	if err := s.dbRepo.Default().WithContext(ctx).
 		Model(&model.ConsoleAdmin{}).
 		Where("id = ?", input.AdminID).
-		Update("password", string(hashedPassword)).Error; err != nil {
+		Updates(map[string]any{
+			"password":             string(hashedPassword),
+			"must_change_password": false,
+		}).Error; err != nil {
 		return errx.Internal().WithCause(err)
 	}
 

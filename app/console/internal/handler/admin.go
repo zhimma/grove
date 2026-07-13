@@ -55,24 +55,25 @@ type AdminItem struct {
 }
 
 type AdminDetail struct {
-	ID            string    `json:"id"`
-	Account       string    `json:"account"`
-	Username      string    `json:"username"`
-	Email         string    `json:"email"`
-	Phone         string    `json:"phone"`
-	RealName      string    `json:"real_name"`
-	DisplayName   string    `json:"display_name"`
-	Avatar        string    `json:"avatar"`
-	RoleID        string    `json:"role_id"`
-	Role          *RoleInfo `json:"role,omitempty"`
-	Status        int       `json:"status"`
-	StatusText    string    `json:"status_text"`
-	EmailVerified bool      `json:"email_verified"`
-	PhoneVerified bool      `json:"phone_verified"`
-	IsSuper       bool      `json:"is_super"`
-	Remark        string    `json:"remark"`
-	CreatedAt     string    `json:"created_at"`
-	UpdatedAt     string    `json:"updated_at"`
+	ID                 string    `json:"id"`
+	Account            string    `json:"account"`
+	Username           string    `json:"username"`
+	Email              string    `json:"email"`
+	Phone              string    `json:"phone"`
+	RealName           string    `json:"real_name"`
+	DisplayName        string    `json:"display_name"`
+	Avatar             string    `json:"avatar"`
+	RoleID             string    `json:"role_id"`
+	Role               *RoleInfo `json:"role,omitempty"`
+	Status             int       `json:"status"`
+	StatusText         string    `json:"status_text"`
+	EmailVerified      bool      `json:"email_verified"`
+	PhoneVerified      bool      `json:"phone_verified"`
+	MustChangePassword bool      `json:"must_change_password"`
+	IsSuper            bool      `json:"is_super"`
+	Remark             string    `json:"remark"`
+	CreatedAt          string    `json:"created_at"`
+	UpdatedAt          string    `json:"updated_at"`
 }
 
 type RoleInfo struct {
@@ -212,24 +213,25 @@ func (h *AdminHandler) Detail(c *gin.Context) {
 		role = &RoleInfo{ID: admin.Role.ID, Name: admin.Role.Name, Code: admin.Role.Code}
 	}
 	response.Success(c, AdminDetail{
-		ID:            admin.ID,
-		Account:       admin.Account,
-		Username:      admin.Username,
-		Email:         admin.Email,
-		Phone:         admin.Phone,
-		RealName:      admin.RealName,
-		DisplayName:   admin.GetDisplayName(),
-		Avatar:        admin.Avatar,
-		RoleID:        admin.RoleID,
-		Role:          role,
-		Status:        admin.Status,
-		StatusText:    adminStatusToText(admin.Status),
-		EmailVerified: admin.EmailVerified,
-		PhoneVerified: admin.PhoneVerified,
-		IsSuper:       admin.HasSuperAccess(),
-		Remark:        admin.Remark,
-		CreatedAt:     admin.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:     admin.UpdatedAt.Format("2006-01-02 15:04:05"),
+		ID:                 admin.ID,
+		Account:            admin.Account,
+		Username:           admin.Username,
+		Email:              admin.Email,
+		Phone:              admin.Phone,
+		RealName:           admin.RealName,
+		DisplayName:        admin.GetDisplayName(),
+		Avatar:             admin.Avatar,
+		RoleID:             admin.RoleID,
+		Role:               role,
+		Status:             admin.Status,
+		StatusText:         adminStatusToText(admin.Status),
+		EmailVerified:      admin.EmailVerified,
+		PhoneVerified:      admin.PhoneVerified,
+		MustChangePassword: admin.MustChangePassword,
+		IsSuper:            admin.HasSuperAccess(),
+		Remark:             admin.Remark,
+		CreatedAt:          admin.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:          admin.UpdatedAt.Format("2006-01-02 15:04:05"),
 	})
 }
 
@@ -268,24 +270,25 @@ func (h *AdminHandler) Create(c *gin.Context) {
 		role = &RoleInfo{ID: admin.Role.ID, Name: admin.Role.Name, Code: admin.Role.Code}
 	}
 	response.Success(c, AdminDetail{
-		ID:            admin.ID,
-		Account:       admin.Account,
-		Username:      admin.Username,
-		Email:         admin.Email,
-		Phone:         admin.Phone,
-		RealName:      admin.RealName,
-		DisplayName:   admin.GetDisplayName(),
-		Avatar:        admin.Avatar,
-		RoleID:        admin.RoleID,
-		Role:          role,
-		Status:        admin.Status,
-		StatusText:    adminStatusToText(admin.Status),
-		EmailVerified: admin.EmailVerified,
-		PhoneVerified: admin.PhoneVerified,
-		IsSuper:       admin.HasSuperAccess(),
-		Remark:        admin.Remark,
-		CreatedAt:     admin.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:     admin.UpdatedAt.Format("2006-01-02 15:04:05"),
+		ID:                 admin.ID,
+		Account:            admin.Account,
+		Username:           admin.Username,
+		Email:              admin.Email,
+		Phone:              admin.Phone,
+		RealName:           admin.RealName,
+		DisplayName:        admin.GetDisplayName(),
+		Avatar:             admin.Avatar,
+		RoleID:             admin.RoleID,
+		Role:               role,
+		Status:             admin.Status,
+		StatusText:         adminStatusToText(admin.Status),
+		EmailVerified:      admin.EmailVerified,
+		PhoneVerified:      admin.PhoneVerified,
+		MustChangePassword: admin.MustChangePassword,
+		IsSuper:            admin.HasSuperAccess(),
+		Remark:             admin.Remark,
+		CreatedAt:          admin.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:          admin.UpdatedAt.Format("2006-01-02 15:04:05"),
 	})
 }
 
@@ -328,24 +331,25 @@ func (h *AdminHandler) Update(c *gin.Context) {
 		role = &RoleInfo{ID: admin.Role.ID, Name: admin.Role.Name, Code: admin.Role.Code}
 	}
 	response.Success(c, AdminDetail{
-		ID:            admin.ID,
-		Account:       admin.Account,
-		Username:      admin.Username,
-		Email:         admin.Email,
-		Phone:         admin.Phone,
-		RealName:      admin.RealName,
-		DisplayName:   admin.GetDisplayName(),
-		Avatar:        admin.Avatar,
-		RoleID:        admin.RoleID,
-		Role:          role,
-		Status:        admin.Status,
-		StatusText:    adminStatusToText(admin.Status),
-		EmailVerified: admin.EmailVerified,
-		PhoneVerified: admin.PhoneVerified,
-		IsSuper:       admin.HasSuperAccess(),
-		Remark:        admin.Remark,
-		CreatedAt:     admin.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:     admin.UpdatedAt.Format("2006-01-02 15:04:05"),
+		ID:                 admin.ID,
+		Account:            admin.Account,
+		Username:           admin.Username,
+		Email:              admin.Email,
+		Phone:              admin.Phone,
+		RealName:           admin.RealName,
+		DisplayName:        admin.GetDisplayName(),
+		Avatar:             admin.Avatar,
+		RoleID:             admin.RoleID,
+		Role:               role,
+		Status:             admin.Status,
+		StatusText:         adminStatusToText(admin.Status),
+		EmailVerified:      admin.EmailVerified,
+		PhoneVerified:      admin.PhoneVerified,
+		MustChangePassword: admin.MustChangePassword,
+		IsSuper:            admin.HasSuperAccess(),
+		Remark:             admin.Remark,
+		CreatedAt:          admin.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:          admin.UpdatedAt.Format("2006-01-02 15:04:05"),
 	})
 }
 
@@ -375,24 +379,25 @@ func (h *AdminHandler) UpdateStatus(c *gin.Context) {
 		role = &RoleInfo{ID: admin.Role.ID, Name: admin.Role.Name, Code: admin.Role.Code}
 	}
 	response.Success(c, AdminDetail{
-		ID:            admin.ID,
-		Account:       admin.Account,
-		Username:      admin.Username,
-		Email:         admin.Email,
-		Phone:         admin.Phone,
-		RealName:      admin.RealName,
-		DisplayName:   admin.GetDisplayName(),
-		Avatar:        admin.Avatar,
-		RoleID:        admin.RoleID,
-		Role:          role,
-		Status:        admin.Status,
-		StatusText:    adminStatusToText(admin.Status),
-		EmailVerified: admin.EmailVerified,
-		PhoneVerified: admin.PhoneVerified,
-		IsSuper:       admin.HasSuperAccess(),
-		Remark:        admin.Remark,
-		CreatedAt:     admin.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:     admin.UpdatedAt.Format("2006-01-02 15:04:05"),
+		ID:                 admin.ID,
+		Account:            admin.Account,
+		Username:           admin.Username,
+		Email:              admin.Email,
+		Phone:              admin.Phone,
+		RealName:           admin.RealName,
+		DisplayName:        admin.GetDisplayName(),
+		Avatar:             admin.Avatar,
+		RoleID:             admin.RoleID,
+		Role:               role,
+		Status:             admin.Status,
+		StatusText:         adminStatusToText(admin.Status),
+		EmailVerified:      admin.EmailVerified,
+		PhoneVerified:      admin.PhoneVerified,
+		MustChangePassword: admin.MustChangePassword,
+		IsSuper:            admin.HasSuperAccess(),
+		Remark:             admin.Remark,
+		CreatedAt:          admin.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:          admin.UpdatedAt.Format("2006-01-02 15:04:05"),
 	})
 }
 

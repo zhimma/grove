@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
 )
 
 func TestEveryUpMigrationHasDownMigration(t *testing.T) {
@@ -64,6 +67,46 @@ func TestConsoleManagementDownPreservesBaseColumns(t *testing.T) {
 	}
 	if !strings.Contains(content, "ALTER COLUMN email SET NOT NULL") {
 		t.Fatal("004 down must restore the 003 email nullability contract")
+	}
+}
+
+func TestConsoleAdminPasswordStateMigrationMatchesModelContract(t *testing.T) {
+	path := filepath.Join("..", "..", "database", "migrations", "202604150008_add_console_admin_password_state.up.sql")
+	content := mustReadMigration(t, path)
+	if !strings.Contains(content, "must_change_password BOOLEAN NOT NULL DEFAULT FALSE") {
+		t.Fatal("password state migration must add a non-null false-by-default flag")
+	}
+}
+
+func TestRunSQLDirWithReplacements(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/seed.db"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE seed_values (value TEXT NOT NULL)`).Error; err != nil {
+		t.Fatalf("create seed table: %v", err)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "001_seed.sql")
+	if err := os.WriteFile(path, []byte(`INSERT INTO seed_values (value) VALUES ('{{VALUE}}');`), 0o600); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+
+	count, err := RunSQLDirWithReplacements(db, dir, map[string]string{"{{VALUE}}": "replaced"})
+	if err != nil {
+		t.Fatalf("run seed with replacements: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected one seed file, got %d", count)
+	}
+
+	var value string
+	if err := db.Raw(`SELECT value FROM seed_values LIMIT 1`).Scan(&value).Error; err != nil {
+		t.Fatalf("read seed value: %v", err)
+	}
+	if value != "replaced" {
+		t.Fatalf("unexpected replaced value: %q", value)
 	}
 }
 

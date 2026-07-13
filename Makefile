@@ -16,7 +16,7 @@ GROVE := $(GO) run ./cmd/grove
 	build build.api build.console build.worker \
 	admin.install admin.dev admin.build admin.typecheck admin.verify \
 	verify verify.go \
-	migrate.up migrate.down migrate.status seed.run
+	migrate.up migrate.down migrate.status seed.bootstrap seed.demo
 
 help: ## 显示常用命令
 	@awk 'BEGIN {FS = ":.*## "; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_.-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -92,5 +92,8 @@ migrate.down: ## 回滚最近一次数据库迁移
 migrate.status: ## 查看数据库迁移状态
 	$(GROVE) migrate status
 
-seed.run: ## 执行数据库种子
-	$(GROVE) seed run
+seed.bootstrap: ## 执行生产安全的基础种子
+	$(GROVE) seed bootstrap
+
+seed.demo: ## 执行开发和测试演示种子（生产环境禁止）
+	$(GROVE) seed demo

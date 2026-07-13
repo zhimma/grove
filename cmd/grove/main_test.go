@@ -53,6 +53,99 @@ func TestRepositoryCommandsUseGroveCLI(t *testing.T) {
 	assertNotContains(t, readme, "cmd/artisan")
 }
 
+func TestSeedCommandListsExplicitSafetyModes(t *testing.T) {
+	cmd := newSeedCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--help"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("seed help failed: %v", err)
+	}
+
+	content := out.String()
+	assertContains(t, content, "bootstrap")
+	assertContains(t, content, "demo")
+}
+
+func TestDemoSeedRefusesProduction(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "config.yaml")
+	mustWrite(t, configPath, `app:
+  env: production
+jwt:
+  secret: 0123456789abcdef0123456789abcdef
+`)
+	t.Setenv("APP_ENV", "")
+	t.Setenv("JWT_SECRET", "")
+
+	previousConfigFile := configFile
+	configFile = configPath
+	t.Cleanup(func() { configFile = previousConfigFile })
+
+	cmd := newSeedCmd()
+	cmd.SetArgs([]string{"demo"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected production demo seed to be rejected")
+	}
+	assertContains(t, err.Error(), "production")
+}
+
+func TestBootstrapSeedDoesNotOverwriteRootPassword(t *testing.T) {
+	root := filepath.Join("..", "..")
+	seed := mustRead(t, filepath.Join(root, "database", "seeds", "bootstrap", "202604150002_console_root_super_admin.sql"))
+
+	assertContains(t, seed, "{{GROVE_ROOT_PASSWORD_HASH}}")
+	assertContains(t, seed, "ON CONFLICT DO NOTHING")
+	assertNotContains(t, seed, "password = EXCLUDED.password")
+}
+
+func TestSeedFilesAreSplitBySafetyBoundary(t *testing.T) {
+	root := filepath.Join("..", "..", "database", "seeds")
+	for _, path := range []string{
+		filepath.Join(root, "bootstrap", "202604150001_system_configs.sql"),
+		filepath.Join(root, "bootstrap", "202604150002_console_root_super_admin.sql"),
+		filepath.Join(root, "demo", "202604150001_api_user.sql"),
+		filepath.Join(root, "demo", "202604150002_console_admin.sql"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("expected seed file %s: %v", path, err)
+		}
+	}
+}
+
+func TestResolveRootPasswordUsesEnvironment(t *testing.T) {
+	t.Setenv(rootPasswordEnv, "configured-root-password")
+
+	password, generated, err := resolveRootPassword()
+	if err != nil {
+		t.Fatalf("resolve configured root password: %v", err)
+	}
+	if generated {
+		t.Fatal("configured root password must not be marked as generated")
+	}
+	if password != "configured-root-password" {
+		t.Fatalf("unexpected configured password: %q", password)
+	}
+}
+
+func TestResolveRootPasswordGeneratesRandomValue(t *testing.T) {
+	t.Setenv(rootPasswordEnv, "")
+
+	password, generated, err := resolveRootPassword()
+	if err != nil {
+		t.Fatalf("generate root password: %v", err)
+	}
+	if !generated {
+		t.Fatal("missing root password must generate a one-time value")
+	}
+	if len(password) < 24 {
+		t.Fatalf("generated password is unexpectedly short: %d", len(password))
+	}
+}
+
 func TestDoctorCommandPrintsConfigSummary(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "config.yaml"), `app:

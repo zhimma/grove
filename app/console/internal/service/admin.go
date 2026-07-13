@@ -8,9 +8,9 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/model"
-	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/transaction"
 )
 
@@ -208,17 +208,18 @@ func (s *AdminService) CreateAdmin(ctx context.Context, in CreateAdminInput) (*m
 	}
 
 	admin := model.ConsoleAdmin{
-		Account:     account,
-		Username:    username,
-		Email:       email,
-		Phone:       phone,
-		Password:    string(hashedPassword),
-		RealName:    strings.TrimSpace(in.RealName),
-		DisplayName: strings.TrimSpace(in.DisplayName),
-		Avatar:      strings.TrimSpace(in.Avatar),
-		RoleID:      roleID,
-		Status:      model.ConsoleAdminStatusActive,
-		Remark:      strings.TrimSpace(in.Remark),
+		Account:            account,
+		Username:           username,
+		Email:              email,
+		Phone:              phone,
+		Password:           string(hashedPassword),
+		MustChangePassword: true,
+		RealName:           strings.TrimSpace(in.RealName),
+		DisplayName:        strings.TrimSpace(in.DisplayName),
+		Avatar:             strings.TrimSpace(in.Avatar),
+		RoleID:             roleID,
+		Status:             model.ConsoleAdminStatusActive,
+		Remark:             strings.TrimSpace(in.Remark),
 	}
 	if in.Status == model.ConsoleAdminStatusDisabled || in.Status == model.ConsoleAdminStatusLocked {
 		admin.Status = in.Status
@@ -306,6 +307,7 @@ func (s *AdminService) UpdateAdmin(ctx context.Context, in UpdateAdminInput) (*m
 			return nil, errx.Internal().WithCause(err)
 		}
 		updates["password"] = string(hashedPassword)
+		updates["must_change_password"] = true
 	}
 
 	if err := s.ensureAdminUnique(ctx, in.AdminID, newAccount, newEmail, newPhone); err != nil {
@@ -405,7 +407,10 @@ func (s *AdminService) ResetPassword(ctx context.Context, in ResetAdminPasswordI
 	if err := s.dbRepo.Default().WithContext(ctx).
 		Model(&model.ConsoleAdmin{}).
 		Where("id = ?", in.AdminID).
-		Update("password", string(hashedPassword)).Error; err != nil {
+		Updates(map[string]any{
+			"password":             string(hashedPassword),
+			"must_change_password": true,
+		}).Error; err != nil {
 		return errx.Internal().WithCause(err)
 	}
 	return nil
