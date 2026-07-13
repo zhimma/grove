@@ -2,7 +2,7 @@ APP_MODULE := github.com/zhimma/grove
 BIN_DIR := bin
 GO ?= go
 PNPM ?= pnpm
-ARTISAN := $(GO) run ./cmd/artisan/main.go
+GROVE := $(GO) run ./cmd/grove
 
 .DEFAULT_GOAL := help
 
@@ -84,13 +84,13 @@ verify: verify.go build admin.typecheck ## 校验后端测试、构建与前端�
 verify.go: test.go ## 校验 Go 代码
 
 migrate.up: ## 执行数据库迁移
-	$(ARTISAN) migrate up
+	$(GROVE) migrate up
 
 migrate.down: ## 回滚最近一次数据库迁移
-	$(ARTISAN) migrate down
+	$(GROVE) migrate down
 
 migrate.status: ## 查看数据库迁移状态
-	$(ARTISAN) migrate status
+	$(GROVE) migrate status
 
 seed.run: ## 执行数据库种子
-	$(ARTISAN) seed run
+	$(GROVE) seed run

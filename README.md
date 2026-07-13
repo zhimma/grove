@@ -87,7 +87,7 @@ app/
   console/          管理后台后端
   worker/           异步任务入口
 cmd/
-  artisan/          CLI：迁移、seed、代码生成
+  grove/            CLI：迁移、seed、代码生成
 internal/           共享内部基础设施
 pkg/                可复用基础包
 database/           SQL migrations 与 seeds
@@ -129,9 +129,9 @@ make seed.run
 
 `make verify` 会执行 Go 测试、三个后端二进制构建和管理后台类型检查；CI 也使用同一组验证口径。
 
-### Artisan CLI
+### Grove CLI
 
-`artisan` 支持：
+`grove` 支持：
 
 - `about`
 - `migrate up/down/status/create`
@@ -144,13 +144,13 @@ make seed.run
 推荐先看：
 
 ```bash
-go run ./cmd/artisan/main.go about
+go run ./cmd/grove about
 ```
 
 查看帮助：
 
 ```bash
-go run ./cmd/artisan/main.go --help
+go run ./cmd/grove --help
 ```
 
 ### 模板仓库约定

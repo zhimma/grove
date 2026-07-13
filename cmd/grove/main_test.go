@@ -42,6 +42,17 @@ func TestRootCommandIncludesGroveHelp(t *testing.T) {
 	assertContains(t, content, "make:module")
 }
 
+func TestRepositoryCommandsUseGroveCLI(t *testing.T) {
+	root := filepath.Join("..", "..")
+	makefile := mustRead(t, filepath.Join(root, "Makefile"))
+	readme := mustRead(t, filepath.Join(root, "README.md"))
+
+	assertContains(t, makefile, "GROVE := $(GO) run ./cmd/grove")
+	assertNotContains(t, makefile, "cmd/artisan")
+	assertContains(t, readme, "go run ./cmd/grove")
+	assertNotContains(t, readme, "cmd/artisan")
+}
+
 func TestDoctorCommandPrintsConfigSummary(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "config.yaml"), `app:
@@ -166,5 +177,12 @@ func assertContains(t *testing.T, haystack string, needle string) {
 	t.Helper()
 	if !strings.Contains(haystack, needle) {
 		t.Fatalf("expected content to contain %q\ncontent:\n%s", needle, haystack)
+	}
+}
+
+func assertNotContains(t *testing.T, haystack string, needle string) {
+	t.Helper()
+	if strings.Contains(haystack, needle) {
+		t.Fatalf("expected content not to contain %q\ncontent:\n%s", needle, haystack)
 	}
 }

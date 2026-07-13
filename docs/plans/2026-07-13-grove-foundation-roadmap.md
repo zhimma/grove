@@ -78,7 +78,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 
 ### Milestone 1：初始化与安全阻断项
 
-- [ ] Task 1：修复 CLI 名称和文档漂移。
+- [x] Task 1：修复 CLI 名称和文档漂移。
 - [ ] Task 2：补齐数据库 schema 和可回滚迁移。
 - [ ] Task 3：拆分安全 bootstrap seed 与 demo seed。
 - [ ] Task 4：替换迁移引擎并使用真实 PostgreSQL 验证生命周期。
@@ -136,7 +136,22 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 
 ### Task 1：修复 CLI 名称和文档漂移
 
-**Status:** `[ ] Planned`
+**Status:** `[x] Completed`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-13
+
+**Completed at:** 2026-07-13
+
+**Verification:**
+
+- `go test ./cmd/grove -run TestRepositoryCommandsUseGroveCLI -v`：PASS。
+- `go test ./cmd/grove -v`：PASS。
+- `go run ./cmd/grove about`：PASS。
+- `make migrate.status`：已进入数据库配置检查，因默认数据库未启用退出；未再访问旧 `cmd/artisan` 路径。
 
 **Files:**
 
@@ -152,8 +167,9 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 在 `cmd/grove/main_test.go` 增加测试，读取根目录 `Makefile` 和 `README.md`，断言：
 
 ```go
-assertContains(t, makefile, "go run ./cmd/grove")
+assertContains(t, makefile, "GROVE := $(GO) run ./cmd/grove")
 assertNotContains(t, makefile, "cmd/artisan")
+assertContains(t, readme, "go run ./cmd/grove")
 assertNotContains(t, readme, "cmd/artisan")
 ```
 
