@@ -434,6 +434,11 @@ func (p *Provider) Close() error {
 	if p.JobServer != nil {
 		p.JobServer.Shutdown()
 	}
+	if p.Cache != nil {
+		if err := p.Cache.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	if p.JobClient != nil {
 		if err := p.JobClient.Close(); err != nil {
 			errs = append(errs, err)

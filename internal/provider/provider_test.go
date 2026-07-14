@@ -1,12 +1,36 @@
 package provider
 
 import (
+	"context"
 	"slices"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/zhimma/grove/internal/config"
+	"github.com/zhimma/grove/pkg/cache"
 	"github.com/zhimma/grove/pkg/database"
 )
+
+type providerCloseStore struct {
+	closed atomic.Bool
+}
+
+func (*providerCloseStore) Get(context.Context, string) ([]byte, bool, error) {
+	return nil, false, nil
+}
+func (*providerCloseStore) Set(context.Context, string, []byte, time.Duration) error { return nil }
+func (*providerCloseStore) Delete(context.Context, string) error                     { return nil }
+func (*providerCloseStore) Add(context.Context, string, []byte, time.Duration) (bool, error) {
+	return true, nil
+}
+func (*providerCloseStore) TTL(context.Context, string) (time.Duration, bool, error) {
+	return 0, false, nil
+}
+func (s *providerCloseStore) Close() error {
+	s.closed.Store(true)
+	return nil
+}
 
 func TestServiceOptionSets(t *testing.T) {
 	if len(APIOptions()) == 0 {
@@ -126,6 +150,19 @@ func TestWithConfigSecretsIsOptionalAndValidatesConfiguredKey(t *testing.T) {
 	p.Config.Security.ConfigEncryptionKey = "0123456789abcdef0123456789abcdef"
 	if err := WithConfigSecrets()(p); err != nil || p.ConfigSecrets == nil {
 		t.Fatalf("strong key should initialize secret box: box=%v err=%v", p.ConfigSecrets, err)
+	}
+}
+
+func TestProviderCloseClosesCacheManager(t *testing.T) {
+	manager := cache.NewManager()
+	store := &providerCloseStore{}
+	manager.Register("tracking", store)
+	p := &Provider{Cache: manager}
+	if err := p.Close(); err != nil {
+		t.Fatalf("close provider: %v", err)
+	}
+	if !store.closed.Load() {
+		t.Fatal("provider close did not close cache manager")
 	}
 }
 

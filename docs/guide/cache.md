@@ -31,7 +31,7 @@ if err != nil {
 	return err
 }
 
-if err := store.Put(ctx, "dashboard:summary", summary, 60); err != nil {
+if err := cache.SetJSON(ctx, store, "dashboard:summary", summary, time.Minute); err != nil {
 	return err
 }
 ```
@@ -39,9 +39,12 @@ if err := store.Put(ctx, "dashboard:summary", summary, 60); err != nil {
 ### 读取缓存
 
 ```go
-value, err := store.Get(ctx, "dashboard:summary")
+value, found, err := cache.GetJSON[DashboardSummary](ctx, store, "dashboard:summary")
 if err != nil {
 	return err
+}
+if !found {
+	// cache miss
 }
 _ = value
 ```
@@ -53,13 +56,15 @@ _ = value
 - 缓存键命名应带业务前缀，例如 `dashboard:summary`、`user:123`。
 - Redis 适合多实例部署；内存缓存只适合单进程本地缓存。
 - 缓存失败不应伪装成业务成功，应按场景决定降级或直接返回错误。
+- `TTL` 返回 `found=false` 表示不存在；永久 key 返回 `ttl=0, found=true`。
+- `Add` 是条件写入，不是完整分布式锁；需要锁所有权、续租或 fencing token 时使用独立组件。
 
 ## 常见场景
 
 ### 读取后回填
 
 ```go
-value, err := store.Remember(ctx, "user:123", 300, func() (any, error) {
+value, err := cache.RememberJSON(ctx, store, "user:123", 5*time.Minute, func(ctx context.Context) (User, error) {
 	return s.loadUser(ctx, "123")
 })
 if err != nil {
@@ -71,7 +76,7 @@ _ = value
 ### 删除缓存
 
 ```go
-if err := store.Forget(ctx, "user:123"); err != nil {
+if err := store.Delete(ctx, "user:123"); err != nil {
 	return err
 }
 ```

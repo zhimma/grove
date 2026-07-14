@@ -26,6 +26,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
 	golang.org/x/crypto v0.47.0
+	golang.org/x/sync v0.20.0
 	golang.org/x/time v0.12.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/postgres v1.6.0
@@ -147,7 +148,6 @@ require (
 	golang.org/x/arch v0.8.0 // indirect
 	golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93 // indirect
 	golang.org/x/net v0.49.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	google.golang.org/grpc v1.80.0 // indirect

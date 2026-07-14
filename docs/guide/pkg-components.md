@@ -20,7 +20,7 @@ store, err := p.Cache.Get("memory")
 if err != nil {
 	return err
 }
-return store.Put(ctx, "dashboard:summary", summary, 60)
+return cache.SetJSON(ctx, store, "dashboard:summary", summary, time.Minute)
 ```
 
 兼容写法：
@@ -37,6 +37,7 @@ if store == nil {
 - `Get(name)` 返回明确错误。
 - `MustStore(name)` 只建议用于启动期快速失败。
 - store 名称会归一化为小写并去除前后空格。
+- Store 只提供字节、命中状态和 TTL 契约；业务类型使用 `cache.GetJSON/SetJSON/RememberJSON`。
 
 ## Event
 

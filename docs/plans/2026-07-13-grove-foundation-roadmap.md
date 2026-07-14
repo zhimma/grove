@@ -102,7 +102,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 
 ### Milestone 3：基础组件契约稳定化
 
-- [ ] Task 13：重构 Cache 契约和生命周期。
+- [x] Task 13：重构 Cache 契约和生命周期。
 - [ ] Task 14：重构 HTTP Client 为请求级不可变状态。
 - [ ] Task 15：修复 Scheduler 并发、配置和取消语义。
 - [ ] Task 16：修复 Event 异步投递语义。
@@ -949,7 +949,7 @@ go test ./pkg/storage ./app/console/internal/router -v
 
 ### Task 13：重构 Cache 契约和生命周期
 
-**Status:** `[-] In Progress`
+**Status:** `[x] Completed`
 
 **Owner:** Codex
 
@@ -957,7 +957,18 @@ go test ./pkg/storage ./app/console/internal/router -v
 
 **Started at:** 2026-07-14
 
+**Completed at:** 2026-07-14
+
 **Design:** `docs/plans/2026-07-14-cache-contract-design.md`
+
+**Verification:**
+
+- `go test ./...`、`go vet ./...`、`make build`、`git diff --check`：PASS。
+- `go test -race ./pkg/cache ./internal/provider`：PASS。
+- MemoryStore 测试覆盖 missing/permanent/expiring、byte slice 隔离、Add/Delete、context 和幂等 Close。
+- `RememberJSON` 16 路并发 loader 仅执行一次；loader/store 错误传播和等待者 context 取消测试 PASS。
+- Provider Close 会关闭 Cache Manager，Memory GC goroutine 有确定退出路径。
+- 本机独立临时 Redis 进程：missing/permanent/expiring/Add/Delete 与 Memory 语义一致，integration 测试 PASS；临时进程和目录已删除。
 
 **Files:**
 
