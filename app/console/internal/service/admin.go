@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
@@ -15,9 +16,12 @@ import (
 )
 
 type AdminService struct {
-	dbRepo    database.Repo
-	enforcer  *rbac.Enforcer
-	txManager transaction.Manager
+	dbRepo       database.Repo
+	roleBindings adminRoleBindings
+}
+
+type adminRoleBindings interface {
+	ReplaceConsoleRoleForUser(adminID, roleID string) error
 }
 
 type ListAdminsInput struct {
@@ -88,12 +92,7 @@ type ResetAdminPasswordInput struct {
 }
 
 func NewAdminService(dbRepo database.Repo, enforcer *rbac.Enforcer) *AdminService {
-	return &AdminService{dbRepo: dbRepo, enforcer: enforcer}
-}
-
-func (s *AdminService) WithTransaction(manager transaction.Manager) *AdminService {
-	s.txManager = manager
-	return s
+	return &AdminService{dbRepo: dbRepo, roleBindings: enforcer}
 }
 
 func (s *AdminService) ListAdmins(ctx context.Context, in ListAdminsInput) (*ListAdminsResult, error) {
@@ -225,17 +224,15 @@ func (s *AdminService) CreateAdmin(ctx context.Context, in CreateAdminInput) (*m
 		admin.Status = in.Status
 	}
 
-	if err := s.execute(ctx, func(txCtx context.Context) error {
-		db := transaction.GetDB(txCtx, s.dbRepo.Default())
-		if db == nil {
-			return errx.ServiceUnavailable().WithMessage("默认数据库未配置")
+	db := s.dbRepo.Default().WithContext(ctx)
+	if err := db.Create(&admin).Error; err != nil {
+		return nil, errx.Internal().WithCause(err)
+	}
+	if s.roleBindings != nil {
+		if err := s.roleBindings.ReplaceConsoleRoleForUser(admin.ID, admin.RoleID); err != nil {
+			cleanupErr := db.Unscoped().Delete(&model.ConsoleAdmin{}, "id = ?", admin.ID).Error
+			return nil, rbacSyncError("管理员角色绑定失败，创建已回滚", err, cleanupErr)
 		}
-		if err := db.Create(&admin).Error; err != nil {
-			return errx.Internal().WithCause(err)
-		}
-		return s.syncAdminRoleBinding(admin.ID, admin.RoleID)
-	}); err != nil {
-		return nil, err
 	}
 	return s.GetAdmin(ctx, GetAdminInput{AdminID: admin.ID})
 }
@@ -290,7 +287,6 @@ func (s *AdminService) UpdateAdmin(ctx context.Context, in UpdateAdminInput) (*m
 		if err := s.ensureRoleExists(ctx, newRoleID); err != nil {
 			return nil, err
 		}
-		updates["role_id"] = newRoleID
 	}
 	if in.Status != nil {
 		if !isAdminStatusValid(*in.Status) {
@@ -313,25 +309,34 @@ func (s *AdminService) UpdateAdmin(ctx context.Context, in UpdateAdminInput) (*m
 	if err := s.ensureAdminUnique(ctx, in.AdminID, newAccount, newEmail, newPhone); err != nil {
 		return nil, err
 	}
-	if err := s.execute(ctx, func(txCtx context.Context) error {
-		db := transaction.GetDB(txCtx, s.dbRepo.Default())
-		if db == nil {
-			return errx.ServiceUnavailable().WithMessage("默认数据库未配置")
-		}
-		if len(updates) > 0 {
-			if err := db.
-				Model(&model.ConsoleAdmin{}).
-				Where("id = ?", in.AdminID).
-				Updates(updates).Error; err != nil {
-				return errx.Internal().WithCause(err)
+	db := s.dbRepo.Default().WithContext(ctx)
+	roleChanged := newRoleID != admin.RoleID
+	if roleChanged {
+		if s.roleBindings != nil {
+			if err := s.roleBindings.ReplaceConsoleRoleForUser(in.AdminID, ""); err != nil {
+				return nil, rbacSyncError("管理员旧角色绑定清理失败", err, nil)
 			}
 		}
-		if newRoleID != admin.RoleID {
-			return s.syncAdminRoleBinding(in.AdminID, newRoleID)
+		if err := db.Model(&model.ConsoleAdmin{}).Where("id = ?", in.AdminID).Update("role_id", newRoleID).Error; err != nil {
+			if s.roleBindings != nil {
+				return nil, errx.Internal().WithCause(errors.Join(err, s.roleBindings.ReplaceConsoleRoleForUser(in.AdminID, admin.RoleID)))
+			}
+			return nil, errx.Internal().WithCause(err)
 		}
-		return nil
-	}); err != nil {
-		return nil, err
+		if s.roleBindings != nil {
+			if err := s.roleBindings.ReplaceConsoleRoleForUser(in.AdminID, newRoleID); err != nil {
+				compensationErr := s.restoreAdminRole(ctx, in.AdminID, admin.RoleID)
+				return nil, rbacSyncError("管理员角色同步失败，角色变更已回滚", err, compensationErr)
+			}
+		}
+	}
+	if len(updates) > 0 {
+		if err := db.Model(&model.ConsoleAdmin{}).Where("id = ?", in.AdminID).Updates(updates).Error; err != nil {
+			if roleChanged {
+				return nil, errx.Internal().WithCause(errors.Join(err, s.restoreAdminRole(ctx, in.AdminID, admin.RoleID)))
+			}
+			return nil, errx.Internal().WithCause(err)
+		}
 	}
 
 	return s.GetAdmin(ctx, GetAdminInput{AdminID: in.AdminID})
@@ -370,21 +375,19 @@ func (s *AdminService) DeleteAdmin(ctx context.Context, in DeleteAdminInput) err
 		return errx.Forbidden().WithMessage("当前管理员不能删除自己")
 	}
 
-	return s.execute(ctx, func(txCtx context.Context) error {
-		db := transaction.GetDB(txCtx, s.dbRepo.Default())
-		if db == nil {
-			return errx.ServiceUnavailable().WithMessage("默认数据库未配置")
+	if s.roleBindings != nil {
+		if err := s.roleBindings.ReplaceConsoleRoleForUser(in.AdminID, ""); err != nil {
+			return rbacSyncError("管理员角色绑定删除失败", err, nil)
 		}
-		if err := db.Delete(&model.ConsoleAdmin{}, "id = ?", in.AdminID).Error; err != nil {
-			return errx.Internal().WithCause(err)
+	}
+	if err := s.dbRepo.Default().WithContext(ctx).Delete(&model.ConsoleAdmin{}, "id = ?", in.AdminID).Error; err != nil {
+		var compensationErr error
+		if s.roleBindings != nil {
+			compensationErr = s.roleBindings.ReplaceConsoleRoleForUser(in.AdminID, admin.RoleID)
 		}
-		if s.enforcer != nil {
-			if _, err := s.enforcer.RemoveFilteredGroupingPolicy(0, in.AdminID); err != nil {
-				return errx.Internal().WithCause(err)
-			}
-		}
-		return nil
-	})
+		return errx.Internal().WithCause(errors.Join(err, compensationErr))
+	}
+	return nil
 }
 
 func (s *AdminService) ResetPassword(ctx context.Context, in ResetAdminPasswordInput) error {
@@ -496,25 +499,27 @@ func isAdminStatusValid(status int) bool {
 	}
 }
 
-func (s *AdminService) syncAdminRoleBinding(adminID, roleID string) error {
-	if s.enforcer == nil || strings.TrimSpace(adminID) == "" {
+func (s *AdminService) restoreAdminRole(ctx context.Context, adminID, roleID string) error {
+	if s.roleBindings != nil {
+		if err := s.roleBindings.ReplaceConsoleRoleForUser(adminID, ""); err != nil {
+			return err
+		}
+	}
+	if err := s.dbRepo.Default().WithContext(ctx).
+		Model(&model.ConsoleAdmin{}).
+		Where("id = ?", adminID).
+		Update("role_id", roleID).Error; err != nil {
+		return err
+	}
+	if s.roleBindings == nil {
 		return nil
 	}
-	if _, err := s.enforcer.RemoveFilteredGroupingPolicy(0, adminID); err != nil {
-		return errx.Internal().WithCause(err)
-	}
-	if strings.TrimSpace(roleID) == "" {
-		return nil
-	}
-	if _, err := s.enforcer.AddGroupingPolicy(adminID, roleID); err != nil {
-		return errx.Internal().WithCause(err)
-	}
-	return nil
+	return s.roleBindings.ReplaceConsoleRoleForUser(adminID, roleID)
 }
 
-func (s *AdminService) execute(ctx context.Context, fn func(context.Context) error) error {
-	if s.txManager == nil {
-		return fn(ctx)
-	}
-	return s.txManager.Execute(ctx, fn)
+func rbacSyncError(message string, syncErr, compensationErr error) error {
+	return errx.Internal().
+		WithCode("rbac_sync_failed").
+		WithMessage(message).
+		WithCause(errors.Join(syncErr, compensationErr))
 }

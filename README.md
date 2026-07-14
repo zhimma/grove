@@ -139,6 +139,8 @@ make seed.demo
 - `migrate up/down/status/create`
 - `seed bootstrap`：创建基础配置和 root 管理员，不覆盖已有密码
 - `seed demo`：写入演示数据，production 环境禁止执行
+- `rbac check`：检查管理员 `role_id`、Casbin grouping 和 role policy 一致性
+- `rbac repair --dry-run`：默认只输出差异；显式 `--dry-run=false` 才执行修复
 - `make:model`：生成共享 GORM model
 - `make:service`：生成 `console` service 模板
 - `make:handler`：生成 `console` handler 模板

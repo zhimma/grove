@@ -6,6 +6,7 @@ import (
 
 	rawcasbin "github.com/casbin/casbin/v3"
 	casbinmodel "github.com/casbin/casbin/v3/model"
+	"github.com/casbin/casbin/v3/persist"
 	gormadapter "github.com/casbin/gorm-adapter/v3"
 	"gorm.io/gorm"
 )
@@ -24,7 +25,7 @@ type Config struct {
 }
 
 type Enforcer struct {
-	*rawcasbin.Enforcer
+	*rawcasbin.SyncedEnforcer
 	mode      Mode
 	tableName string
 }
@@ -62,7 +63,7 @@ func New(db *gorm.DB, cfg *Config) (*Enforcer, error) {
 		}
 	}
 
-	enforcer, err := rawcasbin.NewEnforcer(model, adapter)
+	enforcer, err := rawcasbin.NewSyncedEnforcer(model, adapter)
 	if err != nil {
 		return nil, fmt.Errorf("create casbin enforcer: %w", err)
 	}
@@ -71,9 +72,9 @@ func New(db *gorm.DB, cfg *Config) (*Enforcer, error) {
 	}
 
 	return &Enforcer{
-		Enforcer:  enforcer,
-		mode:      mode,
-		tableName: tableName,
+		SyncedEnforcer: enforcer,
+		mode:           mode,
+		tableName:      tableName,
 	}, nil
 }
 
@@ -109,6 +110,34 @@ func (e *Enforcer) AddConsolePolicies(rules [][]string) error {
 	return err
 }
 
+func (e *Enforcer) ReplaceConsolePoliciesForRole(roleID string, permissions []string) error {
+	roleID = strings.TrimSpace(roleID)
+	if roleID == "" {
+		return fmt.Errorf("console role ID is required")
+	}
+	rules := make([][]string, 0, len(permissions))
+	seen := make(map[string]struct{}, len(permissions))
+	for _, permission := range permissions {
+		permission = strings.TrimSpace(permission)
+		if permission == "" {
+			continue
+		}
+		if _, ok := seen[permission]; ok {
+			continue
+		}
+		seen[permission] = struct{}{}
+		rules = append(rules, []string{roleID, permission})
+	}
+	if e == nil || e.SyncedEnforcer == nil {
+		return fmt.Errorf("casbin enforcer is not configured")
+	}
+	if _, ok := e.GetAdapter().(persist.UpdatableAdapter); !ok {
+		return fmt.Errorf("casbin adapter does not support atomic filtered policy replacement")
+	}
+	_, err := e.UpdateFilteredPolicies(rules, 0, roleID)
+	return err
+}
+
 func (e *Enforcer) RemoveConsolePoliciesForRole(roleID string) error {
 	_, err := e.RemoveFilteredPolicy(0, roleID)
 	return err
@@ -123,9 +152,43 @@ func (e *Enforcer) AddConsoleRoleForUser(userID, roleID string) error {
 	return err
 }
 
+func (e *Enforcer) ReplaceConsoleRoleForUser(userID, roleID string) error {
+	userID = strings.TrimSpace(userID)
+	roleID = strings.TrimSpace(roleID)
+	if userID == "" {
+		return fmt.Errorf("console user ID is required")
+	}
+	rules := make([][]string, 0, 1)
+	if roleID != "" {
+		rules = append(rules, []string{userID, roleID})
+	}
+	return e.replaceFilteredPolicies("g", "g", rules, 0, userID)
+}
+
 func (e *Enforcer) DeleteConsoleRolesForUser(userID string) error {
 	_, err := e.RemoveFilteredGroupingPolicy(0, userID)
 	return err
+}
+
+func (e *Enforcer) replaceFilteredPolicies(sec, ptype string, rules [][]string, fieldIndex int, fieldValues ...string) error {
+	if e == nil || e.SyncedEnforcer == nil {
+		return fmt.Errorf("casbin enforcer is not configured")
+	}
+	lock := e.GetLock()
+	lock.Lock()
+	defer lock.Unlock()
+
+	adapter, ok := e.GetAdapter().(persist.UpdatableAdapter)
+	if !ok {
+		return fmt.Errorf("casbin adapter does not support atomic filtered policy replacement")
+	}
+	if _, err := adapter.UpdateFilteredPolicies(sec, ptype, rules, fieldIndex, fieldValues...); err != nil {
+		return err
+	}
+	if err := e.SyncedEnforcer.Enforcer.LoadPolicy(); err != nil {
+		return fmt.Errorf("reload casbin policy after replacement: %w", err)
+	}
+	return nil
 }
 
 func defaultModel(mode Mode) string {

@@ -55,6 +55,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newDoctorCmd())
 	rootCmd.AddCommand(newMigrateCmd())
 	rootCmd.AddCommand(newSeedCmd())
+	rootCmd.AddCommand(newRBACCmd())
 	rootCmd.AddCommand(newMakeModelCmd())
 	rootCmd.AddCommand(newMakeServiceCmd())
 	rootCmd.AddCommand(newMakeHandlerCmd())

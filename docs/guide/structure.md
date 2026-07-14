@@ -44,7 +44,7 @@ grove/
 
 `cmd/` 用于放置独立 CLI。当前保留：
 
-- `cmd/grove`：迁移、seed、代码生成与环境信息查看
+- `cmd/grove`：迁移、seed、RBAC 一致性检查、代码生成与环境信息查看
 
 ### `internal/`
 

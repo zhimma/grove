@@ -91,7 +91,7 @@ type RolePathRequest struct {
 
 func RegisterRoleRoutes(protected *gin.RouterGroup, p *provider.Provider, runtimeCatalog *consoleservice.RuntimePermissionCatalog) {
 	h := &RoleHandler{
-		roleSvc: consoleservice.NewRoleService(p.DB, p.GetEnforcer("console"), runtimeCatalog).WithTransaction(p.TxManager),
+		roleSvc: consoleservice.NewRoleService(p.DB, p.GetEnforcer("console"), runtimeCatalog),
 	}
 
 	roles := route.Wrap(protected.Group("/roles"))

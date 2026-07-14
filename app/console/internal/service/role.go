@@ -2,23 +2,27 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/datatype"
 	"github.com/zhimma/grove/internal/model"
-	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
-	"github.com/zhimma/grove/pkg/transaction"
+	"github.com/zhimma/grove/pkg/rbac"
 )
 
 type RoleService struct {
 	dbRepo            database.Repo
-	enforcer          *rbac.Enforcer
+	rolePolicies      rolePolicyStore
 	runtimePermission *RuntimePermissionCatalog
-	txManager         transaction.Manager
+}
+
+type rolePolicyStore interface {
+	GetConsolePoliciesForRole(roleID string) ([][]string, error)
+	ReplaceConsolePoliciesForRole(roleID string, permissions []string) error
 }
 
 type ListRolesInput struct {
@@ -104,14 +108,9 @@ func NewRoleService(dbRepo database.Repo, enforcer *rbac.Enforcer, runtimePermis
 	}
 	return &RoleService{
 		dbRepo:            dbRepo,
-		enforcer:          enforcer,
+		rolePolicies:      enforcer,
 		runtimePermission: catalog,
 	}
-}
-
-func (s *RoleService) WithTransaction(manager transaction.Manager) *RoleService {
-	s.txManager = manager
-	return s
 }
 
 func (s *RoleService) ListRoles(ctx context.Context, in ListRolesInput) (*ListRolesOutput, error) {
@@ -310,34 +309,33 @@ func (s *RoleService) DeleteRole(ctx context.Context, in DeleteRoleInput) error 
 		return errx.Conflict().WithCode("role_in_use").WithMessage("该角色已被管理员使用，无法删除")
 	}
 
-	return s.execute(ctx, func(txCtx context.Context) error {
-		db := transaction.GetDB(txCtx, s.dbRepo.Default())
-		if db == nil {
-			return errx.ServiceUnavailable().WithMessage("默认数据库未配置")
+	permissions, err := s.rolePermissionKeys(in.RoleID)
+	if err != nil {
+		return err
+	}
+	if s.rolePolicies != nil {
+		if err := s.rolePolicies.ReplaceConsolePoliciesForRole(in.RoleID, nil); err != nil {
+			return rbacSyncError("角色权限清理失败", err, nil)
 		}
-		if err := db.Delete(&model.ConsoleRole{}, "id = ?", in.RoleID).Error; err != nil {
-			return errx.Internal().WithCause(err)
+	}
+	if err := s.dbRepo.Default().WithContext(ctx).Delete(&model.ConsoleRole{}, "id = ?", in.RoleID).Error; err != nil {
+		var compensationErr error
+		if s.rolePolicies != nil {
+			compensationErr = s.rolePolicies.ReplaceConsolePoliciesForRole(in.RoleID, permissions)
 		}
-		if s.enforcer != nil {
-			if err := s.enforcer.RemoveConsolePoliciesForRole(in.RoleID); err != nil {
-				return errx.Internal().WithCause(err)
-			}
-			if _, err := s.enforcer.RemoveFilteredGroupingPolicy(1, in.RoleID); err != nil {
-				return errx.Internal().WithCause(err)
-			}
-		}
-		return nil
-	})
+		return errx.Internal().WithCause(errors.Join(err, compensationErr))
+	}
+	return nil
 }
 
 func (s *RoleService) GetRolePermissions(ctx context.Context, in GetRolePermissionsInput) ([]string, error) {
 	if _, err := s.loadRole(ctx, in.RoleID); err != nil {
 		return nil, err
 	}
-	if s.enforcer == nil {
+	if s.rolePolicies == nil {
 		return []string{}, nil
 	}
-	policies, err := s.enforcer.GetConsolePoliciesForRole(in.RoleID)
+	policies, err := s.rolePolicies.GetConsolePoliciesForRole(in.RoleID)
 	if err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}
@@ -358,7 +356,7 @@ func (s *RoleService) SetRolePermissions(ctx context.Context, in SetRolePermissi
 	if role.IsSuper {
 		return errx.Forbidden().WithMessage("系统角色不允许修改接口权限")
 	}
-	if s.enforcer == nil {
+	if s.rolePolicies == nil {
 		return nil
 	}
 
@@ -366,23 +364,27 @@ func (s *RoleService) SetRolePermissions(ctx context.Context, in SetRolePermissi
 	if err := s.validateAPIIdentifiers(keys); err != nil {
 		return err
 	}
-	return s.execute(ctx, func(txCtx context.Context) error {
-		if err := s.enforcer.RemoveConsolePoliciesForRole(in.RoleID); err != nil {
-			return errx.Internal().WithCause(err)
-		}
-		if len(keys) == 0 {
-			return nil
-		}
+	if err := s.rolePolicies.ReplaceConsolePoliciesForRole(in.RoleID, keys); err != nil {
+		return rbacSyncError("角色权限更新失败", err, nil)
+	}
+	return nil
+}
 
-		rules := make([][]string, 0, len(keys))
-		for _, key := range keys {
-			rules = append(rules, []string{in.RoleID, key})
+func (s *RoleService) rolePermissionKeys(roleID string) ([]string, error) {
+	if s.rolePolicies == nil {
+		return nil, nil
+	}
+	policies, err := s.rolePolicies.GetConsolePoliciesForRole(roleID)
+	if err != nil {
+		return nil, errx.Internal().WithCause(err)
+	}
+	keys := make([]string, 0, len(policies))
+	for _, policy := range policies {
+		if len(policy) >= 2 {
+			keys = append(keys, policy[1])
 		}
-		if err := s.enforcer.AddConsolePolicies(rules); err != nil {
-			return errx.Internal().WithCause(err)
-		}
-		return nil
-	})
+	}
+	return uniqueNonEmptyStrings(keys), nil
 }
 
 func (s *RoleService) validateAPIIdentifiers(keys []string) error {
@@ -482,11 +484,4 @@ func toRoleOutput(role model.ConsoleRole) Role {
 		CreatedAt:   formatTime(role.CreatedAt),
 		UpdatedAt:   formatTime(role.UpdatedAt),
 	}
-}
-
-func (s *RoleService) execute(ctx context.Context, fn func(context.Context) error) error {
-	if s.txManager == nil {
-		return fn(ctx)
-	}
-	return s.txManager.Execute(ctx, fn)
 }

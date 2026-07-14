@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -10,22 +11,31 @@ import (
 
 	"github.com/zhimma/grove/internal/datatype"
 	"github.com/zhimma/grove/internal/model"
-	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/rbac"
 )
 
-type countingTxManager struct {
-	count int
+type recordingRolePolicies struct {
+	replacements [][]string
+	current      []string
+	replaceErr   error
 }
 
-func (m *countingTxManager) Execute(ctx context.Context, fn func(ctx context.Context) error) error {
-	m.count++
-	return fn(ctx)
+func (r *recordingRolePolicies) GetConsolePoliciesForRole(roleID string) ([][]string, error) {
+	rules := make([][]string, 0, len(r.current))
+	for _, permission := range r.current {
+		rules = append(rules, []string{roleID, permission})
+	}
+	return rules, nil
 }
 
-func (m *countingTxManager) ExecuteWithResult(ctx context.Context, fn func(ctx context.Context) (any, error)) (any, error) {
-	m.count++
-	return fn(ctx)
+func (r *recordingRolePolicies) ReplaceConsolePoliciesForRole(_ string, permissions []string) error {
+	r.replacements = append(r.replacements, append([]string(nil), permissions...))
+	if r.replaceErr != nil {
+		return r.replaceErr
+	}
+	r.current = append([]string(nil), permissions...)
+	return nil
 }
 
 func TestRoleServiceFiltersAndValidatesMenuKeys(t *testing.T) {
@@ -74,8 +84,8 @@ func TestRoleServiceValidatesRuntimeAPIPermissions(t *testing.T) {
 	}
 }
 
-func TestRoleServiceSetPermissionsUsesInjectedTransaction(t *testing.T) {
-	repo, enforcer, roleID := openRoleServiceTestContext(t)
+func TestRoleServiceSetPermissionsUsesSingleAtomicReplacement(t *testing.T) {
+	repo, _, roleID := openRoleServiceTestContext(t)
 
 	engine := gin.New()
 	engine.GET("/console/v1/roles", func(*gin.Context) {})
@@ -83,16 +93,57 @@ func TestRoleServiceSetPermissionsUsesInjectedTransaction(t *testing.T) {
 	catalog := NewRuntimePermissionCatalog()
 	catalog.LoadRoutes(engine.Routes())
 
-	txManager := &countingTxManager{}
-	service := NewRoleService(repo, enforcer, catalog).WithTransaction(txManager)
+	policies := &recordingRolePolicies{}
+	service := &RoleService{dbRepo: repo, rolePolicies: policies, runtimePermission: catalog}
 	if err := service.SetRolePermissions(context.Background(), SetRolePermissionsInput{
 		RoleID:         roleID,
 		APIPermissions: []string{"GET /console/v1/roles"},
 	}); err != nil {
 		t.Fatalf("set role permissions: %v", err)
 	}
-	if txManager.count != 1 {
-		t.Fatalf("expected transaction manager to execute once, got %d", txManager.count)
+	if len(policies.replacements) != 1 || len(policies.replacements[0]) != 1 || policies.replacements[0][0] != "GET /console/v1/roles" {
+		t.Fatalf("unexpected policy replacements: %#v", policies.replacements)
+	}
+}
+
+func TestRoleServiceSetPermissionsReturnsReplacementFailure(t *testing.T) {
+	repo, _, roleID := openRoleServiceTestContext(t)
+	engine := gin.New()
+	engine.GET("/console/v1/roles", func(*gin.Context) {})
+	catalog := NewRuntimePermissionCatalog()
+	catalog.LoadRoutes(engine.Routes())
+	policies := &recordingRolePolicies{replaceErr: errors.New("injected policy failure")}
+	service := &RoleService{dbRepo: repo, rolePolicies: policies, runtimePermission: catalog}
+	if err := service.SetRolePermissions(context.Background(), SetRolePermissionsInput{
+		RoleID:         roleID,
+		APIPermissions: []string{"GET /console/v1/roles"},
+	}); err == nil {
+		t.Fatal("expected policy replacement failure")
+	}
+}
+
+func TestDeleteRoleRestoresPoliciesWhenDatabaseDeleteFails(t *testing.T) {
+	repo, _, roleID := openRoleServiceTestContext(t)
+	if err := repo.Default().Exec(`
+CREATE TRIGGER fail_role_soft_delete
+BEFORE UPDATE OF deleted_at ON console_roles
+WHEN OLD.id = '` + roleID + `'
+BEGIN
+    SELECT RAISE(ABORT, 'injected role delete failure');
+END;`).Error; err != nil {
+		t.Fatalf("create role delete trigger: %v", err)
+	}
+	policies := &recordingRolePolicies{current: []string{"GET /console/v1/roles"}}
+	service := &RoleService{dbRepo: repo, rolePolicies: policies}
+
+	if err := service.DeleteRole(context.Background(), DeleteRoleInput{RoleID: roleID}); err == nil {
+		t.Fatal("expected role delete failure")
+	}
+	if len(policies.replacements) != 2 || len(policies.replacements[0]) != 0 || len(policies.replacements[1]) != 1 {
+		t.Fatalf("expected clear then restore, got %#v", policies.replacements)
+	}
+	if len(policies.current) != 1 || policies.current[0] != "GET /console/v1/roles" {
+		t.Fatalf("old policies were not restored: %#v", policies.current)
 	}
 }
 
@@ -103,8 +154,8 @@ func openRoleServiceTestContext(t *testing.T) (database.Repo, *rbac.Enforcer, st
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&model.ConsoleRole{}); err != nil {
-		t.Fatalf("auto migrate role: %v", err)
+	if err := db.AutoMigrate(&model.ConsoleRole{}, &model.ConsoleAdmin{}); err != nil {
+		t.Fatalf("auto migrate role models: %v", err)
 	}
 	if err := db.Exec(`
 CREATE TABLE IF NOT EXISTS console_casbin_rules (

@@ -96,7 +96,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 - [x] Task 9：增加登录限流、失败锁定与可信代理配置。
 - [x] Task 10：增加请求体和文件上传限制。
 - [x] Task 11：修复系统配置敏感值和审计泄漏。
-- [ ] Task 12：修复 GORM 与 Casbin 的一致性边界。
+- [x] Task 12：修复 GORM 与 Casbin 的一致性边界。
 
 完成条件：多实例下退出和 refresh 语义一致；登录入口可防暴力尝试；上传不能绕过服务端限制；敏感配置不出现在 API 和审计日志中。
 
@@ -903,7 +903,7 @@ go test ./pkg/storage ./app/console/internal/router -v
 
 ### Task 12：修复 GORM 与 Casbin 的一致性边界
 
-**Status:** `[-] In Progress`
+**Status:** `[x] Completed`
 
 **Owner:** Codex
 
@@ -911,7 +911,17 @@ go test ./pkg/storage ./app/console/internal/router -v
 
 **Started at:** 2026-07-14
 
+**Completed at:** 2026-07-14
+
 **Design:** `docs/plans/2026-07-14-rbac-consistency-design.md`
+
+**Verification:**
+
+- `go test ./...`、`go vet ./...`、`make build`、`git diff --check`：PASS。
+- `go test -race ./pkg/rbac ./cmd/grove ./app/console/internal/service ./app/console/internal/router`：PASS。
+- SQLite trigger 故障注入：新 policy/grouping 写入失败时 adapter 事务回滚，旧集合和内存模型保持不变。
+- service 测试覆盖管理员创建补偿、换角色 fail-closed 与恢复、删除前清理、角色删除失败恢复旧权限。
+- 本机 PostgreSQL 唯一临时库：`rbac check` 识别 grouping 错位、孤儿 grouping 和孤儿 policy；默认 repair 未修改数据；`--dry-run=false` 修复后 check PASS；临时库已删除。
 
 **Depends on:** Task 6
 

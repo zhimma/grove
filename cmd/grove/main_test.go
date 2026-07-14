@@ -41,6 +41,7 @@ func TestRootCommandIncludesGroveHelp(t *testing.T) {
 	assertContains(t, content, "grove 是当前仓库唯一保留的 CLI 入口")
 	assertContains(t, content, "about")
 	assertContains(t, content, "doctor")
+	assertContains(t, content, "rbac")
 	assertContains(t, content, "make:module")
 }
 

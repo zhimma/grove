@@ -47,6 +47,15 @@ make seed.demo
 
 `seed.bootstrap` 只写入基础配置和 root 管理员，不覆盖已有密码。可通过 `GROVE_ROOT_PASSWORD` 指定初始密码；未指定时 CLI 仅在首次创建 root 时显示一次随机密码。`seed.demo` 会写入演示数据，并在 production 环境直接拒绝执行。
 
+启用 Console RBAC 后，可检查数据库角色真相源和 Casbin 派生数据：
+
+```bash
+go run ./cmd/grove rbac check
+go run ./cmd/grove rbac repair --dry-run
+# 确认差异后再执行
+go run ./cmd/grove rbac repair --dry-run=false
+```
+
 ## 4. 启动服务
 
 ```bash
