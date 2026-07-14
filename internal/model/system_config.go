@@ -7,8 +7,8 @@ import (
 
 type SystemConfig struct {
 	Base
-	ConfigGroup  string `gorm:"size:64;index:idx_system_configs_group_key,unique;not null" json:"config_group"`
-	ConfigKey    string `gorm:"size:120;index:idx_system_configs_group_key,unique;not null" json:"config_key"`
+	ConfigGroup  string `gorm:"size:64;index:idx_system_configs_group_key,unique,where:deleted_at IS NULL;not null" json:"config_group"`
+	ConfigKey    string `gorm:"size:120;index:idx_system_configs_group_key,unique,where:deleted_at IS NULL;not null" json:"config_key"`
 	Name         string `gorm:"size:120;not null" json:"name"`
 	Description  string `gorm:"size:255;not null;default:''" json:"description"`
 	ValueType    string `gorm:"size:20;not null;default:'string'" json:"value_type"`

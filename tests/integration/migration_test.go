@@ -86,14 +86,53 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 		"console_operation_logs",
 		"console_login_logs",
 		"idx_system_configs_group_key",
+		"idx_users_email_active",
+		"idx_console_roles_code_active",
+		"idx_console_admins_account_active",
+		"idx_console_admins_email_active",
+		"idx_console_admins_phone_active",
+		"idx_casbin_rules_unique",
+		"idx_console_casbin_rules_unique",
 		"grove_migrations",
 	} {
 		assertRelationExists(t, db, relation, true)
 	}
 	assertRelationExists(t, db, "schema_migrations", false)
+	assertColumnExists(t, db, "console_operation_logs", "deleted_at", false)
+	assertColumnExists(t, db, "console_login_logs", "deleted_at", false)
+	for _, constraint := range []string{
+		"fk_console_admins_role",
+		"chk_console_admins_status",
+		"chk_console_roles_status",
+		"chk_system_configs_value_type",
+	} {
+		assertConstraintExists(t, db, constraint)
+	}
+	assertExecFails(t, db, `INSERT INTO console_roles (id, name, code, status) VALUES ('invalid-role', 'Invalid', 'invalid', 9)`)
+	assertExecFails(t, db, `INSERT INTO console_admins (id, account, password, role_id, status) VALUES ('invalid-admin', 'invalid-admin', 'unused', 'missing-role', 1)`)
+	assertExecFails(t, db, `INSERT INTO system_configs (id, config_group, config_key, name, value_type) VALUES ('invalid-config', 'test', 'invalid', 'Invalid', 'yaml')`)
+	if _, err := db.Exec(`INSERT INTO casbin_rules (ptype, v0, v1) VALUES ('p', 'integration-role', 'GET /integration')`); err != nil {
+		t.Fatalf("insert casbin rule: %v", err)
+	}
+	assertExecFails(t, db, `INSERT INTO casbin_rules (ptype, v0, v1) VALUES ('p', 'integration-role', 'GET /integration')`)
+	if _, err := db.Exec(`INSERT INTO console_casbin_rules (ptype, v0, v1) VALUES ('p', 'integration-role', 'GET /integration')`); err != nil {
+		t.Fatalf("insert console casbin rule: %v", err)
+	}
+	assertExecFails(t, db, `INSERT INTO console_casbin_rules (ptype, v0, v1) VALUES ('p', 'integration-role', 'GET /integration')`)
+
+	for _, statement := range []string{
+		`INSERT INTO users (id, name, email) VALUES ('soft-delete-user-1', 'First', 'reuse@example.test')`,
+		`UPDATE users SET deleted_at = NOW() WHERE id = 'soft-delete-user-1'`,
+		`INSERT INTO users (id, name, email) VALUES ('soft-delete-user-2', 'Second', 'reuse@example.test')`,
+		`DELETE FROM users WHERE email = 'reuse@example.test'`,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("verify active-record uniqueness with %q: %v", statement, err)
+		}
+	}
 
 	status := runGrove(t, ctx, repoRoot, configPath, commandEnv, "migrate", "status")
-	if !strings.Contains(status, "已执行") || !strings.Contains(status, "202604150008_add_console_admin_password_state") {
+	if !strings.Contains(status, "已执行") || !strings.Contains(status, "202604150009_define_integrity_semantics") {
 		t.Fatalf("unexpected migration status: %s", status)
 	}
 
@@ -109,6 +148,7 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 	}
 
 	runGrove(t, ctx, repoRoot, configPath, commandEnv, "seed", "bootstrap")
+	assertExecFails(t, db, `DELETE FROM console_roles WHERE id = 'console-role-root'`)
 	var originalHash string
 	if err := db.QueryRowContext(ctx, `SELECT password FROM console_admins WHERE id = 'console-admin-root'`).Scan(&originalHash); err != nil {
 		t.Fatalf("read root password: %v", err)
@@ -233,5 +273,39 @@ func assertRelationExists(t *testing.T, db *sql.DB, name string, expected bool) 
 	}
 	if exists != expected {
 		t.Fatalf("relation %s existence = %t, expected %t", name, exists, expected)
+	}
+}
+
+func assertColumnExists(t *testing.T, db *sql.DB, table, column string, expected bool) {
+	t.Helper()
+	var exists bool
+	if err := db.QueryRow(`
+SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2
+)`, table, column).Scan(&exists); err != nil {
+		t.Fatalf("check column %s.%s: %v", table, column, err)
+	}
+	if exists != expected {
+		t.Fatalf("column %s.%s existence = %t, expected %t", table, column, exists, expected)
+	}
+}
+
+func assertConstraintExists(t *testing.T, db *sql.DB, name string) {
+	t.Helper()
+	var exists bool
+	if err := db.QueryRow(`SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = $1)`, name).Scan(&exists); err != nil {
+		t.Fatalf("check constraint %s: %v", name, err)
+	}
+	if !exists {
+		t.Fatalf("constraint %s does not exist", name)
+	}
+}
+
+func assertExecFails(t *testing.T, db *sql.DB, query string) {
+	t.Helper()
+	if _, err := db.Exec(query); err == nil {
+		t.Fatalf("expected database constraint to reject query: %s", query)
 	}
 }

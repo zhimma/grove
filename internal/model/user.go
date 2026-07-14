@@ -14,7 +14,7 @@ import (
 type User struct {
 	Base
 	Name  string `gorm:"size:120;not null" json:"name"`
-	Email string `gorm:"size:160;uniqueIndex;not null" json:"email"`
+	Email string `gorm:"size:160;uniqueIndex:idx_users_email_active,where:deleted_at IS NULL;not null" json:"email"`
 }
 
 func (User) TableName() string {

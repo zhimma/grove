@@ -539,7 +539,25 @@ git commit -m "fix: make module generation atomic and compilable"
 
 ### Task 6：明确软删除语义并增加数据库约束
 
-**Status:** `[ ] Planned`
+**Status:** `[x] Completed`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Completed at:** 2026-07-14
+
+**Architecture note:** 业务实体统一使用 GORM 原生软删除；登录与操作审计日志使用不含删除字段的 `AuditBase`，删除即物理删除。业务唯一键只约束未删除记录，数据库同时负责稳定枚举、角色引用和 Casbin 规则完整性。
+
+**Verification:**
+
+- `go test ./internal/model ./pkg/migrate ./app/console/internal/service -v`：PASS。
+- `go test -race ./internal/model ./pkg/migrate ./app/console/internal/service`：PASS。
+- `go test -tags=integration ./tests/integration -run '^$'`：PASS，集成测试可编译。
+- 本机 PostgreSQL 17.7 临时库：9 个迁移 up、约束实际拒绝、软删除唯一值复用、bootstrap 幂等、009 down/up、全量 down 全部 PASS，临时库已删除。
+- `go test ./...`、`go vet ./...`、`git diff --check`：PASS。
 
 **Depends on:** Task 4
 
@@ -930,6 +948,7 @@ go test ./pkg/scheduler -race -count=20
 
 - Config `Validate(service)` 根据 api、console、worker 检查真实依赖。
 - YAML 使用 `yaml.Decoder.KnownFields(true)`；未知字段和拼写错误必须启动失败。
+- `config.example.yaml` 在不设置环境变量时必须可直接解析；通配符等 YAML 特殊值必须正确引用，并增加模板加载回归测试。
 - production console 缺少数据库或权限配置时启动失败，不运行成 503 服务。
 - worker 未启用时明确退出，不启动空进程等待信号。
 - Provider 维护按创建逆序执行的 closers。

@@ -1,7 +1,7 @@
 package model
 
 type ConsoleLoginLog struct {
-	Base
+	AuditBase
 	AdminID       string        `gorm:"size:26;index" json:"admin_id"`
 	Account       string        `gorm:"size:120;index;not null" json:"account"`
 	Success       bool          `gorm:"not null;default:false" json:"success"`

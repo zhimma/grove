@@ -8,7 +8,7 @@ import (
 
 type ConsoleAdmin struct {
 	Base
-	Account            string       `gorm:"size:120;uniqueIndex;not null" json:"account"`
+	Account            string       `gorm:"size:120;uniqueIndex:idx_console_admins_account_active,where:deleted_at IS NULL;not null" json:"account"`
 	Username           string       `gorm:"size:120" json:"username"`
 	Email              string       `gorm:"size:160" json:"email"`
 	Phone              string       `gorm:"size:32" json:"phone"`
@@ -25,7 +25,7 @@ type ConsoleAdmin struct {
 	LastLoginIP        string       `gorm:"size:64" json:"last_login_ip"`
 	LoginCount         int          `gorm:"not null;default:0" json:"login_count"`
 	Remark             string       `gorm:"size:500" json:"remark"`
-	Role               *ConsoleRole `gorm:"foreignKey:RoleID" json:"role,omitempty"`
+	Role               *ConsoleRole `gorm:"foreignKey:RoleID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT" json:"role,omitempty"`
 }
 
 func (ConsoleAdmin) TableName() string {

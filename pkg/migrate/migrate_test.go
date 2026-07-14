@@ -78,6 +78,27 @@ func TestConsoleAdminPasswordStateMigrationMatchesModelContract(t *testing.T) {
 	}
 }
 
+func TestIntegrityMigrationDefinesDeletionAndConstraintContracts(t *testing.T) {
+	path := filepath.Join("..", "..", "database", "migrations", "202604150009_define_integrity_semantics.up.sql")
+	content := mustReadMigration(t, path)
+	for _, fragment := range []string{
+		"DROP COLUMN IF EXISTS deleted_at",
+		"ADD CONSTRAINT fk_console_admins_role",
+		"ON DELETE RESTRICT",
+		"ADD CONSTRAINT chk_console_admins_status",
+		"ADD CONSTRAINT chk_console_roles_status",
+		"ADD CONSTRAINT chk_system_configs_value_type",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_casbin_rules_unique",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_console_casbin_rules_unique",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_console_admins_account_active",
+		"WHERE deleted_at IS NULL",
+	} {
+		if !strings.Contains(content, fragment) {
+			t.Errorf("integrity migration missing %q", fragment)
+		}
+	}
+}
+
 func TestRunSQLDirWithReplacements(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/seed.db"), &gorm.Config{})
 	if err != nil {

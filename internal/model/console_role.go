@@ -9,7 +9,7 @@ import (
 type ConsoleRole struct {
 	Base
 	Name        string               `gorm:"size:120;not null" json:"name"`
-	Code        string               `gorm:"size:120;uniqueIndex;not null" json:"code"`
+	Code        string               `gorm:"size:120;uniqueIndex:idx_console_roles_code_active,where:deleted_at IS NULL;not null" json:"code"`
 	DisplayName string               `gorm:"size:120" json:"display_name"`
 	Description string               `gorm:"size:255" json:"description"`
 	MenuKeys    datatype.StringArray `gorm:"type:jsonb;default:'[]'" json:"menu_keys"`

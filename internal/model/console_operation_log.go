@@ -1,7 +1,7 @@
 package model
 
 type ConsoleOperationLog struct {
-	Base
+	AuditBase
 	AdminID      string        `gorm:"size:26;index" json:"admin_id"`
 	Method       string        `gorm:"size:12;index;not null" json:"method"`
 	Path         string        `gorm:"size:255;index;not null" json:"path"`
