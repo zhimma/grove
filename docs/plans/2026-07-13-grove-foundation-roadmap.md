@@ -1000,7 +1000,15 @@ type Store interface {
 
 ### Task 14：重构 HTTP Client 为请求级不可变状态
 
-**Status:** `[ ] Planned`
+**Status:** `[-] In Progress`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Design:** `docs/plans/2026-07-14-http-client-request-state-design.md`
 
 **Files:**
 
