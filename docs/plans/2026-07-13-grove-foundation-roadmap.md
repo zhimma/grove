@@ -1044,7 +1044,15 @@ type Store interface {
 
 ### Task 15：修复 Scheduler 并发、配置和取消语义
 
-**Status:** `[ ] Planned`
+**Status:** `[-] In Progress`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Design:** `docs/plans/2026-07-14-scheduler-concurrency-design.md`
 
 **Files:**
 
