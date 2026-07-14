@@ -115,9 +115,9 @@ route.Wrap(group).GET(...).Name("角色权限.角色列表")
 
 它来自前端本地路由树。后端只负责：
 
-- 校验 `menu_keys` 是否属于当前已注册菜单 key
+- 去重并校验 `menu_keys` 的数量、长度和字符格式
 - 保存角色勾选结果
-- 查询时返回角色已有的 `menu_keys`
+- 查询时返回角色已有的 `menu_keys`，包括前端已删除的历史 key
 
 ## 使用方式
 
@@ -165,7 +165,7 @@ permissionStore.hasApiPermission('DELETE', '/console/v1/roles/:id')
 角色分配权限时，后端会做两类校验：
 
 - API 权限必须存在于运行时路由目录
-- 菜单权限必须是已注册的菜单 key
+- 菜单权限最多 256 个，单个 key 最长 128 字符，只允许字母、数字及 `_.:-`
 
 否则返回 `422 Unprocessable Entity`。
 

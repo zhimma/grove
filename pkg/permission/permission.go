@@ -2,7 +2,6 @@ package permission
 
 import (
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -21,20 +20,6 @@ type CatalogRoute struct {
 	Scope       string
 	Method      string
 	Path        string
-}
-
-type MenuTreeItem struct {
-	MenuKey   string         `json:"menu_key"`
-	ParentKey string         `json:"parent_key,omitempty"`
-	Name      string         `json:"name"`
-	Title     string         `json:"title"`
-	Path      string         `json:"path"`
-	Component string         `json:"component,omitempty"`
-	Icon      string         `json:"icon,omitempty"`
-	Scope     string         `json:"scope,omitempty"`
-	Sort      int            `json:"sort"`
-	Visible   bool           `json:"visible"`
-	Children  []MenuTreeItem `json:"children,omitempty"`
 }
 
 var nonAlphaNum = regexp.MustCompile(`[^a-z0-9]+`)
@@ -95,25 +80,6 @@ func CollectProtectedRoutes(routes gin.RoutesInfo, appCode, serviceCode, authSco
 		})
 	}
 	return items
-}
-
-func sortTreeItems(items []*MenuTreeItem) {
-	sort.Slice(items, func(i, j int) bool {
-		if items[i].Sort == items[j].Sort {
-			return items[i].MenuKey < items[j].MenuKey
-		}
-		return items[i].Sort < items[j].Sort
-	})
-	for _, item := range items {
-		if len(item.Children) == 0 {
-			continue
-		}
-		children := make([]*MenuTreeItem, 0, len(item.Children))
-		for i := range item.Children {
-			children = append(children, &item.Children[i])
-		}
-		sortTreeItems(children)
-	}
 }
 
 func shouldSkipRoute(appCode, method, routePath string) bool {

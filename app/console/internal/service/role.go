@@ -412,7 +412,7 @@ func (s *RoleService) GetRoleMenus(ctx context.Context, in GetRoleMenusInput) ([
 	if err != nil {
 		return nil, err
 	}
-	return FilterConsoleMenuKeys(role.MenuKeys), nil
+	return normalizeConsoleMenuKeys(role.MenuKeys), nil
 }
 
 func (s *RoleService) SetRoleMenus(ctx context.Context, in SetRoleMenusInput) error {
@@ -425,13 +425,13 @@ func (s *RoleService) SetRoleMenus(ctx context.Context, in SetRoleMenusInput) er
 	}
 
 	keys := uniqueNonEmptyStrings(in.MenuKeys)
-	if err := ValidateConsoleMenuKeys(keys); err != nil {
+	if err := validateConsoleMenuKeys(keys); err != nil {
 		return err
 	}
 	if err := s.dbRepo.Default().WithContext(ctx).
 		Model(&model.ConsoleRole{}).
 		Where("id = ?", in.RoleID).
-		Update("menu_keys", datatype.NewStringArray(FilterConsoleMenuKeys(keys))).Error; err != nil {
+		Update("menu_keys", datatype.NewStringArray(normalizeConsoleMenuKeys(keys))).Error; err != nil {
 		return errx.Internal().WithCause(err)
 	}
 	return nil

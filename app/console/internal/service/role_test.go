@@ -38,14 +38,14 @@ func (r *recordingRolePolicies) ReplaceConsolePoliciesForRole(_ string, permissi
 	return nil
 }
 
-func TestRoleServiceFiltersAndValidatesMenuKeys(t *testing.T) {
+func TestRoleServicePreservesHistoricalAndAcceptsNewMenuKeys(t *testing.T) {
 	repo, _, roleID := openRoleServiceTestContext(t)
 	service := NewRoleService(repo, nil)
 
 	if err := repo.Default().
 		Model(&model.ConsoleRole{}).
 		Where("id = ?", roleID).
-		Update("menu_keys", datatype.NewStringArray([]string{"ConsoleDashboard", "legacy.invalid", "ConsoleRoles"})).Error; err != nil {
+		Update("menu_keys", datatype.NewStringArray([]string{"ConsoleDashboard", "legacy.invalid", "ConsoleFuture"})).Error; err != nil {
 		t.Fatalf("seed dirty menu keys: %v", err)
 	}
 
@@ -53,15 +53,29 @@ func TestRoleServiceFiltersAndValidatesMenuKeys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get role menus: %v", err)
 	}
-	if len(menuKeys) != 2 || menuKeys[0] != "ConsoleDashboard" || menuKeys[1] != "ConsoleRoles" {
-		t.Fatalf("unexpected filtered menu keys: %#v", menuKeys)
+	if len(menuKeys) != 3 || menuKeys[0] != "ConsoleDashboard" || menuKeys[1] != "legacy.invalid" || menuKeys[2] != "ConsoleFuture" {
+		t.Fatalf("unexpected preserved menu keys: %#v", menuKeys)
 	}
 
 	if err := service.SetRoleMenus(context.Background(), SetRoleMenusInput{
 		RoleID:   roleID,
-		MenuKeys: []string{"ConsoleDashboard", "bad.key"},
+		MenuKeys: []string{"ConsoleFuture", "ConsoleFuture", "reports.monthly"},
+	}); err != nil {
+		t.Fatalf("set new frontend menu keys: %v", err)
+	}
+	menuKeys, err = service.GetRoleMenus(context.Background(), GetRoleMenusInput{RoleID: roleID})
+	if err != nil {
+		t.Fatalf("get updated role menus: %v", err)
+	}
+	if len(menuKeys) != 2 || menuKeys[0] != "ConsoleFuture" || menuKeys[1] != "reports.monthly" {
+		t.Fatalf("unexpected updated menu keys: %#v", menuKeys)
+	}
+
+	if err := service.SetRoleMenus(context.Background(), SetRoleMenusInput{
+		RoleID:   roleID,
+		MenuKeys: []string{"bad key"},
 	}); err == nil {
-		t.Fatal("expected invalid menu key error")
+		t.Fatal("expected invalid menu key format error")
 	}
 }
 

@@ -418,7 +418,7 @@ func (s *AuthService) GetAuthorizationOverview(ctx context.Context, input GetAut
 	}
 
 	if admin.Role != nil {
-		output.MenuKeys = FilterConsoleMenuKeys(admin.Role.MenuKeys)
+		output.MenuKeys = normalizeConsoleMenuKeys(admin.Role.MenuKeys)
 	}
 
 	return output, nil
