@@ -903,7 +903,15 @@ go test ./pkg/storage ./app/console/internal/router -v
 
 ### Task 12：修复 GORM 与 Casbin 的一致性边界
 
-**Status:** `[ ] Planned`
+**Status:** `[-] In Progress`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Design:** `docs/plans/2026-07-14-rbac-consistency-design.md`
 
 **Depends on:** Task 6
 
