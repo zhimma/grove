@@ -1099,7 +1099,15 @@ go test ./pkg/scheduler -race -count=20
 
 ### Task 16：修复 Event 异步投递语义
 
-**Status:** `[ ] Planned`
+**Status:** `[-] In Progress`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Design:** `docs/plans/2026-07-14-event-async-delivery-design.md`
 
 **Files:**
 
