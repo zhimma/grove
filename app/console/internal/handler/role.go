@@ -15,48 +15,13 @@ type RoleHandler struct {
 }
 
 type ListRolesRequest struct {
-	Page        int      `form:"page" binding:"omitempty,min=1" label:"页码"`
-	PageSize    int      `form:"page_size" binding:"omitempty,min=1,max=100" label:"每页条数"`
-	Offset      int      `form:"offset" label:"偏移量"`
-	Limit       int      `form:"limit" label:"限制条数"`
-	ListAll     bool     `form:"list_all" label:"是否返回全部"`
-	Keyword     string   `form:"keyword" label:"关键词"`
-	OrderBy     []string `form:"order_by" label:"排序字段"`
-	Status      *int     `form:"status" label:"状态"`
-	CreatedFrom string   `form:"created_from" label:"创建开始时间"`
-	CreatedTo   string   `form:"created_to" label:"创建结束时间"`
+	ListQuery
+	Status *int `form:"status" label:"状态"`
 }
 
 type ListRolesResponse struct {
-	List []RoleItem `json:"list"`
-	Meta ListMeta   `json:"meta"`
-}
-
-type RoleItem struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Code        string `json:"code"`
-	DisplayName string `json:"display_name"`
-	Description string `json:"description"`
-	Sort        int    `json:"sort"`
-	Status      int    `json:"status"`
-	StatusText  string `json:"status_text"`
-	IsSuper     bool   `json:"is_super"`
-	CreatedAt   string `json:"created_at"`
-}
-
-type RoleDetail struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Code        string `json:"code"`
-	DisplayName string `json:"display_name"`
-	Description string `json:"description"`
-	Sort        int    `json:"sort"`
-	Status      int    `json:"status"`
-	StatusText  string `json:"status_text"`
-	IsSuper     bool   `json:"is_super"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	List []RoleResponse `json:"list"`
+	Meta ListMeta       `json:"meta"`
 }
 
 type CreateRoleRequest struct {
@@ -130,20 +95,9 @@ func (h *RoleHandler) List(c *gin.Context) {
 		return
 	}
 
-	items := make([]RoleItem, 0, len(result.List))
+	items := make([]RoleResponse, 0, len(result.List))
 	for _, role := range result.List {
-		items = append(items, RoleItem{
-			ID:          role.ID,
-			Name:        role.Name,
-			Code:        role.Code,
-			DisplayName: role.DisplayName,
-			Description: role.Description,
-			Sort:        role.Sort,
-			Status:      role.Status,
-			StatusText:  roleStatusToText(role.Status),
-			IsSuper:     role.IsSuper,
-			CreatedAt:   role.CreatedAt,
-		})
+		items = append(items, newRoleResponse(role))
 	}
 
 	response.Success(c, ListRolesResponse{
@@ -164,19 +118,7 @@ func (h *RoleHandler) Detail(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	response.Success(c, RoleDetail{
-		ID:          role.ID,
-		Name:        role.Name,
-		Code:        role.Code,
-		DisplayName: role.DisplayName,
-		Description: role.Description,
-		Sort:        role.Sort,
-		Status:      role.Status,
-		StatusText:  roleStatusToText(role.Status),
-		IsSuper:     role.IsSuper,
-		CreatedAt:   role.CreatedAt,
-		UpdatedAt:   role.UpdatedAt,
-	})
+	response.Success(c, newRoleResponse(*role))
 }
 
 func (h *RoleHandler) Create(c *gin.Context) {
@@ -205,19 +147,7 @@ func (h *RoleHandler) Create(c *gin.Context) {
 		"status":       role.Status,
 		"sort":         role.Sort,
 	})
-	response.Success(c, RoleDetail{
-		ID:          role.ID,
-		Name:        role.Name,
-		Code:        role.Code,
-		DisplayName: role.DisplayName,
-		Description: role.Description,
-		Sort:        role.Sort,
-		Status:      role.Status,
-		StatusText:  roleStatusToText(role.Status),
-		IsSuper:     role.IsSuper,
-		CreatedAt:   role.CreatedAt,
-		UpdatedAt:   role.UpdatedAt,
-	})
+	response.Success(c, newRoleResponse(*role))
 }
 
 func (h *RoleHandler) Update(c *gin.Context) {
@@ -253,19 +183,7 @@ func (h *RoleHandler) Update(c *gin.Context) {
 		"status":       role.Status,
 		"sort":         role.Sort,
 	})
-	response.Success(c, RoleDetail{
-		ID:          role.ID,
-		Name:        role.Name,
-		Code:        role.Code,
-		DisplayName: role.DisplayName,
-		Description: role.Description,
-		Sort:        role.Sort,
-		Status:      role.Status,
-		StatusText:  roleStatusToText(role.Status),
-		IsSuper:     role.IsSuper,
-		CreatedAt:   role.CreatedAt,
-		UpdatedAt:   role.UpdatedAt,
-	})
+	response.Success(c, newRoleResponse(*role))
 }
 
 func (h *RoleHandler) Delete(c *gin.Context) {
@@ -367,15 +285,4 @@ func (h *RoleHandler) AssignMenus(c *gin.Context) {
 		"menu_key_count": len(req.MenuKeys),
 	})
 	response.Success(c, nil)
-}
-
-func roleStatusToText(status int) string {
-	switch status {
-	case 1:
-		return "启用"
-	case 0:
-		return "禁用"
-	default:
-		return "未知"
-	}
 }

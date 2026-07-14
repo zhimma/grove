@@ -20,66 +20,14 @@ type MessageResponse struct {
 }
 
 type ListAdminsRequest struct {
-	Page        int      `form:"page" binding:"omitempty,min=1" label:"页码"`
-	PageSize    int      `form:"page_size" binding:"omitempty,min=1,max=100" label:"每页条数"`
-	Offset      int      `form:"offset" label:"偏移量"`
-	Limit       int      `form:"limit" label:"限制条数"`
-	ListAll     bool     `form:"list_all" label:"是否返回全部"`
-	Keyword     string   `form:"keyword" label:"关键词"`
-	OrderBy     []string `form:"order_by" label:"排序字段"`
-	RoleID      string   `form:"role_id" label:"角色ID"`
-	Status      *int     `form:"status" label:"状态"`
-	CreatedFrom string   `form:"created_from" label:"创建开始时间"`
-	CreatedTo   string   `form:"created_to" label:"创建结束时间"`
+	ListQuery
+	RoleID string `form:"role_id" label:"角色ID"`
+	Status *int   `form:"status" label:"状态"`
 }
 
 type ListAdminsResponse struct {
-	List []AdminItem `json:"list"`
-	Meta ListMeta    `json:"meta"`
-}
-
-type AdminItem struct {
-	ID          string `json:"id"`
-	Account     string `json:"account"`
-	Username    string `json:"username"`
-	Email       string `json:"email"`
-	Phone       string `json:"phone"`
-	RealName    string `json:"real_name"`
-	DisplayName string `json:"display_name"`
-	Avatar      string `json:"avatar"`
-	RoleID      string `json:"role_id"`
-	RoleName    string `json:"role_name"`
-	Status      int    `json:"status"`
-	IsSuper     bool   `json:"is_super"`
-	CreatedAt   string `json:"created_at"`
-}
-
-type AdminDetail struct {
-	ID                 string    `json:"id"`
-	Account            string    `json:"account"`
-	Username           string    `json:"username"`
-	Email              string    `json:"email"`
-	Phone              string    `json:"phone"`
-	RealName           string    `json:"real_name"`
-	DisplayName        string    `json:"display_name"`
-	Avatar             string    `json:"avatar"`
-	RoleID             string    `json:"role_id"`
-	Role               *RoleInfo `json:"role,omitempty"`
-	Status             int       `json:"status"`
-	StatusText         string    `json:"status_text"`
-	EmailVerified      bool      `json:"email_verified"`
-	PhoneVerified      bool      `json:"phone_verified"`
-	MustChangePassword bool      `json:"must_change_password"`
-	IsSuper            bool      `json:"is_super"`
-	Remark             string    `json:"remark"`
-	CreatedAt          string    `json:"created_at"`
-	UpdatedAt          string    `json:"updated_at"`
-}
-
-type RoleInfo struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Code string `json:"code"`
+	List []AdminResponse `json:"list"`
+	Meta ListMeta        `json:"meta"`
 }
 
 type CreateAdminRequest struct {
@@ -162,26 +110,9 @@ func (h *AdminHandler) List(c *gin.Context) {
 		return
 	}
 
-	items := make([]AdminItem, 0, len(result.List))
-	for _, admin := range result.List {
-		item := AdminItem{
-			ID:          admin.ID,
-			Account:     admin.Account,
-			Username:    admin.Username,
-			Email:       admin.Email,
-			Phone:       admin.Phone,
-			RealName:    admin.RealName,
-			DisplayName: admin.GetDisplayName(),
-			Avatar:      admin.Avatar,
-			RoleID:      admin.RoleID,
-			Status:      admin.Status,
-			IsSuper:     admin.HasSuperAccess(),
-			CreatedAt:   admin.CreatedAt.Format("2006-01-02 15:04:05"),
-		}
-		if admin.Role != nil {
-			item.RoleName = admin.Role.Name
-		}
-		items = append(items, item)
+	items := make([]AdminResponse, 0, len(result.List))
+	for i := range result.List {
+		items = append(items, newAdminResponse(&result.List[i]))
 	}
 
 	response.Success(c, ListAdminsResponse{
@@ -208,31 +139,7 @@ func (h *AdminHandler) Detail(c *gin.Context) {
 		"role_id":      admin.RoleID,
 		"status":       admin.Status,
 	})
-	var role *RoleInfo
-	if admin.Role != nil {
-		role = &RoleInfo{ID: admin.Role.ID, Name: admin.Role.Name, Code: admin.Role.Code}
-	}
-	response.Success(c, AdminDetail{
-		ID:                 admin.ID,
-		Account:            admin.Account,
-		Username:           admin.Username,
-		Email:              admin.Email,
-		Phone:              admin.Phone,
-		RealName:           admin.RealName,
-		DisplayName:        admin.GetDisplayName(),
-		Avatar:             admin.Avatar,
-		RoleID:             admin.RoleID,
-		Role:               role,
-		Status:             admin.Status,
-		StatusText:         adminStatusToText(admin.Status),
-		EmailVerified:      admin.EmailVerified,
-		PhoneVerified:      admin.PhoneVerified,
-		MustChangePassword: admin.MustChangePassword,
-		IsSuper:            admin.HasSuperAccess(),
-		Remark:             admin.Remark,
-		CreatedAt:          admin.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:          admin.UpdatedAt.Format("2006-01-02 15:04:05"),
-	})
+	response.Success(c, newAdminResponse(admin))
 }
 
 func (h *AdminHandler) Create(c *gin.Context) {
@@ -265,31 +172,7 @@ func (h *AdminHandler) Create(c *gin.Context) {
 		"role_id":      admin.RoleID,
 		"status":       admin.Status,
 	})
-	var role *RoleInfo
-	if admin.Role != nil {
-		role = &RoleInfo{ID: admin.Role.ID, Name: admin.Role.Name, Code: admin.Role.Code}
-	}
-	response.Success(c, AdminDetail{
-		ID:                 admin.ID,
-		Account:            admin.Account,
-		Username:           admin.Username,
-		Email:              admin.Email,
-		Phone:              admin.Phone,
-		RealName:           admin.RealName,
-		DisplayName:        admin.GetDisplayName(),
-		Avatar:             admin.Avatar,
-		RoleID:             admin.RoleID,
-		Role:               role,
-		Status:             admin.Status,
-		StatusText:         adminStatusToText(admin.Status),
-		EmailVerified:      admin.EmailVerified,
-		PhoneVerified:      admin.PhoneVerified,
-		MustChangePassword: admin.MustChangePassword,
-		IsSuper:            admin.HasSuperAccess(),
-		Remark:             admin.Remark,
-		CreatedAt:          admin.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:          admin.UpdatedAt.Format("2006-01-02 15:04:05"),
-	})
+	response.Success(c, newAdminResponse(admin))
 }
 
 func (h *AdminHandler) Update(c *gin.Context) {
@@ -326,31 +209,7 @@ func (h *AdminHandler) Update(c *gin.Context) {
 	setAuditMeta(c, "console_admin", admin.ID, map[string]any{
 		"status": admin.Status,
 	})
-	var role *RoleInfo
-	if admin.Role != nil {
-		role = &RoleInfo{ID: admin.Role.ID, Name: admin.Role.Name, Code: admin.Role.Code}
-	}
-	response.Success(c, AdminDetail{
-		ID:                 admin.ID,
-		Account:            admin.Account,
-		Username:           admin.Username,
-		Email:              admin.Email,
-		Phone:              admin.Phone,
-		RealName:           admin.RealName,
-		DisplayName:        admin.GetDisplayName(),
-		Avatar:             admin.Avatar,
-		RoleID:             admin.RoleID,
-		Role:               role,
-		Status:             admin.Status,
-		StatusText:         adminStatusToText(admin.Status),
-		EmailVerified:      admin.EmailVerified,
-		PhoneVerified:      admin.PhoneVerified,
-		MustChangePassword: admin.MustChangePassword,
-		IsSuper:            admin.HasSuperAccess(),
-		Remark:             admin.Remark,
-		CreatedAt:          admin.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:          admin.UpdatedAt.Format("2006-01-02 15:04:05"),
-	})
+	response.Success(c, newAdminResponse(admin))
 }
 
 func (h *AdminHandler) UpdateStatus(c *gin.Context) {
@@ -374,31 +233,7 @@ func (h *AdminHandler) UpdateStatus(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	var role *RoleInfo
-	if admin.Role != nil {
-		role = &RoleInfo{ID: admin.Role.ID, Name: admin.Role.Name, Code: admin.Role.Code}
-	}
-	response.Success(c, AdminDetail{
-		ID:                 admin.ID,
-		Account:            admin.Account,
-		Username:           admin.Username,
-		Email:              admin.Email,
-		Phone:              admin.Phone,
-		RealName:           admin.RealName,
-		DisplayName:        admin.GetDisplayName(),
-		Avatar:             admin.Avatar,
-		RoleID:             admin.RoleID,
-		Role:               role,
-		Status:             admin.Status,
-		StatusText:         adminStatusToText(admin.Status),
-		EmailVerified:      admin.EmailVerified,
-		PhoneVerified:      admin.PhoneVerified,
-		MustChangePassword: admin.MustChangePassword,
-		IsSuper:            admin.HasSuperAccess(),
-		Remark:             admin.Remark,
-		CreatedAt:          admin.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:          admin.UpdatedAt.Format("2006-01-02 15:04:05"),
-	})
+	response.Success(c, newAdminResponse(admin))
 }
 
 func (h *AdminHandler) Delete(c *gin.Context) {
@@ -445,17 +280,4 @@ func (h *AdminHandler) ResetPassword(c *gin.Context) {
 		"password_reset": true,
 	})
 	response.Success(c, MessageResponse{Message: "password reset successfully"})
-}
-
-func adminStatusToText(status int) string {
-	switch status {
-	case 1:
-		return "启用"
-	case 0:
-		return "禁用"
-	case 2:
-		return "锁定"
-	default:
-		return "未知"
-	}
 }

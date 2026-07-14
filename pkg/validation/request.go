@@ -137,10 +137,23 @@ func resolveTypeErrorField(c *gin.Context, target any, source string) (fieldMeta
 	if structType == nil || c == nil {
 		return fieldMeta{}, false
 	}
+	return resolveTypeErrorFieldInStruct(c, target, *structType, source)
+}
 
-	t := *structType
+func resolveTypeErrorFieldInStruct(c *gin.Context, target any, t reflect.Type, source string) (fieldMeta, bool) {
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
+		if field.Anonymous {
+			fieldType := field.Type
+			for fieldType.Kind() == reflect.Ptr {
+				fieldType = fieldType.Elem()
+			}
+			if fieldType.Kind() == reflect.Struct {
+				if meta, ok := resolveTypeErrorFieldInStruct(c, target, fieldType, source); ok {
+					return meta, true
+				}
+			}
+		}
 		tagName := sourceTagName(source)
 		tagValue := firstTagValue(field.Tag.Get(tagName))
 		if tagValue == "" || tagValue == "-" {

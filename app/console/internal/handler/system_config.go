@@ -4,7 +4,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
-	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/internal/provider"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
@@ -16,39 +15,14 @@ type SystemConfigHandler struct {
 }
 
 type ListSystemConfigsRequest struct {
-	Page        int      `form:"page" binding:"omitempty,min=1" label:"页码"`
-	PageSize    int      `form:"page_size" binding:"omitempty,min=1,max=100" label:"每页条数"`
-	Offset      int      `form:"offset" label:"偏移量"`
-	Limit       int      `form:"limit" label:"限制条数"`
-	ListAll     bool     `form:"list_all" label:"是否返回全部"`
-	Keyword     string   `form:"keyword" label:"关键词"`
-	OrderBy     []string `form:"order_by" label:"排序字段"`
-	ConfigGroup string   `form:"config_group" label:"配置分组"`
-	IsEditable  *bool    `form:"is_editable" label:"是否可编辑"`
-	CreatedFrom string   `form:"created_from" label:"创建开始时间"`
-	CreatedTo   string   `form:"created_to" label:"创建结束时间"`
+	ListQuery
+	ConfigGroup string `form:"config_group" label:"配置分组"`
+	IsEditable  *bool  `form:"is_editable" label:"是否可编辑"`
 }
 
 type ListSystemConfigsResponse struct {
 	List []SystemConfigItem `json:"list"`
 	Meta ListMeta           `json:"meta"`
-}
-
-type SystemConfigItem struct {
-	ID           string `json:"id"`
-	ConfigGroup  string `json:"config_group"`
-	ConfigKey    string `json:"config_key"`
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	ValueType    string `json:"value_type"`
-	Value        string `json:"value"`
-	DefaultValue string `json:"default_value"`
-	IsEditable   bool   `json:"is_editable"`
-	IsSystem     bool   `json:"is_system"`
-	IsSecret     bool   `json:"is_secret"`
-	SortOrder    int    `json:"sort_order"`
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
 }
 
 type CreateSystemConfigRequest struct {
@@ -203,25 +177,6 @@ func (h *SystemConfigHandler) Update(c *gin.Context) {
 		"is_secret":  result.IsSecret,
 	})
 	response.Success(c, newSystemConfigItem(*result))
-}
-
-func newSystemConfigItem(item model.SystemConfig) SystemConfigItem {
-	return SystemConfigItem{
-		ID:           item.ID,
-		ConfigGroup:  item.ConfigGroup,
-		ConfigKey:    item.ConfigKey,
-		Name:         item.Name,
-		Description:  item.Description,
-		ValueType:    item.ValueType,
-		Value:        item.Value,
-		DefaultValue: item.DefaultValue,
-		IsEditable:   item.IsEditable,
-		IsSystem:     item.IsSystem,
-		IsSecret:     item.IsSecret,
-		SortOrder:    item.SortOrder,
-		CreatedAt:    item.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:    item.UpdatedAt.Format("2006-01-02 15:04:05"),
-	}
 }
 
 func (h *SystemConfigHandler) Delete(c *gin.Context) {

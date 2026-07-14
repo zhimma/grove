@@ -113,6 +113,33 @@ func TestBindQueryUsesLabelForTypeError(t *testing.T) {
 	}
 }
 
+func TestBindQueryUsesLabelFromEmbeddedStruct(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	type paginationQuery struct {
+		Page int `form:"page" binding:"omitempty,min=1" label:"页码"`
+	}
+	type listRequest struct {
+		paginationQuery
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/roles?page=abc", nil)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = req
+
+	var payload listRequest
+	err := BindQuery(c, &payload)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+
+	httpErr := err.(*errx.HTTPError)
+	errs := httpErr.Data["errors"].(map[string][]string)
+	if got := errs["page"]; len(got) != 1 || got[0] != "页码格式不正确" {
+		t.Fatalf("unexpected page errors: %#v", got)
+	}
+}
+
 func TestBindJSONUsesBadRequestForJSONSyntaxError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

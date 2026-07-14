@@ -47,29 +47,6 @@ type UpdateProfileRequest struct {
 	Avatar   string `json:"avatar" label:"头像"`
 }
 
-type RoleSummary struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name"`
-	Code        string `json:"code"`
-}
-
-type AdminResponse struct {
-	ID                 string       `json:"id"`
-	Account            string       `json:"account"`
-	Username           string       `json:"username"`
-	Email              string       `json:"email"`
-	Phone              string       `json:"phone"`
-	DisplayName        string       `json:"display_name"`
-	RealName           string       `json:"real_name"`
-	Avatar             string       `json:"avatar"`
-	RoleID             string       `json:"role_id"`
-	Role               *RoleSummary `json:"role,omitempty"`
-	IsSuper            bool         `json:"is_super"`
-	Status             int          `json:"status"`
-	MustChangePassword bool         `json:"must_change_password"`
-}
-
 type TokenResponse struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
@@ -139,32 +116,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	admin := newAdminResponse(out.Admin)
 	response.Success(c, LoginResponse{
-		User: &AdminResponse{
-			ID:          out.Admin.ID,
-			Account:     out.Admin.Account,
-			Username:    out.Admin.Username,
-			Email:       out.Admin.Email,
-			Phone:       out.Admin.Phone,
-			DisplayName: out.Admin.GetDisplayName(),
-			RealName:    out.Admin.RealName,
-			Avatar:      out.Admin.Avatar,
-			RoleID:      out.Admin.RoleID,
-			Role: func() *RoleSummary {
-				if out.Admin.Role == nil {
-					return nil
-				}
-				return &RoleSummary{
-					ID:          out.Admin.Role.ID,
-					Name:        out.Admin.Role.Name,
-					DisplayName: out.Admin.Role.DisplayName,
-					Code:        out.Admin.Role.Code,
-				}
-			}(),
-			IsSuper:            out.Admin.HasSuperAccess(),
-			Status:             out.Admin.Status,
-			MustChangePassword: out.Admin.MustChangePassword,
-		},
+		User: &admin,
 		Token: &TokenResponse{
 			AccessToken:  out.Token.AccessToken,
 			RefreshToken: out.Token.RefreshToken,
@@ -225,31 +179,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	response.Success(c, &AdminResponse{
-		ID:          admin.ID,
-		Account:     admin.Account,
-		Username:    admin.Username,
-		Email:       admin.Email,
-		Phone:       admin.Phone,
-		DisplayName: admin.GetDisplayName(),
-		RealName:    admin.RealName,
-		Avatar:      admin.Avatar,
-		RoleID:      admin.RoleID,
-		Role: func() *RoleSummary {
-			if admin.Role == nil {
-				return nil
-			}
-			return &RoleSummary{
-				ID:          admin.Role.ID,
-				Name:        admin.Role.Name,
-				DisplayName: admin.Role.DisplayName,
-				Code:        admin.Role.Code,
-			}
-		}(),
-		IsSuper:            admin.HasSuperAccess(),
-		Status:             admin.Status,
-		MustChangePassword: admin.MustChangePassword,
-	})
+	response.Success(c, newAdminResponse(admin))
 }
 
 func (h *AuthHandler) UpdateMe(c *gin.Context) {
@@ -274,31 +204,7 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, &AdminResponse{
-		ID:          admin.ID,
-		Account:     admin.Account,
-		Username:    admin.Username,
-		Email:       admin.Email,
-		Phone:       admin.Phone,
-		DisplayName: admin.GetDisplayName(),
-		RealName:    admin.RealName,
-		Avatar:      admin.Avatar,
-		RoleID:      admin.RoleID,
-		Role: func() *RoleSummary {
-			if admin.Role == nil {
-				return nil
-			}
-			return &RoleSummary{
-				ID:          admin.Role.ID,
-				Name:        admin.Role.Name,
-				DisplayName: admin.Role.DisplayName,
-				Code:        admin.Role.Code,
-			}
-		}(),
-		IsSuper:            admin.HasSuperAccess(),
-		Status:             admin.Status,
-		MustChangePassword: admin.MustChangePassword,
-	})
+	response.Success(c, newAdminResponse(admin))
 }
 
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
