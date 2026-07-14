@@ -949,7 +949,15 @@ go test ./pkg/storage ./app/console/internal/router -v
 
 ### Task 13：重构 Cache 契约和生命周期
 
-**Status:** `[ ] Planned`
+**Status:** `[-] In Progress`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Design:** `docs/plans/2026-07-14-cache-contract-design.md`
 
 **Files:**
 
