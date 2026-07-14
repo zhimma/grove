@@ -47,18 +47,23 @@ if store == nil {
 
 ```go
 dispatcher := p.Event
-dispatcher.ListenFunc("order.created", func(ctx context.Context, event event.Event) error {
+if err := dispatcher.ListenFunc("order.created", func(ctx context.Context, event event.Event) error {
 	return nil
-})
+}); err != nil {
+	return err
+}
 return dispatcher.Dispatch(ctx, OrderCreated{ID: orderID})
 ```
 
 约定：
 
 - 同步事件用于当前请求内的轻量扩展。
-- 异步事件用于进程内异步处理，不保证跨进程可靠投递。
+- `Dispatch` 返回全部 listener error；panic 可通过 `ListenerPanicError` 观察。
+- `DispatchAsync` 等待入队或 context 取消，`TryDispatchAsync` 队列满返回 `ErrQueueFull`。
+- 异步任务保留 context values，但解除请求 cancel/deadline。
+- 异步执行错误通过 Config `ErrorHandler` 上报。
 - 需要持久化、重试、削峰时使用 `pkg/job`。
-- `Close()` 是幂等的，服务关闭时可以安全调用。
+- `Close()` 拒绝新事件并排空已接受事件，Provider 关闭时会调用。
 
 ## Scheduler
 

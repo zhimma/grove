@@ -105,7 +105,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 - [x] Task 13：重构 Cache 契约和生命周期。
 - [x] Task 14：重构 HTTP Client 为请求级不可变状态。
 - [x] Task 15：修复 Scheduler 并发、配置和取消语义。
-- [ ] Task 16：修复 Event 异步投递语义。
+- [x] Task 16：修复 Event 异步投递语义。
 - [ ] Task 17：统一 Provider 生命周期和按服务配置校验。
 
 完成条件：所有共享组件有一致返回语义、明确错误、并发安全和关闭路径；`go test -race ./...` 通过。
@@ -1099,7 +1099,7 @@ go test ./pkg/scheduler -race -count=20
 
 ### Task 16：修复 Event 异步投递语义
 
-**Status:** `[-] In Progress`
+**Status:** `[x] Completed`
 
 **Owner:** Codex
 
@@ -1107,12 +1107,25 @@ go test ./pkg/scheduler -race -count=20
 
 **Started at:** 2026-07-14
 
+**Completed at:** 2026-07-14
+
 **Design:** `docs/plans/2026-07-14-event-async-delivery-design.md`
+
+**Verification:**
+
+- `go test ./...`、`go test -race ./...`、`go vet ./...`、`make build`、`git diff --check`：PASS。
+- `go test -race ./pkg/event ./internal/provider -count=20`：PASS。
+- 同步 Dispatch 覆盖多 listener error 聚合、panic 类型化、后续 listener 继续执行、typed nil event/listener 和注册校验。
+- 异步覆盖 blocking enqueue context 取消、Try queue full、`context.WithoutCancel` 保留 request value、listener error/panic ErrorHandler 上报。
+- ErrorHandler panic 隔离、单 worker 继续处理后续事件、listener 快照和 value/pointer 泛型 Subscribe 均有回归测试。
+- Close 覆盖排空 4 个已接受事件、等待同步 Dispatch、4 路并发幂等关闭，以及关闭后拒绝 Listen/Dispatch/DispatchAsync/TryDispatchAsync。
+- Provider Close 会在 Cache/Redis/DB 之前关闭 Event Dispatcher，避免默认 worker 泄漏；未访问外部网络、数据库或 Redis。
 
 **Files:**
 
 - Modify: `pkg/event/dispatcher.go`
 - Modify: `pkg/event/dispatcher_test.go`
+- Modify: `internal/provider/provider.go`
 - Modify: event docs
 
 **Required behavior:**

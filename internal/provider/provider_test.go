@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sync/atomic"
 	"testing"
@@ -10,11 +11,16 @@ import (
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/pkg/cache"
 	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/event"
 )
 
 type providerCloseStore struct {
 	closed atomic.Bool
 }
+
+type providerCloseEvent struct{}
+
+func (providerCloseEvent) EventName() string { return "provider.close" }
 
 func (*providerCloseStore) Get(context.Context, string) ([]byte, bool, error) {
 	return nil, false, nil
@@ -163,6 +169,17 @@ func TestProviderCloseClosesCacheManager(t *testing.T) {
 	}
 	if !store.closed.Load() {
 		t.Fatal("provider close did not close cache manager")
+	}
+}
+
+func TestProviderCloseClosesEventDispatcher(t *testing.T) {
+	dispatcher := event.New()
+	p := &Provider{Event: dispatcher}
+	if err := p.Close(); err != nil {
+		t.Fatalf("close provider: %v", err)
+	}
+	if err := dispatcher.Dispatch(context.Background(), providerCloseEvent{}); !errors.Is(err, event.ErrClosed) {
+		t.Fatalf("dispatch after provider close: %v", err)
 	}
 }
 

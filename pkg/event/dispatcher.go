@@ -2,328 +2,473 @@ package event
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
+	"runtime/debug"
+	"strings"
 	"sync"
 
 	"github.com/zhimma/grove/pkg/logger"
 )
 
-// Event 事件接口
+var (
+	ErrClosed    = errors.New("event dispatcher is closed")
+	ErrQueueFull = errors.New("event dispatcher queue is full")
+)
+
 type Event interface {
-	// EventName 返回事件名称
 	EventName() string
 }
 
-// Listener 监听器接口
 type Listener interface {
-	// Handle 处理事件
 	Handle(ctx context.Context, event Event) error
 }
 
-// ListenerFunc 监听器函数类型
 type ListenerFunc func(ctx context.Context, event Event) error
 
-// Handle 实现Listener接口
 func (f ListenerFunc) Handle(ctx context.Context, event Event) error {
 	return f(ctx, event)
 }
 
-// Dispatcher 事件调度器
-type Dispatcher struct {
-	listeners map[string][]Listener
-	mutex     sync.RWMutex
-	async     bool
-	queue     chan *eventJob
-	wg        sync.WaitGroup
-	closeOnce sync.Once
-	closed    bool
-}
+type ErrorHandler func(ctx context.Context, event Event, err error)
 
-// eventJob 异步事件任务
-type eventJob struct {
-	ctx      context.Context
-	event    Event
-	listener Listener
-}
-
-// Config 调度器配置
 type Config struct {
-	Async     bool // 是否启用异步处理
-	QueueSize int  // 异步队列大小
-	WorkerNum int  // 工作协程数
+	QueueSize    int
+	WorkerNum    int
+	ErrorHandler ErrorHandler
 }
 
-// DefaultConfig 默认配置
+type ListenerPanicError struct {
+	EventName string
+	Recovered any
+	Stack     []byte
+}
+
+func (e *ListenerPanicError) Error() string {
+	if e == nil {
+		return "event listener panic"
+	}
+	return fmt.Sprintf("event %q listener panic: %v", e.EventName, e.Recovered)
+}
+
+type Dispatcher struct {
+	listeners    map[string][]Listener
+	mu           sync.RWMutex
+	queue        chan *eventJob
+	workWG       sync.WaitGroup
+	workerWG     sync.WaitGroup
+	closeOnce    sync.Once
+	closed       bool
+	errorHandler ErrorHandler
+}
+
+type eventJob struct {
+	ctx       context.Context
+	event     Event
+	eventName string
+	listeners []Listener
+}
+
 func DefaultConfig() Config {
 	return Config{
-		Async:     false,
 		QueueSize: 1000,
 		WorkerNum: 10,
 	}
 }
 
-// NewDispatcher 创建事件调度器
 func NewDispatcher(config Config) *Dispatcher {
+	defaults := DefaultConfig()
+	if config.QueueSize <= 0 {
+		config.QueueSize = defaults.QueueSize
+	}
+	if config.WorkerNum <= 0 {
+		config.WorkerNum = defaults.WorkerNum
+	}
+	if config.ErrorHandler == nil {
+		config.ErrorHandler = defaultErrorHandler
+	}
 	d := &Dispatcher{
-		listeners: make(map[string][]Listener),
-		async:     config.Async,
+		listeners:    make(map[string][]Listener),
+		queue:        make(chan *eventJob, config.QueueSize),
+		errorHandler: config.ErrorHandler,
 	}
-
-	if config.Async {
-		if config.QueueSize <= 0 {
-			config.QueueSize = DefaultConfig().QueueSize
-		}
-		if config.WorkerNum <= 0 {
-			config.WorkerNum = DefaultConfig().WorkerNum
-		}
-		d.queue = make(chan *eventJob, config.QueueSize)
-		for i := 0; i < config.WorkerNum; i++ {
-			go d.worker()
-		}
+	d.workerWG.Add(config.WorkerNum)
+	for range config.WorkerNum {
+		go d.worker()
 	}
-
 	return d
 }
 
-// New 创建默认调度器（同步模式）
 func New() *Dispatcher {
 	return NewDispatcher(DefaultConfig())
 }
 
-// NewAsync 创建异步调度器
 func NewAsync(queueSize, workerNum int) *Dispatcher {
-	return NewDispatcher(Config{
-		Async:     true,
-		QueueSize: queueSize,
-		WorkerNum: workerNum,
-	})
+	return NewDispatcher(Config{QueueSize: queueSize, WorkerNum: workerNum})
 }
 
-// Close 关闭调度器
-func (d *Dispatcher) Close() {
-	if d.async {
-		d.closeOnce.Do(func() {
-			d.mutex.Lock()
-			d.closed = true
-			d.mutex.Unlock()
-			close(d.queue)
-			d.wg.Wait()
-		})
+func (d *Dispatcher) Close() error {
+	if d == nil {
+		return nil
 	}
+	d.closeOnce.Do(func() {
+		d.mu.Lock()
+		d.closed = true
+		close(d.queue)
+		d.mu.Unlock()
+		d.workWG.Wait()
+		d.workerWG.Wait()
+	})
+	return nil
 }
 
-// worker 异步工作协程
 func (d *Dispatcher) worker() {
+	defer d.workerWG.Done()
 	for job := range d.queue {
 		if job == nil {
 			continue
 		}
-		d.executeListener(job.ctx, job.event, job.listener)
-		d.wg.Done()
+		err := dispatchListeners(job.ctx, job.event, job.eventName, job.listeners)
+		if err != nil {
+			d.reportAsyncError(job.ctx, job.event, err)
+		}
+		d.workWG.Done()
 	}
 }
 
-// Listen 注册监听器
-func (d *Dispatcher) Listen(eventName string, listener Listener) {
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-
+func (d *Dispatcher) Listen(eventName string, listener Listener) error {
+	if d == nil {
+		return fmt.Errorf("event dispatcher is nil")
+	}
+	eventName = strings.TrimSpace(eventName)
+	if eventName == "" {
+		return fmt.Errorf("event name is required")
+	}
+	if isNilValue(listener) {
+		return fmt.Errorf("event listener is required")
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.closed {
+		return ErrClosed
+	}
 	d.listeners[eventName] = append(d.listeners[eventName], listener)
 	logger.Debug().Str("event", eventName).Msg("事件监听器已注册")
+	return nil
 }
 
-// ListenFunc 使用函数注册监听器
-func (d *Dispatcher) ListenFunc(eventName string, handler ListenerFunc) {
-	d.Listen(eventName, handler)
+func (d *Dispatcher) ListenFunc(eventName string, handler ListenerFunc) error {
+	return d.Listen(eventName, handler)
 }
 
-// Dispatch 分发事件（同步）
 func (d *Dispatcher) Dispatch(ctx context.Context, event Event) error {
-	listeners := d.getListeners(event.EventName())
+	if d == nil {
+		return fmt.Errorf("event dispatcher is nil")
+	}
+	eventName, err := eventNameOf(event)
+	if err != nil {
+		return err
+	}
+	ctx = normalizeContext(ctx)
+	d.mu.RLock()
+	if d.closed {
+		d.mu.RUnlock()
+		return ErrClosed
+	}
+	listeners := copyListeners(d.listeners[eventName])
 	if len(listeners) == 0 {
-		logger.Debug().Str("event", event.EventName()).Msg("事件没有监听器")
+		d.mu.RUnlock()
+		logger.Debug().Str("event", eventName).Msg("事件没有监听器")
 		return nil
 	}
-
-	for _, listener := range listeners {
-		if err := d.executeListener(ctx, event, listener); err != nil {
-			logger.Error().
-				Err(err).
-				Str("event", event.EventName()).
-				Msg("事件监听器执行失败")
-			// 继续执行其他监听器
-		}
-	}
-
-	return nil
+	d.workWG.Add(1)
+	d.mu.RUnlock()
+	defer d.workWG.Done()
+	return dispatchListeners(ctx, event, eventName, listeners)
 }
 
-// DispatchAsync 异步分发事件
 func (d *Dispatcher) DispatchAsync(ctx context.Context, event Event) error {
-	if !d.async {
-		return d.Dispatch(ctx, event)
-	}
-
-	listeners := d.getListeners(event.EventName())
-	if len(listeners) == 0 {
-		return nil
-	}
-
-	for _, listener := range listeners {
-		d.mutex.RLock()
-		if d.closed {
-			d.mutex.RUnlock()
-			return fmt.Errorf("event dispatcher is closed")
-		}
-		d.wg.Add(1)
-		select {
-		case d.queue <- &eventJob{ctx: ctx, event: event, listener: listener}:
-			// 成功入队
-		default:
-			d.wg.Done()
-			logger.Warn().
-				Str("event", event.EventName()).
-				Msg("事件队列已满，事件已丢弃")
-		}
-		d.mutex.RUnlock()
-	}
-
-	return nil
+	return d.enqueue(ctx, event, true)
 }
 
-// executeListener 执行监听器
-func (d *Dispatcher) executeListener(ctx context.Context, event Event, listener Listener) error {
+func (d *Dispatcher) TryDispatchAsync(ctx context.Context, event Event) error {
+	return d.enqueue(ctx, event, false)
+}
+
+func (d *Dispatcher) enqueue(ctx context.Context, event Event, wait bool) error {
+	if d == nil {
+		return fmt.Errorf("event dispatcher is nil")
+	}
+	eventName, err := eventNameOf(event)
+	if err != nil {
+		return err
+	}
+	ctx = normalizeContext(ctx)
+	if err := contextError(ctx); err != nil {
+		return err
+	}
+	jobCtx := context.WithoutCancel(ctx)
+	d.mu.RLock()
+	if d.closed {
+		d.mu.RUnlock()
+		return ErrClosed
+	}
+	listeners := copyListeners(d.listeners[eventName])
+	if len(listeners) == 0 {
+		d.mu.RUnlock()
+		return nil
+	}
+	d.workWG.Add(1)
+	job := &eventJob{ctx: jobCtx, event: event, eventName: eventName, listeners: listeners}
+	if wait {
+		select {
+		case d.queue <- job:
+			d.mu.RUnlock()
+			return nil
+		case <-ctx.Done():
+			d.workWG.Done()
+			d.mu.RUnlock()
+			return ctx.Err()
+		}
+	}
+	select {
+	case d.queue <- job:
+		d.mu.RUnlock()
+		return nil
+	default:
+		d.workWG.Done()
+		d.mu.RUnlock()
+		return ErrQueueFull
+	}
+}
+
+func dispatchListeners(ctx context.Context, event Event, eventName string, listeners []Listener) error {
+	errs := make([]error, 0)
+	for index, listener := range listeners {
+		if err := executeListener(ctx, event, eventName, listener); err != nil {
+			errs = append(errs, fmt.Errorf("event %q listener %d: %w", eventName, index, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func executeListener(ctx context.Context, event Event, eventName string, listener Listener) (err error) {
 	defer func() {
-		if r := recover(); r != nil {
-			logger.Error().
-				Interface("recover", r).
-				Str("event", event.EventName()).
-				Msg("事件监听器 panic 已恢复")
+		if recovered := recover(); recovered != nil {
+			err = &ListenerPanicError{
+				EventName: eventName,
+				Recovered: recovered,
+				Stack:     debug.Stack(),
+			}
 		}
 	}()
-
 	if err := listener.Handle(ctx, event); err != nil {
 		return fmt.Errorf("listener handle: %w", err)
 	}
 	return nil
 }
 
-// getListeners 获取事件监听器（副本）
-func (d *Dispatcher) getListeners(eventName string) []Listener {
-	d.mutex.RLock()
-	defer d.mutex.RUnlock()
+func (d *Dispatcher) reportAsyncError(ctx context.Context, event Event, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			logger.Error().Interface("recover", recovered).Msg("事件错误处理器 panic 已恢复")
+		}
+	}()
+	d.errorHandler(ctx, event, err)
+}
 
-	listeners := d.listeners[eventName]
+func defaultErrorHandler(_ context.Context, event Event, err error) {
+	eventName, nameErr := eventNameOf(event)
+	if nameErr != nil {
+		eventName = "unknown"
+	}
+	logger.Error().Err(err).Str("event", eventName).Msg("异步事件监听器执行失败")
+}
+
+func eventNameOf(event Event) (name string, err error) {
+	if isNilValue(event) {
+		return "", fmt.Errorf("event is required")
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			name = ""
+			err = fmt.Errorf("get event name panic: %v", recovered)
+		}
+	}()
+	name = strings.TrimSpace(event.EventName())
+	if name == "" {
+		return "", fmt.Errorf("event name is required")
+	}
+	return name, nil
+}
+
+func isNilValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
+	}
+}
+
+func normalizeContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
+func contextError(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return nil
+	}
+}
+
+func copyListeners(listeners []Listener) []Listener {
 	if len(listeners) == 0 {
 		return nil
 	}
-
-	// 返回副本避免并发修改
-	result := make([]Listener, len(listeners))
-	copy(result, listeners)
-	return result
+	return append([]Listener(nil), listeners...)
 }
 
-// HasListeners 检查是否有监听器
+func (d *Dispatcher) getListeners(eventName string) []Listener {
+	if d == nil {
+		return nil
+	}
+	d.mu.RLock()
+	listeners := copyListeners(d.listeners[strings.TrimSpace(eventName)])
+	d.mu.RUnlock()
+	return listeners
+}
+
 func (d *Dispatcher) HasListeners(eventName string) bool {
-	d.mutex.RLock()
-	defer d.mutex.RUnlock()
-
-	return len(d.listeners[eventName]) > 0
+	if d == nil {
+		return false
+	}
+	d.mu.RLock()
+	hasListeners := len(d.listeners[strings.TrimSpace(eventName)]) > 0
+	d.mu.RUnlock()
+	return hasListeners
 }
 
-// Forget 移除所有监听器
 func (d *Dispatcher) Forget(eventName string) {
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-
-	delete(d.listeners, eventName)
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
+	delete(d.listeners, strings.TrimSpace(eventName))
+	d.mu.Unlock()
 }
 
-// Flush 清空所有监听器
 func (d *Dispatcher) Flush() {
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
 	d.listeners = make(map[string][]Listener)
+	d.mu.Unlock()
 }
 
-// Listeners 获取事件的所有监听器
 func (d *Dispatcher) Listeners(eventName string) []Listener {
 	return d.getListeners(eventName)
 }
 
-// ==================== 全局实例 ====================
+var (
+	defaultDispatcherMu sync.RWMutex
+	defaultDispatcher   *Dispatcher
+)
 
-var defaultDispatcher *Dispatcher
-
-// Init 初始化全局调度器
 func Init(dispatcher *Dispatcher) {
+	defaultDispatcherMu.Lock()
 	defaultDispatcher = dispatcher
+	defaultDispatcherMu.Unlock()
 }
 
-// Listen 全局注册监听器
-func Listen(eventName string, listener Listener) {
+func currentDispatcher() *Dispatcher {
+	defaultDispatcherMu.RLock()
+	dispatcher := defaultDispatcher
+	defaultDispatcherMu.RUnlock()
+	return dispatcher
+}
+
+func getOrCreateDispatcher() *Dispatcher {
+	if dispatcher := currentDispatcher(); dispatcher != nil {
+		return dispatcher
+	}
+	defaultDispatcherMu.Lock()
+	defer defaultDispatcherMu.Unlock()
 	if defaultDispatcher == nil {
 		defaultDispatcher = New()
 	}
-	defaultDispatcher.Listen(eventName, listener)
+	return defaultDispatcher
 }
 
-// ListenFunc 全局函数注册
-func ListenFunc(eventName string, handler ListenerFunc) {
-	if defaultDispatcher == nil {
-		defaultDispatcher = New()
-	}
-	defaultDispatcher.ListenFunc(eventName, handler)
+func Listen(eventName string, listener Listener) error {
+	return getOrCreateDispatcher().Listen(eventName, listener)
 }
 
-// Dispatch 全局分发
+func ListenFunc(eventName string, handler ListenerFunc) error {
+	return getOrCreateDispatcher().ListenFunc(eventName, handler)
+}
+
 func Dispatch(ctx context.Context, event Event) error {
-	if defaultDispatcher == nil {
-		defaultDispatcher = New()
-	}
-	return defaultDispatcher.Dispatch(ctx, event)
+	return getOrCreateDispatcher().Dispatch(ctx, event)
 }
 
-// DispatchAsync 全局异步分发
 func DispatchAsync(ctx context.Context, event Event) error {
-	if defaultDispatcher == nil {
-		defaultDispatcher = New()
-	}
-	return defaultDispatcher.DispatchAsync(ctx, event)
+	return getOrCreateDispatcher().DispatchAsync(ctx, event)
 }
 
-// HasListeners 全局检查
+func TryDispatchAsync(ctx context.Context, event Event) error {
+	return getOrCreateDispatcher().TryDispatchAsync(ctx, event)
+}
+
 func HasListeners(eventName string) bool {
-	if defaultDispatcher == nil {
-		return false
+	dispatcher := currentDispatcher()
+	return dispatcher != nil && dispatcher.HasListeners(eventName)
+}
+
+func Subscribe[T Event](dispatcher *Dispatcher, handler func(ctx context.Context, event T) error) error {
+	if dispatcher == nil {
+		return fmt.Errorf("event dispatcher is required")
 	}
-	return defaultDispatcher.HasListeners(eventName)
-}
-
-// ==================== 辅助函数 ====================
-
-// eventNameFromType 从类型获取事件名
-func eventNameFromType(t reflect.Type) string {
-	return t.String()
-}
-
-// Subscribe 订阅事件类型（使用类型推断）
-func Subscribe[T Event](dispatcher *Dispatcher, handler func(ctx context.Context, event T) error) {
-	// 创建类型实例获取事件名
-	var event T
-	eventName := event.EventName()
-
-	// 包装为通用监听器
-	listener := ListenerFunc(func(ctx context.Context, e Event) error {
-		// 类型断言
-		if typedEvent, ok := e.(T); ok {
-			return handler(ctx, typedEvent)
+	if handler == nil {
+		return fmt.Errorf("event subscription handler is required")
+	}
+	sample, err := eventSample[T]()
+	if err != nil {
+		return err
+	}
+	eventName, err := eventNameOf(sample)
+	if err != nil {
+		return fmt.Errorf("infer event name: %w", err)
+	}
+	return dispatcher.Listen(eventName, ListenerFunc(func(ctx context.Context, event Event) error {
+		typedEvent, ok := event.(T)
+		if !ok {
+			return fmt.Errorf("event type mismatch: expected %T, got %T", sample, event)
 		}
-		return fmt.Errorf("event type mismatch: expected %T, got %T", event, e)
-	})
+		return handler(ctx, typedEvent)
+	}))
+}
 
-	dispatcher.Listen(eventName, listener)
+func eventSample[T Event]() (T, error) {
+	var zero T
+	eventType := reflect.TypeOf((*T)(nil)).Elem()
+	if eventType.Kind() != reflect.Pointer {
+		return zero, nil
+	}
+	sample, ok := reflect.New(eventType.Elem()).Interface().(T)
+	if !ok {
+		return zero, fmt.Errorf("create event sample for %s", eventType)
+	}
+	return sample, nil
 }
