@@ -42,6 +42,65 @@ api:
 	}
 }
 
+func TestLoadWithOptionsRejectsUnknownFields(t *testing.T) {
+	tests := map[string]string{
+		"top level": "unknown_field: true\n",
+		"nested":    "server:\n  read_timout: 30\n",
+	}
+
+	for name, raw := range tests {
+		t.Run(name, func(t *testing.T) {
+			configPath := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+
+			_, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "api"})
+			if err == nil {
+				t.Fatal("expected unknown field error")
+			}
+			if !strings.Contains(err.Error(), "field") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadWithOptionsRejectsMultipleDocuments(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte("app:\n  env: test\n---\napp:\n  name: second\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "api"})
+	if err == nil {
+		t.Fatal("expected multiple document error")
+	}
+	if !strings.Contains(err.Error(), "multiple YAML documents") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadConfigExampleWithCleanEnvironment(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "config.example.yaml"))
+	if err != nil {
+		t.Fatalf("read config example: %v", err)
+	}
+	for _, match := range envPattern.FindAllStringSubmatch(string(raw), -1) {
+		if len(match) > 1 {
+			t.Setenv(match[1], "")
+		}
+	}
+
+	configPath := filepath.Join(t.TempDir(), "config.example.yaml")
+	if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+		t.Fatalf("copy config example: %v", err)
+	}
+	if _, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "api"}); err != nil {
+		t.Fatalf("load config example with clean environment: %v", err)
+	}
+}
+
 func TestLoadWithOptionsValidatesProductionSecret(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yaml")
@@ -220,6 +279,66 @@ func TestValidateRejectsJobWithoutRedis(t *testing.T) {
 
 	if err := cfg.Validate("worker"); err == nil {
 		t.Fatal("expected job without redis validation error")
+	}
+}
+
+func TestValidateRejectsUnknownService(t *testing.T) {
+	cfg := defaultConfig()
+	if err := cfg.Validate("ap1"); err == nil || !strings.Contains(err.Error(), "unknown service") {
+		t.Fatalf("expected unknown service error, got %v", err)
+	}
+}
+
+func TestValidateProductionConsoleRequiresDatabaseAndEnforcer(t *testing.T) {
+	cfg := validProductionConfig()
+
+	if err := cfg.Validate("console"); err == nil || !strings.Contains(err.Error(), "default database") {
+		t.Fatalf("expected default database error, got %v", err)
+	}
+
+	cfg.Databases.Default = validDatabaseConfig()
+	if err := cfg.Validate("console"); err == nil || !strings.Contains(err.Error(), "console casbin enforcer") {
+		t.Fatalf("expected console enforcer error, got %v", err)
+	}
+
+	cfg.Casbin.Enforcers["console"] = CasbinEnforcerConfig{
+		Enabled:  true,
+		Database: "default",
+		Mode:     "rbac",
+	}
+	if err := cfg.Validate("console"); err != nil {
+		t.Fatalf("expected valid production console config, got %v", err)
+	}
+}
+
+func TestValidateWorkerRequiresRunnableComponent(t *testing.T) {
+	cfg := defaultConfig()
+	if err := cfg.Validate("worker"); err == nil || !strings.Contains(err.Error(), "job or scheduler") {
+		t.Fatalf("expected disabled worker error, got %v", err)
+	}
+}
+
+func TestValidateCasbinRequiresEnabledDatabase(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.Databases.Resources = map[string]DatabaseConfig{}
+	cfg.Databases.Resources["reporting"] = DatabaseConfig{Enabled: false}
+	cfg.Casbin.Enforcers["api"] = CasbinEnforcerConfig{
+		Enabled:  true,
+		Database: "reporting",
+	}
+
+	if err := cfg.Validate("api"); err == nil || !strings.Contains(err.Error(), "reporting") {
+		t.Fatalf("expected disabled database reference error, got %v", err)
+	}
+}
+
+func TestValidateEnabledDatabaseRequiresConnectionFields(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.Databases.Default.Enabled = true
+	cfg.Databases.Default.Host = ""
+
+	if err := cfg.Validate("api"); err == nil || !strings.Contains(err.Error(), "host") {
+		t.Fatalf("expected database host error, got %v", err)
 	}
 }
 
@@ -403,5 +522,26 @@ func TestValidateRejectsInvalidSchedulerTimezone(t *testing.T) {
 	cfg.Scheduler.Timezone = "not/a-timezone"
 	if err := cfg.Validate("worker"); err == nil {
 		t.Fatal("expected invalid scheduler timezone error")
+	}
+}
+
+func validProductionConfig() Config {
+	cfg := defaultConfig()
+	cfg.App.Env = "production"
+	cfg.JWT.Secret = "0123456789abcdef0123456789abcdef"
+	cfg.CORS.AllowedOrigins = []string{"https://console.example.com"}
+	return cfg
+}
+
+func validDatabaseConfig() DatabaseConfig {
+	return DatabaseConfig{
+		Enabled:  true,
+		Driver:   "postgres",
+		Host:     "127.0.0.1",
+		Port:     "5432",
+		User:     "grove",
+		Password: "secret",
+		DBName:   "grove",
+		SSLMode:  "disable",
 	}
 }

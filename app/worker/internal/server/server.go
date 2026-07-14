@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 
 	"github.com/zhimma/grove/app/worker/internal/handler"
 	"github.com/zhimma/grove/internal/config"
@@ -9,11 +10,16 @@ import (
 	"github.com/zhimma/grove/pkg/logger"
 )
 
+var ErrWorkerDisabled = errors.New("worker requires job or scheduler to be enabled")
+
 type WorkerApp struct {
 	provider *provider.Provider
 }
 
 func NewServer(cfg *config.Config) (*WorkerApp, func(), error) {
+	if cfg != nil && !cfg.Job.Enabled && !cfg.Scheduler.Enabled {
+		return nil, nil, ErrWorkerDisabled
+	}
 	p, err := provider.New(cfg, "worker", provider.WorkerOptions()...)
 	if err != nil {
 		return nil, nil, err
@@ -33,7 +39,7 @@ func (a *WorkerApp) Start() error {
 	}
 	if a.provider.JobServer == nil {
 		if a.provider.Scheduler == nil {
-			logger.Warn().Msg("Worker 组件未启用")
+			return ErrWorkerDisabled
 		} else {
 			logger.Info().Msg("工作进程已启动")
 		}

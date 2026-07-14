@@ -106,7 +106,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 - [x] Task 14：重构 HTTP Client 为请求级不可变状态。
 - [x] Task 15：修复 Scheduler 并发、配置和取消语义。
 - [x] Task 16：修复 Event 异步投递语义。
-- [ ] Task 17：统一 Provider 生命周期和按服务配置校验。
+- [x] Task 17：统一 Provider 生命周期和按服务配置校验。
 
 完成条件：所有共享组件有一致返回语义、明确错误、并发安全和关闭路径；`go test -race ./...` 通过。
 
@@ -1139,7 +1139,7 @@ go test ./pkg/scheduler -race -count=20
 
 ### Task 17：统一 Provider 生命周期和按服务配置校验
 
-**Status:** `[-] In Progress`
+**Status:** `[x] Completed`
 
 **Owner:** Codex
 
@@ -1147,15 +1147,26 @@ go test ./pkg/scheduler -race -count=20
 
 **Started at:** 2026-07-14
 
+**Completed at:** 2026-07-14
+
 **Design:** `docs/plans/2026-07-14-provider-lifecycle-config-design.md`
+
+**Verification:**
+
+- `go test ./...`、`go test -race ./...`、`go vet ./...`、`make build`、`git diff --check`：PASS。
+- `go test -race ./internal/config ./internal/provider ./pkg/logger ./pkg/server ./app/worker/internal/server -count=20`：PASS。
+- 本机 PostgreSQL `127.0.0.1` 连接验证通过；`go test -tags=integration ./app/console/internal/service -run TestPostgresConcurrentRefreshOnlySucceedsOnce -count=1`：PASS。
+- 未启动 Docker、未下载 PostgreSQL 镜像；数据库凭据仅通过临时进程环境传入。
 
 **Files:**
 
 - Modify: `internal/provider/provider.go`
 - Modify: `internal/config/load.go`
-- Modify: `internal/config/types.go`
+- Modify: `pkg/logger/logger.go`
 - Modify: `pkg/server/core.go`
-- Test: provider/config/server tests
+- Modify: API/Console main and Worker server lifecycle
+- Modify: `docs/guide/configuration.md`
+- Test: config/provider/logger/server/worker tests
 
 **Required behavior:**
 

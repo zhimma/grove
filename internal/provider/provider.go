@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -39,6 +40,16 @@ type Provider struct {
 	Event         *event.Dispatcher
 	Scheduler     *scheduler.Scheduler
 	ConfigSecrets *secretbox.Box
+
+	closeMu   sync.Mutex
+	closers   []providerCloser
+	closeOnce sync.Once
+	closeErr  error
+}
+
+type providerCloser struct {
+	name string
+	fn   func() error
 }
 
 type Option func(*Provider) error
@@ -115,9 +126,12 @@ func New(cfg *config.Config, serviceName string, opts ...Option) (*Provider, err
 	}
 
 	p := &Provider{Config: cfg}
+	p.AddCloser("logger", logger.Close)
 	for _, opt := range opts {
 		if err := opt(p); err != nil {
-			_ = p.Close()
+			if closeErr := p.Close(); closeErr != nil {
+				return nil, errors.Join(err, fmt.Errorf("rollback provider: %w", closeErr))
+			}
 			return nil, err
 		}
 	}
@@ -160,6 +174,7 @@ func WithDatabase() Option {
 			return err
 		}
 		p.DB = repo
+		p.AddCloser("database", repo.Close)
 		return nil
 	}
 }
@@ -219,6 +234,7 @@ func WithRedis() Option {
 			}
 		}
 		p.RedisClient = client
+		p.AddCloser("redis", client.Close)
 		return nil
 	}
 }
@@ -247,11 +263,13 @@ func WithJob() Option {
 		if !p.Config.Redis.Enabled {
 			return fmt.Errorf("任务队列已启用，但 Redis 未启用")
 		}
-		p.JobClient = job.NewClient(job.RedisConfig{
+		client := job.NewClient(job.RedisConfig{
 			Addr:     p.Config.Redis.Addr,
 			Password: p.Config.Redis.Password,
 			DB:       p.Config.Redis.DB,
 		})
+		p.JobClient = client
+		p.AddCloser("job client", client.Close)
 		return nil
 	}
 }
@@ -264,13 +282,18 @@ func WithJobServer() Option {
 		if !p.Config.Redis.Enabled {
 			return fmt.Errorf("任务队列已启用，但 Redis 未启用")
 		}
-		p.JobServer = job.NewServer(job.RedisConfig{
+		server := job.NewServer(job.RedisConfig{
 			Addr:     p.Config.Redis.Addr,
 			Password: p.Config.Redis.Password,
 			DB:       p.Config.Redis.DB,
 		}, job.ServerConfig{
 			Concurrency: p.Config.Job.Concurrency,
 			Queues:      p.Config.Job.Queues,
+		})
+		p.JobServer = server
+		p.AddCloser("job server", func() error {
+			server.Shutdown()
+			return nil
 		})
 		return nil
 	}
@@ -393,6 +416,7 @@ func WithCache() Option {
 		}
 
 		p.Cache = manager
+		p.AddCloser("cache", manager.Close)
 		return nil
 	}
 }
@@ -406,7 +430,9 @@ func WithHTTPClient() Option {
 
 func WithEvent() Option {
 	return func(p *Provider) error {
-		p.Event = event.New()
+		dispatcher := event.New()
+		p.Event = dispatcher
+		p.AddCloser("event", dispatcher.Close)
 		return nil
 	}
 }
@@ -424,6 +450,7 @@ func WithScheduler() Option {
 			return fmt.Errorf("init scheduler: %w", err)
 		}
 		p.Scheduler = sched
+		p.AddCloser("scheduler", sched.Stop)
 		return nil
 	}
 }
@@ -432,41 +459,33 @@ func (p *Provider) Close() error {
 	if p == nil {
 		return nil
 	}
-	var errs []error
-	if p.Scheduler != nil {
-		if err := p.Scheduler.Stop(); err != nil {
-			errs = append(errs, err)
+	p.closeOnce.Do(func() {
+		p.closeMu.Lock()
+		closers := append([]providerCloser(nil), p.closers...)
+		p.closers = nil
+		p.closeMu.Unlock()
+
+		var errs []error
+		for i := len(closers) - 1; i >= 0; i-- {
+			closer := closers[i]
+			if err := closer.fn(); err != nil {
+				errs = append(errs, fmt.Errorf("close %s: %w", closer.name, err))
+			}
 		}
+		p.closeErr = errors.Join(errs...)
+	})
+	return p.closeErr
+}
+
+// AddCloser registers cleanup for a successfully initialized Option.
+// Provider calls registered functions in reverse order during Close.
+func (p *Provider) AddCloser(name string, fn func() error) {
+	if p == nil || fn == nil {
+		return
 	}
-	if p.JobServer != nil {
-		p.JobServer.Shutdown()
-	}
-	if p.Event != nil {
-		if err := p.Event.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if p.Cache != nil {
-		if err := p.Cache.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if p.JobClient != nil {
-		if err := p.JobClient.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if p.RedisClient != nil {
-		if err := p.RedisClient.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if p.DB != nil {
-		if err := p.DB.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
+	p.closeMu.Lock()
+	p.closers = append(p.closers, providerCloser{name: strings.TrimSpace(name), fn: fn})
+	p.closeMu.Unlock()
 }
 
 func (p *Provider) GetEnforcer(name string) *rbac.Enforcer {

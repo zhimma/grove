@@ -1,10 +1,15 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -113,6 +118,83 @@ func TestNewCoreServerRejectsInvalidTrustedProxy(t *testing.T) {
 	}
 	if core != nil || cleanup != nil {
 		t.Fatal("expected no server or cleanup function after startup failure")
+	}
+}
+
+func TestCoreServerStartReturnsBindError(t *testing.T) {
+	listener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	defer listener.Close()
+	port := listener.Addr().(*net.TCPAddr).Port
+
+	core, cleanup, err := NewCoreServer(testServerConfig(t), "api", fmt.Sprint(port))
+	if err != nil {
+		t.Fatalf("new core server: %v", err)
+	}
+	t.Cleanup(cleanup)
+	if err := core.Start("api"); err == nil || !strings.Contains(err.Error(), "listen") {
+		t.Fatalf("expected bind error, got %v", err)
+	}
+}
+
+func TestCoreServerStartBindsBeforeReturning(t *testing.T) {
+	core, cleanup, err := NewCoreServer(testServerConfig(t), "api", "0")
+	if err != nil {
+		t.Fatalf("new core server: %v", err)
+	}
+	t.Cleanup(cleanup)
+	if err := core.Start("api"); err != nil {
+		t.Fatalf("start core server: %v", err)
+	}
+	if core.listener == nil {
+		t.Fatal("expected listener to be available after Start")
+	}
+	conn, err := net.DialTimeout("tcp", core.listener.Addr().String(), time.Second)
+	if err != nil {
+		t.Fatalf("dial started server: %v", err)
+	}
+	_ = conn.Close()
+	if err := core.Stop(context.Background()); err != nil {
+		t.Fatalf("stop core server: %v", err)
+	}
+}
+
+func TestCoreServerReportsServeErrors(t *testing.T) {
+	core, cleanup, err := NewCoreServer(testServerConfig(t), "api", "0")
+	if err != nil {
+		t.Fatalf("new core server: %v", err)
+	}
+	t.Cleanup(cleanup)
+	if err := core.Start("api"); err != nil {
+		t.Fatalf("start core server: %v", err)
+	}
+	if err := core.listener.Close(); err != nil {
+		t.Fatalf("close listener: %v", err)
+	}
+	select {
+	case err := <-core.Errors():
+		if err == nil {
+			t.Fatal("expected serve error")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for serve error")
+	}
+}
+
+func TestNewCoreServerUsesCaseInsensitiveProductionMode(t *testing.T) {
+	previousMode := gin.Mode()
+	t.Cleanup(func() { gin.SetMode(previousMode) })
+	cfg := testServerConfig(t)
+	cfg.App.Env = "ProDucTion"
+	_, cleanup, err := NewCoreServer(cfg, "api", "0")
+	if err != nil {
+		t.Fatalf("new core server: %v", err)
+	}
+	t.Cleanup(cleanup)
+	if gin.Mode() != gin.ReleaseMode {
+		t.Fatalf("gin mode = %q, want %q", gin.Mode(), gin.ReleaseMode)
 	}
 }
 

@@ -87,7 +87,6 @@ func newDoctorCmd() *cobra.Command {
 		Short: "检查当前配置与组件启用状态",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadWithOptions(config.LoadOptions{
-				Service:    "grove",
 				ConfigFile: configFile,
 			})
 			if err != nil {
@@ -418,7 +417,6 @@ func openDefaultDB() (*gorm.DB, func(), error) {
 
 func loadCLIConfig() (*config.Config, error) {
 	return config.LoadWithOptions(config.LoadOptions{
-		Service:    "grove",
 		ConfigFile: configFile,
 	})
 }

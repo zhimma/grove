@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -9,6 +10,20 @@ import (
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/pkg/scheduler"
 )
+
+func TestNewServerRejectsDisabledWorker(t *testing.T) {
+	cfg := &config.Config{
+		App: config.AppConfig{Name: "grove", Env: "test"},
+		Log: config.LogConfig{Level: "error", Path: t.TempDir()},
+	}
+	app, cleanup, err := NewServer(cfg)
+	if !errors.Is(err, ErrWorkerDisabled) {
+		t.Fatalf("expected ErrWorkerDisabled, got %v", err)
+	}
+	if app != nil || cleanup != nil {
+		t.Fatal("disabled worker must not create an app")
+	}
+}
 
 func TestWorkerStartsSchedulerWhenQueueIsDisabled(t *testing.T) {
 	cfg := &config.Config{

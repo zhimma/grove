@@ -12,6 +12,8 @@ Grove 默认按以下顺序读取配置：
 
 配置文件支持 `${VAR:default}` 语法。
 
+YAML 使用严格字段校验：未知字段、字段拼写错误和多个 YAML document 都会导致启动失败。
+
 ## 最短路径
 
 ### 示例配置
@@ -102,6 +104,11 @@ Redis 连接配置。启用缓存、队列或 worker 时需要。
 ## 使用约定
 
 - 生产环境必须替换 `jwt.secret`。
+- `api`、`console`、`worker` 使用各自的服务级配置校验，未知 service 名不会被静默接受。
+- production Console 必须启用默认数据库和 `casbin.enforcers.console`。
+- Worker 必须至少启用 Job 或 Scheduler；启用 Job 时必须同时启用 Redis。
+- 已启用的数据库必须配置 `driver`、`host`、`port`、`user` 和 `dbname`。
+- 已启用的 Casbin enforcer 必须引用已启用的数据库。
 - 生产环境建议保持 `app.debug=false`，避免响应体暴露底层错误信息。
 - 推荐把敏感信息放到环境变量，不直接写入版本库。
 - 多数据库资源命名应体现业务语义，例如 `orders`、`crm`。

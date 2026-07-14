@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path"
@@ -41,7 +42,15 @@ func LoadWithOptions(opts LoadOptions) (*Config, error) {
 		envForDotEnv := detectAppEnv(rawText, cfg.App.Env)
 		loadDotEnv(configDir, envForDotEnv)
 		expanded := expandEnv(rawText)
-		if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
+		decoder := yaml.NewDecoder(strings.NewReader(expanded))
+		decoder.KnownFields(true)
+		if err := decoder.Decode(&cfg); err != nil {
+			return nil, fmt.Errorf("unmarshal config: %w", err)
+		}
+		var extra yaml.Node
+		if err := decoder.Decode(&extra); err == nil {
+			return nil, fmt.Errorf("unmarshal config: multiple YAML documents are not allowed")
+		} else if err != io.EOF {
 			return nil, fmt.Errorf("unmarshal config: %w", err)
 		}
 	} else if !os.IsNotExist(err) {
@@ -493,6 +502,13 @@ func (c *Config) normalize(service string, debugConfigured bool) {
 }
 
 func (c Config) Validate(service string) error {
+	service = strings.ToLower(strings.TrimSpace(service))
+	switch service {
+	case "", "api", "console", "worker":
+	default:
+		return fmt.Errorf("unknown service %q", service)
+	}
+
 	if err := validatePort("port", c.Port); err != nil {
 		return err
 	}
@@ -507,9 +523,42 @@ func (c Config) Validate(service string) error {
 		if containsString(c.CORS.AllowedOrigins, "*") {
 			return fmt.Errorf("production cors allowed_origins cannot contain wildcard")
 		}
+		if service == "console" {
+			if !c.Databases.Default.Enabled {
+				return fmt.Errorf("production console requires default database to be enabled")
+			}
+			consoleEnforcer, ok := c.casbinEnforcer("console")
+			if !ok || !consoleEnforcer.Enabled {
+				return fmt.Errorf("production console requires console casbin enforcer to be enabled")
+			}
+		}
 	}
 	if c.Job.Enabled && !c.Redis.Enabled {
 		return fmt.Errorf("job requires redis to be enabled")
+	}
+	if service == "worker" && !c.Job.Enabled && !c.Scheduler.Enabled {
+		return fmt.Errorf("worker requires job or scheduler to be enabled")
+	}
+	if err := validateDatabaseConfig("default", c.Databases.Default); err != nil {
+		return err
+	}
+	for name, databaseCfg := range c.Databases.Resources {
+		if err := validateDatabaseConfig(name, databaseCfg); err != nil {
+			return err
+		}
+	}
+	for name, enforcer := range c.Casbin.Enforcers {
+		if !enforcer.Enabled {
+			continue
+		}
+		databaseName := strings.ToLower(strings.TrimSpace(enforcer.Database))
+		if databaseName == "" {
+			databaseName = "default"
+		}
+		databaseCfg, ok := c.databaseConfig(databaseName)
+		if !ok || !databaseCfg.Enabled {
+			return fmt.Errorf("casbin enforcer %q requires enabled database %q", name, databaseName)
+		}
 	}
 	timezone := strings.TrimSpace(c.Scheduler.Timezone)
 	if timezone == "" {
@@ -570,7 +619,54 @@ func (c Config) Validate(service string) error {
 			return fmt.Errorf("storage upload policy %q directory is invalid", policyName)
 		}
 	}
-	_ = service
+	return nil
+}
+
+func (c Config) databaseConfig(name string) (DatabaseConfig, bool) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" || name == "default" {
+		return c.Databases.Default, true
+	}
+	for resourceName, cfg := range c.Databases.Resources {
+		if strings.EqualFold(strings.TrimSpace(resourceName), name) {
+			return cfg, true
+		}
+	}
+	return DatabaseConfig{}, false
+}
+
+func (c Config) casbinEnforcer(name string) (CasbinEnforcerConfig, bool) {
+	for enforcerName, cfg := range c.Casbin.Enforcers {
+		if strings.EqualFold(strings.TrimSpace(enforcerName), name) {
+			return cfg, true
+		}
+	}
+	return CasbinEnforcerConfig{}, false
+}
+
+func validateDatabaseConfig(name string, cfg DatabaseConfig) error {
+	if !cfg.Enabled {
+		return nil
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("database resource name cannot be empty")
+	}
+	if !strings.EqualFold(strings.TrimSpace(cfg.Driver), "postgres") {
+		return fmt.Errorf("database %q driver must be postgres", name)
+	}
+	if strings.TrimSpace(cfg.Host) == "" {
+		return fmt.Errorf("database %q host is required", name)
+	}
+	if err := validatePort(fmt.Sprintf("database %q port", name), cfg.Port); err != nil {
+		return err
+	}
+	if strings.TrimSpace(cfg.User) == "" {
+		return fmt.Errorf("database %q user is required", name)
+	}
+	if strings.TrimSpace(cfg.DBName) == "" {
+		return fmt.Errorf("database %q dbname is required", name)
+	}
 	return nil
 }
 

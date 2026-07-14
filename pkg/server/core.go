@@ -2,9 +2,12 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,6 +23,11 @@ type CoreServer struct {
 	Provider *provider.Provider
 	Router   *gin.Engine
 	Server   *http.Server
+
+	startMu     sync.Mutex
+	listener    net.Listener
+	started     bool
+	serveErrors chan error
 }
 
 func NewCoreServer(cfg *config.Config, serviceName, port string, opts ...provider.Option) (*CoreServer, func(), error) {
@@ -50,14 +58,17 @@ func NewCoreServer(cfg *config.Config, serviceName, port string, opts ...provide
 		MaxHeaderBytes:    cfg.Server.MaxHeaderBytes,
 	}
 
-	return &CoreServer{
-			Config:   cfg,
-			Provider: p,
-			Router:   router,
-			Server:   srv,
-		}, func() {
-			_ = p.Close()
-		}, nil
+	core := &CoreServer{
+		Config:      cfg,
+		Provider:    p,
+		Router:      router,
+		Server:      srv,
+		serveErrors: make(chan error, 1),
+	}
+	cleanup := func() {
+		_ = p.Close()
+	}
+	return core, cleanup, nil
 }
 
 func registerHealthCheck(router *gin.Engine, serviceName string) {
@@ -70,18 +81,56 @@ func registerHealthCheck(router *gin.Engine, serviceName string) {
 }
 
 func (s *CoreServer) Start(name string) error {
+	if s == nil || s.Server == nil {
+		return fmt.Errorf("server is not configured")
+	}
+	s.startMu.Lock()
+	defer s.startMu.Unlock()
+	if s.started {
+		return fmt.Errorf("server %q is already started", name)
+	}
+	listener, err := net.Listen("tcp", s.Server.Addr)
+	if err != nil {
+		return fmt.Errorf("listen %s on %s: %w", name, s.Server.Addr, err)
+	}
+	s.listener = listener
+	s.started = true
+
+	logger.Info().Str("addr", listener.Addr().String()).Str("server", name).Msg("服务启动中")
 	go func() {
-		logger.Info().Str("addr", s.Server.Addr).Str("server", name).Msg("服务启动中")
-		if err := s.Server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Fatal().Err(err).Str("server", name).Msg("服务异常停止")
+		if err := s.Server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error().Err(err).Str("server", name).Msg("服务异常停止")
+			select {
+			case s.serveErrors <- err:
+			default:
+			}
 		}
 	}()
 	return nil
 }
 
+func (s *CoreServer) Errors() <-chan error {
+	if s == nil {
+		return nil
+	}
+	return s.serveErrors
+}
+
 func (s *CoreServer) Stop(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
 	timeout := time.Duration(s.Config.Server.ShutdownTimeout) * time.Second
 	shutdownCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	return s.Server.Shutdown(shutdownCtx)
+	var errs []error
+	if err := s.Server.Shutdown(shutdownCtx); err != nil {
+		errs = append(errs, fmt.Errorf("shutdown http server: %w", err))
+	}
+	if s.Provider != nil {
+		if err := s.Provider.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("close provider: %w", err))
+		}
+	}
+	return errors.Join(errs...)
 }

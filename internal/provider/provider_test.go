@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -164,6 +165,7 @@ func TestProviderCloseClosesCacheManager(t *testing.T) {
 	store := &providerCloseStore{}
 	manager.Register("tracking", store)
 	p := &Provider{Cache: manager}
+	p.AddCloser("cache", manager.Close)
 	if err := p.Close(); err != nil {
 		t.Fatalf("close provider: %v", err)
 	}
@@ -175,11 +177,89 @@ func TestProviderCloseClosesCacheManager(t *testing.T) {
 func TestProviderCloseClosesEventDispatcher(t *testing.T) {
 	dispatcher := event.New()
 	p := &Provider{Event: dispatcher}
+	p.AddCloser("event", dispatcher.Close)
 	if err := p.Close(); err != nil {
 		t.Fatalf("close provider: %v", err)
 	}
 	if err := dispatcher.Dispatch(context.Background(), providerCloseEvent{}); !errors.Is(err, event.ErrClosed) {
 		t.Fatalf("dispatch after provider close: %v", err)
+	}
+}
+
+func TestProviderCloseRunsClosersInReverseOrder(t *testing.T) {
+	p := &Provider{}
+	var order []string
+	for _, name := range []string{"logger", "database", "redis", "event"} {
+		name := name
+		p.AddCloser(name, func() error {
+			order = append(order, name)
+			return nil
+		})
+	}
+
+	if err := p.Close(); err != nil {
+		t.Fatalf("close provider: %v", err)
+	}
+	want := []string{"event", "redis", "database", "logger"}
+	if !slices.Equal(order, want) {
+		t.Fatalf("close order = %v, want %v", order, want)
+	}
+}
+
+func TestProviderCloseAggregatesErrorsAndIsIdempotent(t *testing.T) {
+	firstErr := errors.New("first close")
+	secondErr := errors.New("second close")
+	p := &Provider{}
+	var calls atomic.Int64
+	p.AddCloser("first", func() error {
+		calls.Add(1)
+		return firstErr
+	})
+	p.AddCloser("second", func() error {
+		calls.Add(1)
+		return secondErr
+	})
+
+	err := p.Close()
+	if !errors.Is(err, firstErr) || !errors.Is(err, secondErr) {
+		t.Fatalf("expected joined close errors, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "first") || !strings.Contains(err.Error(), "second") {
+		t.Fatalf("expected component names, got %v", err)
+	}
+	if err := p.Close(); !errors.Is(err, firstErr) || !errors.Is(err, secondErr) {
+		t.Fatalf("second close should return same error, got %v", err)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("closers called %d times", calls.Load())
+	}
+}
+
+func TestNewRollsBackInitializedOptionsOnFailure(t *testing.T) {
+	cfg := &config.Config{
+		App: config.AppConfig{Name: "grove", Env: "test"},
+		Log: config.LogConfig{Level: "error", Path: t.TempDir()},
+	}
+	initErr := errors.New("option failed")
+	var closed atomic.Bool
+	provider, err := New(cfg, "test",
+		func(p *Provider) error {
+			p.AddCloser("probe", func() error {
+				closed.Store(true)
+				return nil
+			})
+			return nil
+		},
+		func(*Provider) error { return initErr },
+	)
+	if provider != nil {
+		t.Fatal("expected nil provider")
+	}
+	if !errors.Is(err, initErr) {
+		t.Fatalf("expected option error, got %v", err)
+	}
+	if !closed.Load() {
+		t.Fatal("initialized option was not rolled back")
 	}
 }
 

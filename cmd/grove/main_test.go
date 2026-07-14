@@ -172,6 +172,11 @@ console_port: "18081"
 databases:
   default:
     enabled: true
+    driver: postgres
+    host: 127.0.0.1
+    port: "5432"
+    user: grove
+    dbname: grove
 redis:
   enabled: true
 job:
