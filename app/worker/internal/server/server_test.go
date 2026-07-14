@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -10,6 +12,38 @@ import (
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/pkg/scheduler"
 )
+
+func TestWorkerExposesHealthAndMetrics(t *testing.T) {
+	cfg := &config.Config{
+		App:        config.AppConfig{Name: "grove", Env: "test"},
+		WorkerPort: "0",
+		Log:        config.LogConfig{Level: "error", Path: t.TempDir()},
+		Server:     config.ServerConfig{ShutdownTimeout: 1},
+		Databases: config.DatabasesConfig{
+			Default: config.DatabaseConfig{Enabled: true},
+		},
+		Scheduler: config.SchedulerConfig{Enabled: true, Timezone: "UTC"},
+		Observability: config.ObservabilityConfig{
+			Enabled:          true,
+			MetricsEnabled:   true,
+			MetricsPath:      "/metrics",
+			ReadinessTimeout: 1,
+			TraceSampleRatio: 1,
+		},
+	}
+	app, cleanup, err := NewServer(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	for _, path := range []string{"/health/live", "/health/ready", "/metrics"} {
+		resp := httptest.NewRecorder()
+		app.health.Router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, path, nil))
+		if resp.Code != http.StatusOK {
+			t.Fatalf("%s expected 200, got %d body=%s", path, resp.Code, resp.Body.String())
+		}
+	}
+}
 
 func TestNewServerRejectsDisabledWorker(t *testing.T) {
 	cfg := &config.Config{
@@ -27,10 +61,11 @@ func TestNewServerRejectsDisabledWorker(t *testing.T) {
 
 func TestWorkerStartsSchedulerWhenQueueIsDisabled(t *testing.T) {
 	cfg := &config.Config{
-		App:       config.AppConfig{Name: "grove", Env: "test"},
-		Log:       config.LogConfig{Level: "error", Path: t.TempDir()},
-		Server:    config.ServerConfig{ShutdownTimeout: 1},
-		Scheduler: config.SchedulerConfig{Enabled: true, Timezone: "UTC"},
+		App:        config.AppConfig{Name: "grove", Env: "test"},
+		WorkerPort: "0",
+		Log:        config.LogConfig{Level: "error", Path: t.TempDir()},
+		Server:     config.ServerConfig{ShutdownTimeout: 1},
+		Scheduler:  config.SchedulerConfig{Enabled: true, Timezone: "UTC"},
 	}
 	app, cleanup, err := NewServer(cfg)
 	if err != nil {

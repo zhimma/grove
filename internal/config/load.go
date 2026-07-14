@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -76,6 +77,7 @@ func defaultConfig() Config {
 		},
 		Port:        "8080",
 		ConsolePort: "8081",
+		WorkerPort:  "8082",
 		Server: ServerConfig{
 			ShutdownTimeout: 30,
 			ReadTimeout:     30,
@@ -115,6 +117,13 @@ func defaultConfig() Config {
 		Scheduler: SchedulerConfig{
 			Enabled:  false,
 			Timezone: "Local",
+		},
+		Observability: ObservabilityConfig{
+			Enabled:          true,
+			MetricsEnabled:   true,
+			MetricsPath:      "/metrics",
+			ReadinessTimeout: 3,
+			TraceSampleRatio: 0.1,
 		},
 		Casbin: CasbinConfig{
 			Enforcers: map[string]CasbinEnforcerConfig{},
@@ -503,6 +512,12 @@ func (c *Config) normalize(service string, debugConfigured bool) {
 	if c.Security.Login.LockSeconds <= 0 {
 		c.Security.Login.LockSeconds = 900
 	}
+	if strings.TrimSpace(c.Observability.MetricsPath) == "" {
+		c.Observability.MetricsPath = "/metrics"
+	}
+	if c.Observability.ReadinessTimeout <= 0 {
+		c.Observability.ReadinessTimeout = 3
+	}
 }
 
 func (c Config) Validate(service string) error {
@@ -517,6 +532,9 @@ func (c Config) Validate(service string) error {
 		return err
 	}
 	if err := validatePort("console_port", c.ConsolePort); err != nil {
+		return err
+	}
+	if err := validatePort("worker_port", c.WorkerPort); err != nil {
 		return err
 	}
 	if strings.EqualFold(strings.TrimSpace(c.App.Env), "production") {
@@ -575,6 +593,22 @@ func (c Config) Validate(service string) error {
 	}
 	if c.CORS.AllowCredentials && containsString(c.CORS.AllowedOrigins, "*") {
 		return fmt.Errorf("cors allow_credentials cannot be used with wildcard origin")
+	}
+	if c.Observability.TraceSampleRatio < 0 || c.Observability.TraceSampleRatio > 1 {
+		return fmt.Errorf("observability trace_sample_ratio must be between 0 and 1")
+	}
+	metricsPath := strings.TrimSpace(c.Observability.MetricsPath)
+	if c.Observability.MetricsEnabled && (!strings.HasPrefix(metricsPath, "/") || metricsPath == "/") {
+		return fmt.Errorf("observability metrics_path must be an absolute non-root path")
+	}
+	if metricsPath == "/health" || metricsPath == "/health/live" || metricsPath == "/health/ready" {
+		return fmt.Errorf("observability metrics_path conflicts with health endpoints")
+	}
+	if endpoint := strings.TrimSpace(c.Observability.OTLPTraceEndpoint); endpoint != "" {
+		parsed, err := url.ParseRequestURI(endpoint)
+		if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return fmt.Errorf("observability otlp_trace_endpoint must be an absolute http or https URL")
+		}
 	}
 	for _, proxy := range c.Security.TrustedProxies {
 		proxy = strings.TrimSpace(proxy)

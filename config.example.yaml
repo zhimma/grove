@@ -8,6 +8,7 @@ app:
 
 port: ${APP_PORT:8080}
 console_port: ${CONSOLE_PORT:8081}
+worker_port: ${WORKER_PORT:8082}
 
 server:
   shutdown_timeout: ${SERVER_SHUTDOWN_TIMEOUT:30}
@@ -61,6 +62,15 @@ scheduler:
   # Scheduler 只由 worker 进程承载；除非业务自行做跨实例协调，否则只启用一个实例。
   enabled: ${SCHEDULER_ENABLED:false}
   timezone: ${SCHEDULER_TIMEZONE:Local}
+
+observability:
+  enabled: ${OBSERVABILITY_ENABLED:true}
+  metrics_enabled: ${OBSERVABILITY_METRICS_ENABLED:true}
+  metrics_path: ${OBSERVABILITY_METRICS_PATH:/metrics}
+  readiness_timeout: ${OBSERVABILITY_READINESS_TIMEOUT:3}
+  trace_sample_ratio: ${OBSERVABILITY_TRACE_SAMPLE_RATIO:0.1}
+  otlp_trace_endpoint: ${OBSERVABILITY_OTLP_TRACE_ENDPOINT:}
+  otlp_insecure: ${OBSERVABILITY_OTLP_INSECURE:false}
 
 casbin:
   enforcers:

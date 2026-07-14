@@ -6,7 +6,7 @@
 
 ### 运行环境
 
-- Go 1.25+
+- Go 1.25.12+
 - PostgreSQL 14+
 - Redis 6+（启用缓存、队列或 worker 时需要）
 - Linux systemd 环境，或容器运行环境
@@ -53,6 +53,7 @@ cp config.example.yaml config.yaml
 至少需要配置：
 
 - `app.env`
+- `port`、`console_port`、`worker_port`
 - `databases.default`
 - `jwt.secret`
 - `casbin.enforcers.console`（启用后台权限时）
@@ -95,6 +96,16 @@ casbin:
       database: default
       mode: rbac
       table_name: console_casbin_rules
+
+observability:
+  enabled: true
+  metrics_enabled: true
+  metrics_path: /metrics
+  readiness_timeout: 3
+  trace_sample_ratio: 0.1
+  # 使用 OTLP HTTP collector 时填写完整 traces endpoint。
+  otlp_trace_endpoint: https://otel-collector.example.com/v1/traces
+  otlp_insecure: false
 ```
 
 ### 3. 初始化数据库
@@ -126,6 +137,8 @@ go run ./cmd/grove seed bootstrap
 ```bash
 ./bin/worker
 ```
+
+Worker 默认在 `worker_port`（`8082`）启动仅用于 health 与 metrics 的内部 HTTP 监听，不提供业务接口。
 
 ## systemd 示例
 
@@ -200,12 +213,47 @@ docker run --rm -p 8081:8081 grove-console
 
 容器部署时建议通过环境变量覆盖数据库、Redis 和 JWT 配置。
 
+## 健康检查与可观测性
+
+HTTP 服务提供三个健康入口：
+
+- `/health/live`：只表示进程存活，不访问数据库或 Redis。
+- `/health/ready`：检查当前服务启用的 PostgreSQL、Redis 和 queue 后端；任一依赖失败时返回 `503`。
+- `/health`：兼容旧部署，当前等价于 live；新部署不要继续使用它作为 readiness probe。
+
+检查示例：
+
+```bash
+curl -fsS http://127.0.0.1:8081/health/live
+curl -fsS http://127.0.0.1:8081/health/ready
+curl -fsS http://127.0.0.1:8081/metrics
+```
+
+Kubernetes 探针示例：
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: 8081
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: 8081
+```
+
+Prometheus 默认从 `/metrics` 采集 HTTP 请求量、延迟、错误、数据库连接池和任务执行结果。该端点不包含密码、SQL 或 token，但仍应只对监控网络开放；不要通过公网 ingress 暴露。
+
+配置 `observability.otlp_trace_endpoint` 后，Gin、GORM、Redis、HTTP Client 和 Asynq span 会通过 OTLP HTTP 上报。生产环境使用 HTTPS；只有本地无 TLS collector 才设置 `otlp_insecure: true`。
+
 ## 运行约束
 
 - `console`、`api`、`worker` 可以独立部署
 - `scheduler` 只由 worker 进程承载，适合单实例运行；多 worker 场景应只启用一个实例，或明确允许重复执行
 - `pkg/job` 依赖 Redis；未启用 Redis 时不应启动 worker
 - 日志统一由 `pkg/logger` 输出，生产环境建议落盘并接入集中日志系统
+- 访问日志包含 `trace_id` 和 `span_id`，可与 OTLP trace 关联
+- Prometheus `/metrics` 应通过网络策略、反向代理 allowlist 或独立内部入口限制访问
 
 ## 相关文档
 

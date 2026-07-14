@@ -15,6 +15,7 @@ import (
 	"github.com/zhimma/grove/internal/bootstrap"
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/internal/readiness"
 	"github.com/zhimma/grove/pkg/logger"
 )
 
@@ -35,19 +36,45 @@ func NewCoreServer(cfg *config.Config, serviceName, port string, opts ...provide
 	if err != nil {
 		return nil, nil, err
 	}
+	core, err := newCoreServer(cfg, serviceName, port, p)
+	if err != nil {
+		_ = p.Close()
+		return nil, nil, err
+	}
+	cleanup := func() {
+		_ = p.Close()
+	}
+	return core, cleanup, nil
+}
 
+func NewHealthServer(cfg *config.Config, serviceName, port string, p *provider.Provider) (*CoreServer, error) {
+	if p == nil {
+		return nil, fmt.Errorf("health server provider is required")
+	}
+	return newCoreServer(cfg, serviceName, port, p)
+}
+
+func newCoreServer(cfg *config.Config, serviceName, port string, p *provider.Provider) (*CoreServer, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("server config is required")
+	}
 	if strings.EqualFold(strings.TrimSpace(cfg.App.Env), "production") {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	router := gin.New()
 	if err := router.SetTrustedProxies(cfg.Security.TrustedProxies); err != nil {
-		_ = p.Close()
-		return nil, nil, fmt.Errorf("configure trusted proxies: %w", err)
+		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
 	loader := bootstrap.NewMiddlewareLoader(cfg, serviceName)
+	if p.Observability != nil {
+		router.Use(p.Observability.GinMiddleware())
+	}
 	router.Use(loader.Global()...)
-	registerHealthCheck(router, serviceName)
+	registerHealthChecks(router, serviceName, p, cfg)
+	if p.Observability != nil && p.Observability.MetricsHandler() != nil {
+		router.GET(p.Observability.MetricsPath(), gin.WrapH(p.Observability.MetricsHandler()))
+	}
 
 	srv := &http.Server{
 		Addr:              ":" + port,
@@ -58,24 +85,49 @@ func NewCoreServer(cfg *config.Config, serviceName, port string, opts ...provide
 		MaxHeaderBytes:    cfg.Server.MaxHeaderBytes,
 	}
 
-	core := &CoreServer{
+	return &CoreServer{
 		Config:      cfg,
 		Provider:    p,
 		Router:      router,
 		Server:      srv,
 		serveErrors: make(chan error, 1),
-	}
-	cleanup := func() {
-		_ = p.Close()
-	}
-	return core, cleanup, nil
+	}, nil
 }
 
-func registerHealthCheck(router *gin.Engine, serviceName string) {
-	router.GET("/health", func(c *gin.Context) {
+func registerHealthChecks(router *gin.Engine, serviceName string, p *provider.Provider, cfg *config.Config) {
+	live := func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
 			"service": serviceName,
+		})
+	}
+	router.GET("/health", live)
+	router.GET("/health/live", live)
+
+	timeout := 3 * time.Second
+	if cfg != nil && cfg.Observability.ReadinessTimeout > 0 {
+		timeout = time.Duration(cfg.Observability.ReadinessTimeout) * time.Second
+	}
+	checks := map[string]readiness.Check{}
+	if p != nil {
+		checks = p.ReadinessChecks()
+	}
+	checker := readiness.New(checks, timeout)
+	router.GET("/health/ready", func(c *gin.Context) {
+		report := checker.Run(c.Request.Context())
+		status := http.StatusOK
+		responseStatus := "ok"
+		if !report.Ready {
+			status = http.StatusServiceUnavailable
+			responseStatus = "unavailable"
+			for name, err := range report.Errors() {
+				logger.Warn().Err(err).Str("dependency", name).Str("service", serviceName).Msg("readiness check failed")
+			}
+		}
+		c.JSON(status, gin.H{
+			"status":       responseStatus,
+			"service":      serviceName,
+			"dependencies": report.Dependencies,
 		})
 	})
 }

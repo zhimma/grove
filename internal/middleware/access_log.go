@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/zhimma/grove/pkg/logger"
 	"github.com/zhimma/grove/pkg/request"
@@ -25,9 +26,17 @@ func AccessLog() gin.HandlerFunc {
 		}
 		meta := request.GetErrorMeta(c)
 		identity := request.GetIdentity(c)
+		spanContext := trace.SpanContextFromContext(c.Request.Context())
+		traceID, spanID := "", ""
+		if spanContext.IsValid() {
+			traceID = spanContext.TraceID().String()
+			spanID = spanContext.SpanID().String()
+		}
 		log := logger.Logger()
 		log.WithLevel(level).
 			Str("request_id", request.GetRequestID(c)).
+			Str("trace_id", traceID).
+			Str("span_id", spanID).
 			Str("method", c.Request.Method).
 			Str("path", c.Request.URL.Path).
 			Str("route", c.FullPath()).

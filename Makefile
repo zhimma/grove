@@ -1,5 +1,6 @@
 APP_MODULE := github.com/zhimma/grove
 BIN_DIR := bin
+ADMIN_DIR := web/admin-vben
 GO ?= go
 PNPM ?= pnpm
 GROVE := $(GO) run ./cmd/grove
@@ -66,16 +67,16 @@ build.worker: ## 构建 Worker 二进制到 bin/worker
 	$(GO) build -o $(BIN_DIR)/worker ./app/worker/cmd/main.go
 
 admin.install: ## 安装后台前端依赖
-	$(PNPM) install:admin-vben
+	cd $(ADMIN_DIR) && $(PNPM) install --frozen-lockfile
 
 admin.dev: ## 启动后台前端开发服务
-	$(PNPM) dev:admin
+	cd $(ADMIN_DIR) && $(PNPM) dev:console
 
 admin.build: ## 构建后台前端
-	$(PNPM) build:admin
+	cd $(ADMIN_DIR) && $(PNPM) build:console
 
 admin.typecheck: ## 执行后台前端类型检查
-	$(PNPM) typecheck:admin
+	cd $(ADMIN_DIR) && $(PNPM) --filter @grove/console typecheck
 
 admin.verify: admin.typecheck ## 校验后台前端
 

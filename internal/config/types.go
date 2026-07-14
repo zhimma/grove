@@ -6,23 +6,25 @@ type LoadOptions struct {
 }
 
 type Config struct {
-	App         AppConfig       `yaml:"app"`
-	Port        string          `yaml:"port"`
-	ConsolePort string          `yaml:"console_port"`
-	Server      ServerConfig    `yaml:"server"`
-	Log         LogConfig       `yaml:"log"`
-	Databases   DatabasesConfig `yaml:"databases"`
-	Redis       RedisConfig     `yaml:"redis"`
-	JWT         JWTConfig       `yaml:"jwt"`
-	Job         JobConfig       `yaml:"job"`
-	Scheduler   SchedulerConfig `yaml:"scheduler"`
-	Casbin      CasbinConfig    `yaml:"casbin"`
-	Storage     StorageConfig   `yaml:"storage"`
-	Docs        DocsConfig      `yaml:"docs"`
-	CORS        CORSConfig      `yaml:"cors"`
-	API         APIConfig       `yaml:"api"`
-	Demo        DemoConfig      `yaml:"demo"`
-	Security    SecurityConfig  `yaml:"security"`
+	App           AppConfig           `yaml:"app"`
+	Port          string              `yaml:"port"`
+	ConsolePort   string              `yaml:"console_port"`
+	WorkerPort    string              `yaml:"worker_port"`
+	Server        ServerConfig        `yaml:"server"`
+	Log           LogConfig           `yaml:"log"`
+	Databases     DatabasesConfig     `yaml:"databases"`
+	Redis         RedisConfig         `yaml:"redis"`
+	JWT           JWTConfig           `yaml:"jwt"`
+	Job           JobConfig           `yaml:"job"`
+	Scheduler     SchedulerConfig     `yaml:"scheduler"`
+	Casbin        CasbinConfig        `yaml:"casbin"`
+	Storage       StorageConfig       `yaml:"storage"`
+	Docs          DocsConfig          `yaml:"docs"`
+	CORS          CORSConfig          `yaml:"cors"`
+	API           APIConfig           `yaml:"api"`
+	Demo          DemoConfig          `yaml:"demo"`
+	Security      SecurityConfig      `yaml:"security"`
+	Observability ObservabilityConfig `yaml:"observability"`
 }
 
 type AppConfig struct {
@@ -88,6 +90,16 @@ type JobConfig struct {
 type SchedulerConfig struct {
 	Enabled  bool   `yaml:"enabled"`
 	Timezone string `yaml:"timezone"`
+}
+
+type ObservabilityConfig struct {
+	Enabled           bool    `yaml:"enabled"`
+	MetricsEnabled    bool    `yaml:"metrics_enabled"`
+	MetricsPath       string  `yaml:"metrics_path"`
+	ReadinessTimeout  int     `yaml:"readiness_timeout"`
+	TraceSampleRatio  float64 `yaml:"trace_sample_ratio"`
+	OTLPTraceEndpoint string  `yaml:"otlp_trace_endpoint"`
+	OTLPInsecure      bool    `yaml:"otlp_insecure"`
 }
 
 type CasbinConfig struct {

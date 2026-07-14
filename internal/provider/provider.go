@@ -11,6 +11,8 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/zhimma/grove/internal/config"
+	"github.com/zhimma/grove/internal/observability"
+	"github.com/zhimma/grove/internal/readiness"
 	"github.com/zhimma/grove/pkg/auth"
 	"github.com/zhimma/grove/pkg/cache"
 	"github.com/zhimma/grove/pkg/database"
@@ -40,6 +42,8 @@ type Provider struct {
 	Event         *event.Dispatcher
 	Scheduler     *scheduler.Scheduler
 	ConfigSecrets *secretbox.Box
+	Observability *observability.Runtime
+	serviceName   string
 
 	closeMu   sync.Mutex
 	closers   []providerCloser
@@ -56,6 +60,7 @@ type Option func(*Provider) error
 
 func APIOptions() []Option {
 	return []Option{
+		WithObservability(),
 		WithDatabase(),
 		WithRedis(),
 		WithAuth(),
@@ -71,6 +76,7 @@ func APIOptions() []Option {
 
 func ConsoleOptions() []Option {
 	return []Option{
+		WithObservability(),
 		WithDatabase(),
 		WithRedis(),
 		WithAuth(),
@@ -101,6 +107,7 @@ func WithConfigSecrets() Option {
 
 func WorkerOptions() []Option {
 	return []Option{
+		WithObservability(),
 		WithRedis(),
 		WithJobServer(),
 		WithScheduler(),
@@ -125,7 +132,7 @@ func New(cfg *config.Config, serviceName string, opts ...Option) (*Provider, err
 		return nil, err
 	}
 
-	p := &Provider{Config: cfg}
+	p := &Provider{Config: cfg, serviceName: serviceName}
 	p.AddCloser("logger", logger.Close)
 	for _, opt := range opts {
 		if err := opt(p); err != nil {
@@ -136,6 +143,29 @@ func New(cfg *config.Config, serviceName string, opts ...Option) (*Provider, err
 		}
 	}
 	return p, nil
+}
+
+func WithObservability() Option {
+	return func(p *Provider) error {
+		runtime, err := observability.New(context.Background(), observability.Config{
+			ServiceName:      p.serviceName,
+			Environment:      p.Config.App.Env,
+			Enabled:          p.Config.Observability.Enabled,
+			MetricsEnabled:   p.Config.Observability.MetricsEnabled,
+			MetricsPath:      p.Config.Observability.MetricsPath,
+			TraceSampleRatio: p.Config.Observability.TraceSampleRatio,
+			OTLPTraceURL:     p.Config.Observability.OTLPTraceEndpoint,
+			OTLPInsecure:     p.Config.Observability.OTLPInsecure,
+		})
+		if err != nil {
+			return err
+		}
+		p.Observability = runtime
+		if runtime != nil {
+			p.AddCloser("observability", runtime.Close)
+		}
+		return nil
+	}
 }
 
 func WithDatabase() Option {
@@ -174,6 +204,28 @@ func WithDatabase() Option {
 			return err
 		}
 		p.DB = dbs
+		if p.Observability != nil {
+			for _, name := range dbs.Names() {
+				db, getErr := dbs.Get(name)
+				if getErr != nil {
+					_ = dbs.Close()
+					return getErr
+				}
+				if err := p.Observability.InstrumentGORM(name, db); err != nil {
+					_ = dbs.Close()
+					return err
+				}
+				sqlDB, err := db.DB()
+				if err != nil {
+					_ = dbs.Close()
+					return err
+				}
+				if err := p.Observability.ObserveDBPool(name, sqlDB); err != nil {
+					_ = dbs.Close()
+					return err
+				}
+			}
+		}
 		p.AddCloser("database", dbs.Close)
 		return nil
 	}
@@ -225,6 +277,9 @@ func WithRedis() Option {
 			Password: p.Config.Redis.Password,
 			DB:       p.Config.Redis.DB,
 		})
+		if p.Observability != nil {
+			client.AddHook(p.Observability.NewRedisHook())
+		}
 		if strings.EqualFold(p.Config.App.Env, "production") {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
@@ -424,6 +479,9 @@ func WithCache() Option {
 func WithHTTPClient() Option {
 	return func(p *Provider) error {
 		p.HTTPClient = httpclient.New()
+		if p.Observability != nil {
+			p.HTTPClient = p.HTTPClient.WithTracing()
+		}
 		return nil
 	}
 }
@@ -493,4 +551,48 @@ func (p *Provider) GetEnforcer(name string) *rbac.Enforcer {
 		return nil
 	}
 	return p.Enforcers[strings.TrimSpace(strings.ToLower(name))]
+}
+
+func (p *Provider) ReadinessChecks() map[string]readiness.Check {
+	checks := map[string]readiness.Check{}
+	if p == nil || p.Config == nil {
+		return checks
+	}
+
+	addDatabaseCheck := func(name string) {
+		checkName := "database." + name
+		checks[checkName] = func(ctx context.Context) error {
+			if p.DB == nil {
+				return fmt.Errorf("database connections are not initialized")
+			}
+			db, err := p.DB.Get(name)
+			if err != nil {
+				return err
+			}
+			sqlDB, err := db.DB()
+			if err != nil {
+				return err
+			}
+			return sqlDB.PingContext(ctx)
+		}
+	}
+	if p.DB != nil {
+		for _, name := range p.DB.Names() {
+			addDatabaseCheck(name)
+		}
+	}
+	if p.RedisClient != nil {
+		checks["redis"] = func(ctx context.Context) error {
+			return p.RedisClient.Ping(ctx).Err()
+		}
+	}
+	if p.Config.Job.Enabled {
+		checks["queue"] = func(ctx context.Context) error {
+			if p.RedisClient == nil {
+				return fmt.Errorf("queue backend is not initialized")
+			}
+			return p.RedisClient.Ping(ctx).Err()
+		}
+	}
+	return checks
 }

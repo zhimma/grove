@@ -56,6 +56,20 @@ func TestRepositoryCommandsUseGroveCLI(t *testing.T) {
 	assertNotContains(t, readme, "cmd/artisan")
 }
 
+func TestMakefileUsesCurrentConsoleScripts(t *testing.T) {
+	makefile := mustRead(t, filepath.Join("..", "..", "Makefile"))
+
+	assertContains(t, makefile, "ADMIN_DIR := web/admin-vben")
+	assertContains(t, makefile, "cd $(ADMIN_DIR) && $(PNPM) install --frozen-lockfile")
+	assertContains(t, makefile, "cd $(ADMIN_DIR) && $(PNPM) dev:console")
+	assertContains(t, makefile, "cd $(ADMIN_DIR) && $(PNPM) build:console")
+	assertContains(t, makefile, "cd $(ADMIN_DIR) && $(PNPM) --filter @grove/console typecheck")
+	assertNotContains(t, makefile, "install:admin-vben")
+	assertNotContains(t, makefile, "dev:admin")
+	assertNotContains(t, makefile, "build:admin")
+	assertNotContains(t, makefile, "typecheck:admin")
+}
+
 func TestSeedCommandListsExplicitSafetyModes(t *testing.T) {
 	cmd := newSeedCmd()
 	var out bytes.Buffer

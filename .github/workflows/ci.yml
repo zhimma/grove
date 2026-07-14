@@ -1,5 +1,8 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   pull_request:
   push:
@@ -11,6 +14,7 @@ jobs:
   verify:
     name: Verify
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -19,7 +23,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          go-version: '1.25.12'
           cache: true
 
       - name: Setup Node
@@ -28,16 +32,30 @@ jobs:
           node-version: '20.19.x'
 
       - name: Enable pnpm
-        run: corepack enable
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.2 --activate
 
       - name: Install frontend dependencies
-        run: pnpm --dir web/admin-vben install --no-frozen-lockfile
+        run: pnpm --dir web/admin-vben install --frozen-lockfile
 
       - name: Run backend tests
         run: go test ./...
 
       - name: Check route and OpenAPI contracts
         run: go test ./app/api/internal/docs ./app/console/internal/docs -run 'RouteContract' -v
+
+      - name: Run backend race tests
+        run: go test -race ./...
+
+      - name: Run Go vet
+        run: go vet ./...
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
+
+      - name: Scan Go dependencies and call graph
+        run: govulncheck ./...
 
       - name: Run PostgreSQL integration tests
         run: go test -tags=integration ./tests/integration -v
@@ -47,3 +65,9 @@ jobs:
 
       - name: Typecheck console frontend
         run: make admin.typecheck
+
+      - name: Run console unit tests
+        run: pnpm --dir web/admin-vben test:unit
+
+      - name: Build console frontend
+        run: pnpm --dir web/admin-vben build:console

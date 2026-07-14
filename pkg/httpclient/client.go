@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
@@ -20,6 +22,7 @@ type Client struct {
 	transport http.RoundTripper
 	baseURL   string
 	timeout   time.Duration
+	tracing   bool
 }
 
 type Config struct {
@@ -97,6 +100,17 @@ func (c *Client) WithTransport(transport http.RoundTripper) *Client {
 		transport = newDefaultTransport()
 	}
 	cloned.transport = transport
+	cloned.tracing = false
+	return cloned
+}
+
+func (c *Client) WithTracing() *Client {
+	cloned := c.Clone()
+	if cloned.tracing {
+		return cloned
+	}
+	cloned.transport = otelhttp.NewTransport(cloned.transport)
+	cloned.tracing = true
 	return cloned
 }
 

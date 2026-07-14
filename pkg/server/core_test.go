@@ -12,8 +12,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/config"
+	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/database"
 )
 
 func TestNewCoreServerRequiresConfig(t *testing.T) {
@@ -29,7 +33,7 @@ func TestNewCoreServerRequiresConfig(t *testing.T) {
 	}
 }
 
-func TestNewCoreServerRegistersHealthCheck(t *testing.T) {
+func TestNewCoreServerRegistersHealthChecks(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	cfg := testServerConfig(t)
@@ -40,23 +44,81 @@ func TestNewCoreServerRegistersHealthCheck(t *testing.T) {
 	}
 	t.Cleanup(cleanup)
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	for _, path := range []string{"/health", "/health/live", "/health/ready"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		resp := httptest.NewRecorder()
+		core.Router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("%s expected 200, got %d", path, resp.Code)
+		}
+
+		var payload map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("decode health response: %v", err)
+		}
+		if payload["status"] != "ok" {
+			t.Fatalf("unexpected status: %#v", payload["status"])
+		}
+		if payload["service"] != "api" {
+			t.Fatalf("unexpected service: %#v", payload["service"])
+		}
+	}
+}
+
+func TestReadinessFailureDoesNotExposeDependencyError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := testServerConfig(t)
+	cfg.Databases.Default.Enabled = true
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	engine := gin.New()
+	registerHealthChecks(engine, "api", &provider.Provider{
+		Config: cfg,
+		DB:     database.NewConnectionsFromDBs(db, nil),
+	}, cfg)
+
 	resp := httptest.NewRecorder()
-	core.Router.ServeHTTP(resp, req)
+	engine.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/health/ready", nil))
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	if strings.Contains(resp.Body.String(), "database is closed") {
+		t.Fatalf("readiness response leaked internal error: %s", resp.Body.String())
+	}
+}
 
-	if resp.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.Code)
+func TestCoreServerExportsPrometheusMetricsWhenEnabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := testServerConfig(t)
+	cfg.Observability = config.ObservabilityConfig{
+		Enabled:          true,
+		MetricsEnabled:   true,
+		MetricsPath:      "/metrics",
+		ReadinessTimeout: 1,
+		TraceSampleRatio: 1,
 	}
+	core, cleanup, err := NewCoreServer(cfg, "api", "8080", provider.WithObservability())
+	if err != nil {
+		t.Fatalf("new core server: %v", err)
+	}
+	t.Cleanup(cleanup)
 
-	var payload map[string]any
-	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode health response: %v", err)
-	}
-	if payload["status"] != "ok" {
-		t.Fatalf("unexpected status: %#v", payload["status"])
-	}
-	if payload["service"] != "api" {
-		t.Fatalf("unexpected service: %#v", payload["service"])
+	core.Router.GET("/test", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	core.Router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/test", nil))
+	resp := httptest.NewRecorder()
+	core.Router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), "grove_http_server_requests") {
+		t.Fatalf("unexpected metrics response: %d %s", resp.Code, resp.Body.String())
 	}
 }
 

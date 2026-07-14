@@ -116,7 +116,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 - [x] Task 19：清理未使用的全局单例 API 和命名。
 - [x] Task 20：收敛重复分页和响应映射。
 - [x] Task 21：完善 OpenAPI 合同和漂移检查。
-- [ ] Task 22：增加 readiness、指标、trace 和安全 CI。
+- [x] Task 22：增加 readiness、指标、trace 和安全 CI。
 - [ ] Task 23：建立前端自定义代码测试基线。
 
 完成条件：新增模块路径清晰；权限、文档和路由不会静默漂移；运行状态可观测；前后端关键自定义逻辑有自动化测试。
@@ -1329,16 +1329,41 @@ go test ./pkg/scheduler -race -count=20
 
 ### Task 22：增加 readiness、指标、trace 和安全 CI
 
-**Status:** `[ ] Planned`
+**Status:** `[x] Completed`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Completed at:** 2026-07-14
+
+**Design:** `docs/plans/2026-07-14-observability-readiness-design.md`
+
+**Architecture note:** OpenTelemetry Runtime 由 Provider 持有并按逆序生命周期关闭；readiness 只检查当前服务实际初始化的数据库和 Redis，以及显式启用的 queue 后端。每个依赖并行检查并具有硬超时，即使底层检查忽略 context 也不会阻塞 HTTP 探针。Worker 使用独立 `worker_port` 暴露 health/metrics，不引入业务 HTTP 接口。
+
+**Verification:**
+
+- `go mod tidy -diff`、`go test ./...`、`go test -race ./...`、`go vet ./...`、`go build ./...`、`make build GO='mise exec -- go'`：PASS。
+- `govulncheck ./...`：可达漏洞 0；依赖升级后使用 Go 1.25.12 完成扫描。
+- 本机 PostgreSQL `127.0.0.1:5432`：`TestPostgresReadinessCheck` 真实连接 PASS，凭据只通过临时进程环境传入。
+- `make admin.typecheck`：PASS；Makefile 已改用仓库真实的 Console 脚本和 pnpm 10.28.2 项目目录解析。
+- `pnpm test:unit`：36 个测试文件、304 个测试 PASS。
+- `make admin.build`：11/11 Turbo 任务 PASS，Vite 转换 7045 个模块并成功生成 production bundle。
+- `git diff --check`：PASS；构建产物均为 ignored 文件，未进入提交范围。
 
 **Files:**
 
 - Create: `internal/observability/`
-- Create: readiness middleware/handler
-- Modify: `pkg/server/core.go`
-- Modify: provider constructors
-- Modify: `.github/workflows/ci.yml`
-- Modify: deployment docs
+- Create: `internal/readiness/`
+- Modify: `internal/provider/`、`pkg/server/`、`pkg/httpclient/`、`pkg/job/`
+- Modify: worker health/error lifecycle and observability config
+- Modify: `.github/workflows/ci.yml`、`.github/dependabot.yml`、`.mise.toml`
+- Modify: `Makefile`、Console production env and pnpm hoist config
+- Modify: deployment and quickstart docs
+
+**Deviations from plan:** CI 的 production build 暴露了三个既有阻断项并在本任务一并最小修复：Console 缺少 `VITE_APP_TITLE`、PostCSS 的 `cssnano` 未按现有策略提升、Makefile 仍引用已删除的前端脚本名。`govulncheck` 同时发现可达依赖漏洞，因此升级 Go patch toolchain、pgx、Redis、JWT、OpenTelemetry 和 `x/net` 后重新完成全量回归。
 
 **Required behavior:**
 

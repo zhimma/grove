@@ -16,6 +16,10 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -76,6 +80,25 @@ func TestClientConfigurationReturnsCopies(t *testing.T) {
 	}
 	if configured.baseURL != "https://api.example.com" || configured.timeout != time.Minute || configured.transport != transport {
 		t.Fatalf("unexpected configured client: %#v", configured)
+	}
+}
+
+func TestWithTracingInjectsTraceContext(t *testing.T) {
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()))
+	t.Cleanup(func() { _ = tracerProvider.Shutdown(context.Background()) })
+	otel.SetTracerProvider(tracerProvider)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	client := newTestClient(t, func(req *http.Request) (*http.Response, error) {
+		if req.Header.Get("traceparent") == "" {
+			t.Fatal("missing traceparent header")
+		}
+		return jsonResponse(http.StatusOK, `{}`), nil
+	}).WithTracing()
+	ctx, span := tracerProvider.Tracer("test").Start(context.Background(), "parent")
+	defer span.End()
+	if _, err := client.GetWithContext(ctx, "/trace"); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -101,6 +101,26 @@ func TestLoadConfigExampleWithCleanEnvironment(t *testing.T) {
 	}
 }
 
+func TestObservabilityConfigValidation(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.Observability.TraceSampleRatio = 1.1
+	if err := cfg.Validate("api"); err == nil || !strings.Contains(err.Error(), "trace_sample_ratio") {
+		t.Fatalf("expected trace sample validation error, got %v", err)
+	}
+
+	cfg = defaultConfig()
+	cfg.Observability.MetricsPath = "/health/ready"
+	if err := cfg.Validate("api"); err == nil || !strings.Contains(err.Error(), "conflicts") {
+		t.Fatalf("expected metrics path conflict, got %v", err)
+	}
+
+	cfg = defaultConfig()
+	cfg.Observability.OTLPTraceEndpoint = "javascript:alert(1)"
+	if err := cfg.Validate("api"); err == nil || !strings.Contains(err.Error(), "otlp_trace_endpoint") {
+		t.Fatalf("expected OTLP endpoint validation error, got %v", err)
+	}
+}
+
 func TestLoadWithOptionsValidatesProductionSecret(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yaml")

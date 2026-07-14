@@ -34,13 +34,18 @@ func main() {
 	defer cleanup()
 
 	if err := app.Start(); err != nil {
+		cleanup()
 		fmt.Fprintf(os.Stderr, "启动工作进程失败: %v\n", err)
 		os.Exit(1)
 	}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	select {
+	case <-quit:
+	case runErr := <-app.Errors():
+		logger.Error().Err(runErr).Msg("工作进程异常停止")
+	}
 
 	if err := app.Stop(context.Background()); err != nil {
 		logger.Error().Err(err).Msg("工作进程关闭失败")
