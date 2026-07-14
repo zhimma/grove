@@ -22,7 +22,10 @@ import { refreshTokenApi } from './core';
 
 const { apiURL } = useAppConfig(import.meta.env, import.meta.env.PROD);
 
-function createRequestClient(baseURL: string, options?: RequestClientOptions) {
+export function createRequestClient(
+  baseURL: string,
+  options?: RequestClientOptions,
+) {
   const client = new RequestClient({
     ...options,
     baseURL,

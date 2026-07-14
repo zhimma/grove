@@ -46,39 +46,14 @@ import { accessRoutes } from '#/router/routes';
 import { usePermissionStore } from '#/store';
 import { parseApiError } from '#/utils/http-error';
 
+import { collectLeafPermissionKeys } from './permission-helpers';
+
 defineOptions({ name: 'ConsoleRoles' });
 
 interface PermissionNode {
   children?: PermissionNode[];
   key: string;
   title: string;
-}
-
-function collectLeafPermissionKeys(
-  nodes: APIPermissionTreeNode[],
-  targetKeys: string[],
-): string[] {
-  if (targetKeys.length === 0) {
-    return [];
-  }
-
-  const targetSet = new Set(targetKeys);
-  const result: string[] = [];
-
-  const walk = (items: APIPermissionTreeNode[]) => {
-    items.forEach((item) => {
-      if (item.children && item.children.length > 0) {
-        walk(item.children);
-        return;
-      }
-      if (targetSet.has(item.key)) {
-        result.push(item.key);
-      }
-    });
-  };
-
-  walk(nodes);
-  return result;
 }
 
 const permissionStore = usePermissionStore();
@@ -236,7 +211,9 @@ const roleForm = reactive<CreateRoleParams & UpdateRoleParams>({
 });
 
 const roleFieldNames = ['name', 'code', 'display_name', 'description'] as const;
-const roleFieldErrors = reactive<Record<(typeof roleFieldNames)[number], string[]>>({
+const roleFieldErrors = reactive<
+  Record<(typeof roleFieldNames)[number], string[]>
+>({
   name: [],
   code: [],
   display_name: [],

@@ -117,7 +117,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 - [x] Task 20：收敛重复分页和响应映射。
 - [x] Task 21：完善 OpenAPI 合同和漂移检查。
 - [x] Task 22：增加 readiness、指标、trace 和安全 CI。
-- [ ] Task 23：建立前端自定义代码测试基线。
+- [x] Task 23：建立前端自定义代码测试基线。
 
 完成条件：新增模块路径清晰；权限、文档和路由不会静默漂移；运行状态可观测；前后端关键自定义逻辑有自动化测试。
 
@@ -1385,15 +1385,41 @@ pnpm --dir web/admin-vben build:console
 
 ### Task 23：建立前端自定义代码测试基线
 
-**Status:** `[ ] Planned`
+**Status:** `[x] Completed`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Completed at:** 2026-07-14
+
+**Design:** `docs/plans/2026-07-14-console-test-baseline-design.md`
+
+**Architecture note:** Console 自定义权限和认证逻辑优先使用真实 Pinia Store 与纯函数测试；不挂载大型页面，不引入 Testing Pinia、Axios MockAdapter 或新测试依赖。权限在授权总览加载完成前和加载失败后统一 fail closed；logout 对 token、权限、菜单和动态路由状态建立显式清理合同。
+
+**Verification:**
+
+- 新增 Console targeted tests：6 个测试文件、14 个测试 PASS。
+- `pnpm test:unit`：41 个测试文件、316 个测试 PASS。
+- 两个并发 401 请求只调用 1 次 refresh，并使用新 access/refresh token 重放成功。
+- logout 测试覆盖服务端通知、全局 Store reset、access/refresh token、access codes、菜单、动态路由、权限检查状态和 Permission Store 清理。
+- `make admin.typecheck`：PASS。
+- `make admin.build`：11/11 Turbo 任务 PASS，Vite 转换 7047 个模块并生成 production bundle。
+- 前端变更文件 Prettier、`git diff --check`：PASS。
+- `loadScript` 上游测试已移除真实 CDN/localhost 访问，单文件 4 个测试和全仓 unit 均稳定 PASS。
 
 **Files:**
 
-- Create tests beside `apps/console/src/store/permission.ts`
-- Create tests beside `apps/console/src/router/menu-access.ts`
-- Create tests for request refresh/logout flow
-- Create tests for role permission page helpers
-- Modify CI
+- Create: tests beside `apps/console/src/store/permission.ts` and `auth.ts`
+- Modify: `apps/console/src/router/menu-access.test.ts`
+- Create: `apps/console/src/api/request.test.ts`
+- Create: `apps/console/src/store/auth-state.ts` and tests
+- Create: role `permission-helpers.ts` and tests
+- Modify: upstream `resources.test.ts` to remove real network dependence
+
+**Deviations from plan:** 前端 unit CI 已在依赖任务 Task 22 中接入，本任务不重复增加第二个 CI step。全仓验证暴露 Vben 上游 `loadScript` 测试依赖真实 CDN/localhost，已在测试隔离层最小修复，不修改生产 `loadScript` 实现。
 
 **Required behavior:**
 

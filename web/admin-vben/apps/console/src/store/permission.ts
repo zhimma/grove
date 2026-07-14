@@ -25,7 +25,7 @@ export const usePermissionStore = defineStore('permission', () => {
 
   function hasPermission(permission: string): boolean {
     if (!isLoaded.value) {
-      return true;
+      return false;
     }
 
     if (apiPermissions.value.includes('*')) {
@@ -41,7 +41,7 @@ export const usePermissionStore = defineStore('permission', () => {
 
   function hasMenuAccess(menuKey: string): boolean {
     if (!isLoaded.value) {
-      return true;
+      return false;
     }
 
     if (menuKeys.value.includes('*')) {

@@ -13,6 +13,7 @@ import { defineStore } from 'pinia';
 import { getAccessCodesApi, getUserInfoApi, loginApi, logoutApi } from '#/api';
 import { $t } from '#/locales';
 
+import { clearConsoleAuthState } from './auth-state';
 import { usePermissionStore } from './permission';
 
 export const useAuthStore = defineStore('auth', () => {
@@ -90,7 +91,10 @@ export const useAuthStore = defineStore('auth', () => {
     };
   }
 
-  async function logout(redirect: boolean = true, notifyServer: boolean = true) {
+  async function logout(
+    redirect: boolean = true,
+    notifyServer: boolean = true,
+  ) {
     if (notifyServer && accessStore.accessToken) {
       try {
         await logoutApi(accessStore.refreshToken);
@@ -99,9 +103,7 @@ export const useAuthStore = defineStore('auth', () => {
       }
     }
     resetAllStores();
-    permissionStore.$reset();
-    accessStore.setLoginExpired(false);
-    accessStore.setRefreshToken(null);
+    clearConsoleAuthState(accessStore, permissionStore);
 
     // 回登录页带上当前路由地址
     await router.replace({

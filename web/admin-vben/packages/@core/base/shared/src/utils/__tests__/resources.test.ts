@@ -1,14 +1,37 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadScript } from '../resources';
 
 const testJsPath =
   'https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js';
+let appendedScripts: HTMLScriptElement[] = [];
 
 describe('loadScript', () => {
   beforeEach(() => {
-    // 每个测试前清空 head，保证环境干净
-    document.head.innerHTML = '';
+    appendedScripts = [];
+    vi.spyOn(document.head, 'append').mockImplementation((...nodes) => {
+      appendedScripts.push(
+        ...nodes.filter(
+          (node): node is HTMLScriptElement =>
+            node instanceof HTMLScriptElement,
+        ),
+      );
+    });
+    vi.spyOn(document, 'querySelector').mockImplementation((selector) => {
+      const matched = /^script\[src="(.+)"\]$/.exec(selector);
+      if (!matched) {
+        return null;
+      }
+      return (
+        appendedScripts.find(
+          (script) => script.getAttribute('src') === matched[1],
+        ) || null
+      );
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('should resolve when the script loads successfully', async () => {
@@ -39,9 +62,11 @@ describe('loadScript', () => {
     // 立即 resolve
     await expect(promise).resolves.toBeUndefined();
 
-    // head 中只保留一个
-    const scripts = document.head.querySelectorAll('script[src="bar.js"]');
-    expect(scripts).toHaveLength(1);
+    expect(
+      appendedScripts.filter(
+        (script) => script.getAttribute('src') === 'bar.js',
+      ),
+    ).toHaveLength(1);
   });
 
   it('should reject when the script fails to load', async () => {
@@ -73,10 +98,10 @@ describe('loadScript', () => {
     await expect(p1).resolves.toBeUndefined();
     await expect(p2).resolves.toBeUndefined();
 
-    // 只插入一次
-    const scripts = document.head.querySelectorAll(
-      `script[src="${testJsPath}"]`,
-    );
-    expect(scripts).toHaveLength(1);
+    expect(
+      appendedScripts.filter(
+        (script) => script.getAttribute('src') === testJsPath,
+      ),
+    ).toHaveLength(1);
   });
 });
