@@ -807,7 +807,15 @@ go test ./internal/middleware ./pkg/ratelimit ./app/console/internal/service -ra
 
 ### Task 10：增加请求体和文件上传限制
 
-**Status:** `[ ] Planned`
+**Status:** `[-] In Progress`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Design:** `docs/plans/2026-07-14-upload-security-design.md`
 
 **Files:**
 
