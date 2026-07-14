@@ -82,6 +82,10 @@ func newValidationError(c *gin.Context, err error, target any, source string) er
 }
 
 func newBindingError(c *gin.Context, err error, target any, source string) error {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		return errx.RequestBodyTooLarge(maxBytesErr.Limit)
+	}
 	return errx.InvalidParams().WithMessage(invalidParamsMessage).WithData(map[string]interface{}{
 		"errors": formatErrors(c, err, target, source),
 	})

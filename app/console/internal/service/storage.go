@@ -2,8 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"mime/multipart"
-	"strings"
+	"net/http"
 
 	"github.com/zhimma/grove/pkg/errx"
 	pkgstorage "github.com/zhimma/grove/pkg/storage"
@@ -14,8 +15,7 @@ type StorageService struct {
 }
 
 type GetStorageConfigInput struct {
-	UserID string
-	Disk   string
+	Disk string
 }
 
 type GetAllStorageConfigsOutput struct {
@@ -24,25 +24,20 @@ type GetAllStorageConfigsOutput struct {
 }
 
 type UploadStorageFileInput struct {
-	UserID    string
-	Disk      string
-	Directory string
-	File      *multipart.FileHeader
+	Disk    string
+	Purpose string
+	File    *multipart.FileHeader
 }
 
 func NewStorageService(manager *pkgstorage.Manager) *StorageService {
 	return &StorageService{manager: manager}
 }
 
-func (s *StorageService) GetStorageConfig(ctx context.Context, in GetStorageConfigInput) (*pkgstorage.ClientConfig, error) {
+func (s *StorageService) GetStorageConfig(_ context.Context, in GetStorageConfigInput) (*pkgstorage.ClientConfig, error) {
 	if s == nil || s.manager == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("存储管理器未配置")
 	}
-	userID := strings.TrimSpace(in.UserID)
-	if userID == "" {
-		userID = "anonymous"
-	}
-	cfg, err := s.manager.IssueClientConfig(ctx, in.Disk, userID)
+	cfg, err := s.manager.Describe(in.Disk)
 	if err != nil {
 		return nil, errx.InvalidParams().WithMessage(err.Error())
 	}
@@ -63,8 +58,24 @@ func (s *StorageService) UploadFile(ctx context.Context, in UploadStorageFileInp
 	if s == nil || s.manager == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("存储管理器未配置")
 	}
-	file, err := s.manager.SaveUploadedFile(ctx, in.Disk, in.Directory, in.File)
+	file, err := s.manager.SaveUploadedFile(ctx, in.Disk, in.Purpose, in.File)
 	if err != nil {
+		if errors.Is(err, pkgstorage.ErrUploadStore) {
+			return nil, errx.Internal().WithCause(err)
+		}
+		if errors.Is(err, pkgstorage.ErrUploadTooLarge) {
+			return nil, errx.New(http.StatusRequestEntityTooLarge, "upload_too_large", "文件超过用途策略大小限制")
+		}
+		if errors.Is(err, pkgstorage.ErrUploadEmpty) ||
+			errors.Is(err, pkgstorage.ErrUploadExtension) ||
+			errors.Is(err, pkgstorage.ErrUploadMIME) ||
+			errors.Is(err, pkgstorage.ErrUploadMagic) ||
+			errors.Is(err, pkgstorage.ErrUploadActiveContent) {
+			return nil, errx.InvalidParams().
+				WithHTTPStatus(http.StatusUnprocessableEntity).
+				WithCode("invalid_upload").
+				WithMessage(err.Error())
+		}
 		return nil, errx.InvalidParams().WithMessage(err.Error())
 	}
 	return file, nil

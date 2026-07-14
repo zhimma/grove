@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"mime"
-	"mime/multipart"
 	"path/filepath"
 	"strings"
 
@@ -65,30 +65,20 @@ func (d *S3Driver) Name() string {
 }
 
 func (d *S3Driver) Put(ctx context.Context, objectPath string, content []byte) error {
-	_, err := d.client.PutObject(ctx, d.bucket, objectPath, bytes.NewReader(content), int64(len(content)), minio.PutObjectOptions{
-		ContentType: contentTypeByPath(objectPath),
+	return d.PutStream(ctx, objectPath, bytes.NewReader(content), int64(len(content)), contentTypeByPath(objectPath))
+}
+
+func (d *S3Driver) PutStream(ctx context.Context, objectPath string, reader io.Reader, size int64, contentType string) error {
+	if strings.TrimSpace(contentType) == "" {
+		contentType = "application/octet-stream"
+	}
+	_, err := d.client.PutObject(ctx, d.bucket, objectPath, reader, size, minio.PutObjectOptions{
+		ContentType: contentType,
 	})
 	if err != nil {
 		return fmt.Errorf("put s3 object: %w", err)
 	}
 	return nil
-}
-
-func (d *S3Driver) PutFile(ctx context.Context, objectPath string, file *multipart.FileHeader) (string, error) {
-	src, err := file.Open()
-	if err != nil {
-		return "", fmt.Errorf("open upload file: %w", err)
-	}
-	defer src.Close()
-
-	targetPath := buildUploadedObjectPath(objectPath, file.Filename)
-	_, err = d.client.PutObject(ctx, d.bucket, targetPath, src, file.Size, minio.PutObjectOptions{
-		ContentType: contentTypeByPath(targetPath),
-	})
-	if err != nil {
-		return "", fmt.Errorf("put s3 object: %w", err)
-	}
-	return targetPath, nil
 }
 
 func (d *S3Driver) Delete(ctx context.Context, objectPaths ...string) error {

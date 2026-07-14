@@ -12,12 +12,12 @@ import (
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/pkg/auth"
 	"github.com/zhimma/grove/pkg/cache"
-	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/event"
 	"github.com/zhimma/grove/pkg/httpclient"
 	"github.com/zhimma/grove/pkg/job"
 	"github.com/zhimma/grove/pkg/logger"
+	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/scheduler"
 	"github.com/zhimma/grove/pkg/storage"
 	"github.com/zhimma/grove/pkg/transaction"
@@ -260,6 +260,20 @@ func WithJobServer() Option {
 func WithStorage() Option {
 	return func(p *Provider) error {
 		manager := storage.NewManager(p.Config.Storage.Default)
+		for name, policyCfg := range p.Config.Storage.UploadPolicies {
+			policy, err := storage.NewUploadPolicy(storage.UploadPolicyConfig{
+				Name:       name,
+				Directory:  policyCfg.Directory,
+				MaxBytes:   policyCfg.MaxBytes,
+				Extensions: policyCfg.Extensions,
+				MIMETypes:  policyCfg.MIMETypes,
+			})
+			if err != nil {
+				return fmt.Errorf("init upload policy %q: %w", name, err)
+			}
+			manager.AddUploadPolicy(policy)
+		}
+		manager.SetDefaultUploadPolicy(p.Config.Storage.DefaultUploadPolicy)
 		for name, diskCfg := range p.Config.Storage.Disks {
 			diskName := strings.TrimSpace(strings.ToLower(name))
 			if diskName == "" {
@@ -312,7 +326,7 @@ func WithStorage() Option {
 
 			manager.AddDisk(diskName, driver, storage.DiskConfig{
 				Name:      diskName,
-				Driver:    strings.TrimSpace(strings.ToLower(diskCfg.Driver)),
+				Driver:    driver.Name(),
 				BaseURL:   diskCfg.BaseURL,
 				Endpoint:  diskCfg.Endpoint,
 				Region:    diskCfg.Region,

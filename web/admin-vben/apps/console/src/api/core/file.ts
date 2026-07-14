@@ -1,37 +1,56 @@
 import { requestClient } from '#/api/request';
 
-export interface StorageConfigResponse {
-  baseUrl: string;
+export type StorageDriver = 'local' | 's3';
+
+export interface StorageClientConfig {
+  base_url: string;
   bucket: string;
-  credentials: {
-    expiredTime?: number;
-    sessionToken?: string;
-    tmpSecretId?: string;
-    tmpSecretKey?: string;
-  };
   disk: string;
-  driver: string;
+  driver: StorageDriver;
   endpoint: string;
-  expiredTime: number;
+  is_default: boolean;
+  prefix: string;
   region: string;
-  expiration?: string;
-  requestId?: string;
-  startTime?: number;
+  upload_mode: 'server' | 'sts';
 }
 
-/**
- * 获取存储配置（支持动态获取存储驱动）
- * @param disk 存储磁盘，默认 'cos'
- */
+export interface StoredFile {
+  content_type: string;
+  disk: string;
+  driver: StorageDriver;
+  filename: string;
+  path: string;
+  purpose: string;
+  size: number;
+  url: string;
+}
+
+interface UploadStorageFileInput {
+  disk?: string;
+  file: File;
+  onProgress?: (percentage: number) => void;
+  purpose: string;
+}
+
 export function getStorageConfig(disk?: string) {
-  return requestClient.get<StorageConfigResponse>(
-    '/console/v1/storage/config',
+  return requestClient.get<StorageClientConfig>('/console/v1/storage/config', {
+    params: disk ? { disk } : undefined,
+  });
+}
+
+export function uploadStorageFile(input: UploadStorageFileInput) {
+  return requestClient.upload<StoredFile>(
+    '/console/v1/storage/upload',
     {
-      params: { disk: disk || 'cos' },
+      disk: input.disk,
+      file: input.file,
+      purpose: input.purpose,
+    },
+    {
+      onUploadProgress: (event) => {
+        const percentage = Math.round((event.progress ?? 0) * 100);
+        input.onProgress?.(percentage);
+      },
     },
   );
-}
-
-export function getFileList() {
-  return requestClient.get<StorageConfigResponse[]>('/console/v1/files');
 }

@@ -99,6 +99,14 @@ func TooManyRequests() *HTTPError {
 	return New(http.StatusTooManyRequests, "too_many_requests", "请求过于频繁")
 }
 
+func RequestBodyTooLarge(maxBytes int64) *HTTPError {
+	data := map[string]interface{}{}
+	if maxBytes > 0 {
+		data["max_bytes"] = maxBytes
+	}
+	return New(http.StatusRequestEntityTooLarge, "request_body_too_large", "请求体超过大小限制").WithData(data)
+}
+
 func ServiceUnavailable() *HTTPError {
 	return New(http.StatusServiceUnavailable, "service_unavailable", "服务暂不可用")
 }

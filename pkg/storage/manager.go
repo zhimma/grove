@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"path"
 	"sort"
@@ -12,7 +13,7 @@ import (
 type Driver interface {
 	Name() string
 	Put(ctx context.Context, objectPath string, content []byte) error
-	PutFile(ctx context.Context, objectPath string, file *multipart.FileHeader) (string, error)
+	PutStream(ctx context.Context, objectPath string, reader io.Reader, size int64, contentType string) error
 	Delete(ctx context.Context, objectPaths ...string) error
 	Exists(ctx context.Context, objectPath string) (bool, error)
 	URL(objectPath string) string
@@ -49,8 +50,10 @@ type Disk struct {
 }
 
 type Manager struct {
-	defaultDisk string
-	disks       map[string]*Disk
+	defaultDisk         string
+	disks               map[string]*Disk
+	defaultUploadPolicy string
+	uploadPolicies      map[string]UploadPolicy
 }
 
 type ClientConfig struct {
@@ -76,18 +79,46 @@ type STSClientConfig struct {
 }
 
 type StoredFile struct {
-	Disk     string `json:"disk"`
-	Driver   string `json:"driver"`
-	Path     string `json:"path"`
-	URL      string `json:"url"`
-	Filename string `json:"filename"`
-	Size     int64  `json:"size"`
+	Disk        string `json:"disk"`
+	Driver      string `json:"driver"`
+	Purpose     string `json:"purpose"`
+	Path        string `json:"path"`
+	URL         string `json:"url"`
+	Filename    string `json:"filename"`
+	Size        int64  `json:"size"`
+	ContentType string `json:"content_type"`
 }
 
 func NewManager(defaultDisk string) *Manager {
-	return &Manager{
-		defaultDisk: strings.TrimSpace(defaultDisk),
-		disks:       map[string]*Disk{},
+	manager := &Manager{
+		defaultDisk:         strings.TrimSpace(defaultDisk),
+		disks:               map[string]*Disk{},
+		defaultUploadPolicy: "document",
+		uploadPolicies:      map[string]UploadPolicy{},
+	}
+	for _, cfg := range DefaultUploadPolicyConfigs() {
+		policy, err := NewUploadPolicy(cfg)
+		if err == nil {
+			manager.AddUploadPolicy(policy)
+		}
+	}
+	return manager
+}
+
+func (m *Manager) AddUploadPolicy(policy UploadPolicy) {
+	if m == nil || strings.TrimSpace(policy.Name()) == "" {
+		return
+	}
+	m.uploadPolicies[policy.Name()] = policy
+}
+
+func (m *Manager) SetDefaultUploadPolicy(name string) {
+	if m == nil {
+		return
+	}
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name != "" {
+		m.defaultUploadPolicy = name
 	}
 }
 
@@ -182,7 +213,7 @@ func (m *Manager) IssueClientConfig(ctx context.Context, name, userID string) (*
 	return cfg, nil
 }
 
-func (m *Manager) SaveUploadedFile(ctx context.Context, diskName, directory string, file *multipart.FileHeader) (*StoredFile, error) {
+func (m *Manager) SaveUploadedFile(ctx context.Context, diskName, purpose string, file *multipart.FileHeader) (*StoredFile, error) {
 	disk, err := m.Get(diskName)
 	if err != nil {
 		return nil, err
@@ -190,28 +221,42 @@ func (m *Manager) SaveUploadedFile(ctx context.Context, diskName, directory stri
 	if file == nil {
 		return nil, fmt.Errorf("upload file is required")
 	}
-
-	objectDir := buildObjectDir(disk.Config.Prefix, directory)
-	objectPath, err := disk.Driver.PutFile(ctx, objectDir, file)
+	policyName := strings.ToLower(strings.TrimSpace(purpose))
+	if policyName == "" {
+		policyName = m.defaultUploadPolicy
+	}
+	policy, ok := m.uploadPolicies[policyName]
+	if !ok {
+		return nil, fmt.Errorf("upload policy %q is not configured", policyName)
+	}
+	src, err := file.Open()
+	if err != nil {
+		return nil, fmt.Errorf("open upload file: %w", err)
+	}
+	defer src.Close()
+	validated, err := policy.Inspect(file.Filename, file.Size, src)
 	if err != nil {
 		return nil, err
 	}
+	objectDir := buildObjectDir(disk.Config.Prefix, validated.Directory)
+	objectPath := buildUploadedObjectPath(objectDir, validated.Filename)
+	if err := disk.Driver.PutStream(ctx, objectPath, validated.Reader, validated.Size, validated.ContentType); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrUploadStore, err)
+	}
 
 	return &StoredFile{
-		Disk:     disk.Config.Name,
-		Driver:   disk.Config.Driver,
-		Path:     objectPath,
-		URL:      disk.Driver.URL(objectPath),
-		Filename: file.Filename,
-		Size:     file.Size,
+		Disk:        disk.Config.Name,
+		Driver:      disk.Config.Driver,
+		Purpose:     policyName,
+		Path:        objectPath,
+		URL:         disk.Driver.URL(objectPath),
+		Filename:    file.Filename,
+		Size:        file.Size,
+		ContentType: validated.ContentType,
 	}, nil
 }
 
 func describeDisk(disk *Disk) *ClientConfig {
-	uploadMode := "server"
-	if disk.stsIssuer != nil {
-		uploadMode = "sts"
-	}
 	return &ClientConfig{
 		Disk:       disk.Config.Name,
 		Driver:     disk.Config.Driver,
@@ -221,7 +266,7 @@ func describeDisk(disk *Disk) *ClientConfig {
 		Region:     disk.Config.Region,
 		Bucket:     disk.Config.Bucket,
 		Prefix:     disk.Config.Prefix,
-		UploadMode: uploadMode,
+		UploadMode: "server",
 	}
 }
 

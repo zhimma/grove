@@ -31,10 +31,11 @@ type AppConfig struct {
 }
 
 type ServerConfig struct {
-	ShutdownTimeout int `yaml:"shutdown_timeout"`
-	ReadTimeout     int `yaml:"read_timeout"`
-	WriteTimeout    int `yaml:"write_timeout"`
-	MaxHeaderBytes  int `yaml:"max_header_bytes"`
+	ShutdownTimeout int   `yaml:"shutdown_timeout"`
+	ReadTimeout     int   `yaml:"read_timeout"`
+	WriteTimeout    int   `yaml:"write_timeout"`
+	MaxHeaderBytes  int   `yaml:"max_header_bytes"`
+	MaxBodyBytes    int64 `yaml:"max_body_bytes"`
 }
 
 type LogConfig struct {
@@ -96,8 +97,17 @@ type CasbinEnforcerConfig struct {
 }
 
 type StorageConfig struct {
-	Default string                       `yaml:"default"`
-	Disks   map[string]StorageDiskConfig `yaml:"disks"`
+	Default             string                        `yaml:"default"`
+	Disks               map[string]StorageDiskConfig  `yaml:"disks"`
+	DefaultUploadPolicy string                        `yaml:"default_upload_policy"`
+	UploadPolicies      map[string]UploadPolicyConfig `yaml:"upload_policies"`
+}
+
+type UploadPolicyConfig struct {
+	Directory  string   `yaml:"directory"`
+	MaxBytes   int64    `yaml:"max_bytes"`
+	Extensions []string `yaml:"extensions"`
+	MIMETypes  []string `yaml:"mime_types"`
 }
 
 type StorageDiskConfig struct {

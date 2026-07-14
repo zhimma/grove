@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -45,7 +46,16 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 			Enabled: false,
 		},
 		Storage: config.StorageConfig{
-			Default: "local",
+			Default:             "local",
+			DefaultUploadPolicy: "document",
+			UploadPolicies: map[string]config.UploadPolicyConfig{
+				"document": {
+					Directory:  "documents",
+					MaxBytes:   64,
+					Extensions: []string{".txt"},
+					MIMETypes:  []string{"text/plain"},
+				},
+			},
 			Disks: map[string]config.StorageDiskConfig{
 				"local": {
 					Driver:  "local",
@@ -73,7 +83,7 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 	}
 
 	engine := gin.New()
-	engine.Use(appmiddleware.RequestID(), appmiddleware.RequestMeta("console"), appmiddleware.Recovery())
+	engine.Use(appmiddleware.RequestID(), appmiddleware.BodyLimit(1024), appmiddleware.RequestMeta("console"), appmiddleware.Recovery())
 	New(cfg, p).InstallToEngine(engine)
 
 	loginResp := performJSON(t, engine, http.MethodPost, "/console/v1/auth/login", map[string]any{
@@ -249,11 +259,39 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 	}
 
 	uploadResp := performMultipart(t, engine, "/console/v1/storage/upload", token, map[string]string{
-		"disk":      "local",
-		"directory": "avatars",
+		"disk":    "local",
+		"purpose": "document",
 	}, "file", "avatar.txt", []byte("hello upload"))
 	if got := int(uploadResp["code"].(float64)); got != 0 {
 		t.Fatalf("upload storage file failed: %#v", uploadResp)
+	}
+	uploadData := uploadResp["data"].(map[string]any)
+	if path, _ := uploadData["path"].(string); !strings.HasPrefix(path, "console-test/documents/") {
+		t.Fatalf("upload policy directory was not applied: %#v", uploadResp)
+	}
+
+	activeContentResp := performMultipartWithStatus(t, engine, "/console/v1/storage/upload", token, map[string]string{
+		"disk":    "local",
+		"purpose": "document",
+	}, "file", "page.txt", []byte("<!doctype html><script>alert(1)</script>"), http.StatusUnprocessableEntity)
+	if activeContentResp["data"].(map[string]any)["error_code"] != "invalid_upload" {
+		t.Fatalf("active content should be rejected: %#v", activeContentResp)
+	}
+
+	policyLimitResp := performMultipartWithStatus(t, engine, "/console/v1/storage/upload", token, map[string]string{
+		"disk":    "local",
+		"purpose": "document",
+	}, "file", "large.txt", bytes.Repeat([]byte("a"), 65), http.StatusRequestEntityTooLarge)
+	if policyLimitResp["data"].(map[string]any)["error_code"] != "upload_too_large" {
+		t.Fatalf("policy size limit should be rejected: %#v", policyLimitResp)
+	}
+
+	bodyLimitResp := performMultipartWithStatus(t, engine, "/console/v1/storage/upload", token, map[string]string{
+		"disk":    "local",
+		"purpose": "document",
+	}, "file", "body.txt", bytes.Repeat([]byte("a"), 2048), http.StatusRequestEntityTooLarge, true)
+	if bodyLimitResp["data"].(map[string]any)["error_code"] != "request_body_too_large" {
+		t.Fatalf("request body size limit should be rejected: %#v", bodyLimitResp)
 	}
 
 	operationLogsResp := performJSON(t, engine, http.MethodGet, "/console/v1/logs/operations?list_all=true", nil, token)
@@ -434,6 +472,10 @@ func seedConsoleTestData(t *testing.T, db *gorm.DB, enforcer *rbac.Enforcer) {
 }
 
 func performMultipart(t *testing.T, engine *gin.Engine, requestPath, token string, fields map[string]string, fileField, fileName string, fileContent []byte) map[string]any {
+	return performMultipartWithStatus(t, engine, requestPath, token, fields, fileField, fileName, fileContent, http.StatusOK)
+}
+
+func performMultipartWithStatus(t *testing.T, engine *gin.Engine, requestPath, token string, fields map[string]string, fileField, fileName string, fileContent []byte, expectedStatus int, unknownLength ...bool) map[string]any {
 	t.Helper()
 
 	var body bytes.Buffer
@@ -455,6 +497,9 @@ func performMultipart(t *testing.T, engine *gin.Engine, requestPath, token strin
 	}
 
 	req := httptest.NewRequest(http.MethodPost, requestPath, &body)
+	if len(unknownLength) > 0 && unknownLength[0] {
+		req.ContentLength = -1
+	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -462,7 +507,7 @@ func performMultipart(t *testing.T, engine *gin.Engine, requestPath, token strin
 
 	resp := httptest.NewRecorder()
 	engine.ServeHTTP(resp, req)
-	if resp.Code != http.StatusOK {
+	if resp.Code != expectedStatus {
 		t.Fatalf("unexpected status %d for multipart %s: %s", resp.Code, requestPath, resp.Body.String())
 	}
 

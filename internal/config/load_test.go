@@ -324,3 +324,41 @@ func TestLoadWithOptionsReadsLoginProtectionOverrides(t *testing.T) {
 		t.Fatalf("unexpected login protection overrides: %#v", login)
 	}
 }
+
+func TestLoadWithOptionsDefaultsSecureUploadPolicies(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte("app:\n  env: test\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "console"})
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Server.MaxBodyBytes != 32*1024*1024 {
+		t.Fatalf("unexpected max body bytes: %d", cfg.Server.MaxBodyBytes)
+	}
+	if cfg.Storage.DefaultUploadPolicy != "document" {
+		t.Fatalf("unexpected default upload policy: %q", cfg.Storage.DefaultUploadPolicy)
+	}
+	for _, name := range []string{"avatar", "document"} {
+		policy, ok := cfg.Storage.UploadPolicies[name]
+		if !ok || policy.MaxBytes <= 0 || len(policy.Extensions) == 0 || len(policy.MIMETypes) == 0 {
+			t.Fatalf("missing secure %s policy: %#v", name, policy)
+		}
+	}
+}
+
+func TestLoadWithOptionsReadsMaxBodyBytesOverride(t *testing.T) {
+	t.Setenv("SERVER_MAX_BODY_BYTES", "4096")
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte("app:\n  env: test\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "api"})
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Server.MaxBodyBytes != 4096 {
+		t.Fatalf("expected max body override, got %d", cfg.Server.MaxBodyBytes)
+	}
+}

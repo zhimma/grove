@@ -14,6 +14,7 @@ server:
   read_timeout: ${SERVER_READ_TIMEOUT:30}
   write_timeout: ${SERVER_WRITE_TIMEOUT:30}
   max_header_bytes: ${SERVER_MAX_HEADER_BYTES:1048576}
+  max_body_bytes: ${SERVER_MAX_BODY_BYTES:33554432}
 
 log:
   level: ${LOG_LEVEL:info}
@@ -71,6 +72,18 @@ casbin:
 
 storage:
   default: ${STORAGE_DEFAULT:local}
+  default_upload_policy: document
+  upload_policies:
+    avatar:
+      directory: avatars
+      max_bytes: 5242880
+      extensions: [.jpg, .jpeg, .png, .gif, .webp]
+      mime_types: [image/jpeg, image/png, image/gif, image/webp]
+    document:
+      directory: documents
+      max_bytes: 20971520
+      extensions: [.pdf, .txt, .csv, .doc, .docx, .xls, .xlsx]
+      mime_types: [application/pdf, text/plain, text/csv, application/x-ole-storage, application/zip, application/octet-stream]
   disks:
     local:
       driver: ${STORAGE_LOCAL_DRIVER:local}

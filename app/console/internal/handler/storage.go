@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"errors"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
 	"github.com/zhimma/grove/internal/provider"
-	"github.com/zhimma/grove/pkg/request"
+	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
 	"github.com/zhimma/grove/pkg/validation"
@@ -37,8 +40,7 @@ func (h *StorageHandler) Config(c *gin.Context) {
 		return
 	}
 	result, err := h.service.GetStorageConfig(c.Request.Context(), consoleservice.GetStorageConfigInput{
-		UserID: request.GetAdminID(c),
-		Disk:   req.Disk,
+		Disk: req.Disk,
 	})
 	if err != nil {
 		response.Fail(c, err)
@@ -59,14 +61,18 @@ func (h *StorageHandler) AllConfigs(c *gin.Context) {
 func (h *StorageHandler) Upload(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			response.Fail(c, errx.RequestBodyTooLarge(maxBytesErr.Limit))
+			return
+		}
 		response.Fail(c, "file is required")
 		return
 	}
 	result, serviceErr := h.service.UploadFile(c.Request.Context(), consoleservice.UploadStorageFileInput{
-		UserID:    request.GetAdminID(c),
-		Disk:      c.PostForm("disk"),
-		Directory: c.PostForm("directory"),
-		File:      file,
+		Disk:    c.PostForm("disk"),
+		Purpose: c.PostForm("purpose"),
+		File:    file,
 	})
 	if serviceErr != nil {
 		response.Fail(c, serviceErr)
@@ -78,7 +84,8 @@ func (h *StorageHandler) Upload(c *gin.Context) {
 		"path":      result.Path,
 		"filename":  result.Filename,
 		"size":      result.Size,
-		"directory": c.PostForm("directory"),
+		"purpose":   result.Purpose,
+		"mime_type": result.ContentType,
 	})
 	response.Success(c, result)
 }

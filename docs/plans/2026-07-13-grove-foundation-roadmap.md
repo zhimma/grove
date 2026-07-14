@@ -94,7 +94,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 
 - [x] Task 8：实现可持久化 Console Session 和 refresh token 轮换。
 - [x] Task 9：增加登录限流、失败锁定与可信代理配置。
-- [ ] Task 10：增加请求体和文件上传限制。
+- [x] Task 10：增加请求体和文件上传限制。
 - [ ] Task 11：修复系统配置敏感值和审计泄漏。
 - [ ] Task 12：修复 GORM 与 Casbin 的一致性边界。
 
@@ -807,7 +807,7 @@ go test ./internal/middleware ./pkg/ratelimit ./app/console/internal/service -ra
 
 ### Task 10：增加请求体和文件上传限制
 
-**Status:** `[-] In Progress`
+**Status:** `[x] Completed`
 
 **Owner:** Codex
 
@@ -815,7 +815,18 @@ go test ./internal/middleware ./pkg/ratelimit ./app/console/internal/service -ra
 
 **Started at:** 2026-07-14
 
+**Completed at:** 2026-07-14
+
 **Design:** `docs/plans/2026-07-14-upload-security-design.md`
+
+**Verification:**
+
+- `go test -race ./internal/middleware ./internal/bootstrap ./pkg/storage ./pkg/validation ./app/console/internal/service ./app/console/internal/router ./app/console/internal/server`：PASS。
+- `go test ./...`、`go vet ./...`、`make build`、`git diff --check`：PASS。
+- Console `vue-tsc --noEmit --skipLibCheck`：PASS，直接使用现有离线 module cache，未安装或下载依赖。
+- 前端变更文件与 package/lockfile 使用本地 Prettier 校验：PASS。
+- 路由测试覆盖 document 成功上传、策略目录、主动内容伪装拒绝、策略大小 413 和未知长度请求体 413。
+- Local 驱动覆盖流式写入、内容一致性、读失败时临时文件与目标文件清理；静态文件响应 `nosniff`。
 
 **Files:**
 
@@ -825,10 +836,13 @@ go test ./internal/middleware ./pkg/ratelimit ./app/console/internal/service -ra
 - Modify: `pkg/storage/local.go`
 - Modify: `pkg/storage/s3.go`
 - Modify: `web/admin-vben/apps/console/src/components/upload/FileUpload.vue`
-- Modify: `web/admin-vben/apps/console/src/utils/storage/`
+- Delete: `web/admin-vben/apps/console/src/utils/storage/` 中 COS、OSS、未实现 S3 适配器和工厂残留
+- Modify: `web/admin-vben/apps/console/src/api/core/file.ts`
 - Modify: `internal/config/types.go`
+- Modify: `internal/bootstrap/middleware.go`
+- Modify: `internal/provider/provider.go`
 - Modify: `config.example.yaml`
-- Test: storage and router tests
+- Test: config、middleware、validation、storage、server、router 和 Vue typecheck
 
 **Required behavior:**
 
@@ -841,7 +855,7 @@ go test ./internal/middleware ./pkg/ratelimit ./app/console/internal/service -ra
 - 前端只消费后端返回的 `local / s3` ClientConfig；删除当前默认 COS、未实现 OSS/S3 等与后端协议冲突的残留适配器。
 - local 使用服务端 multipart 上传；S3 STS 实现后再启用前端直传。
 
-**Verification:**
+**Required verification command:**
 
 ```bash
 go test ./pkg/storage ./app/console/internal/router -v

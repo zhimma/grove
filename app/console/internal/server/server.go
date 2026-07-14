@@ -56,6 +56,11 @@ func registerLocalStorageRoutes(engine *gin.Engine, cfg *config.Config) {
 		if strings.TrimSpace(disk.BaseURL) == "" || strings.TrimSpace(disk.Root) == "" {
 			continue
 		}
-		engine.Static(strings.TrimRight(disk.BaseURL, "/"), disk.Root)
+		group := engine.Group(strings.TrimRight(disk.BaseURL, "/"))
+		group.Use(func(c *gin.Context) {
+			c.Header("X-Content-Type-Options", "nosniff")
+			c.Next()
+		})
+		group.Static("/", disk.Root)
 	}
 }

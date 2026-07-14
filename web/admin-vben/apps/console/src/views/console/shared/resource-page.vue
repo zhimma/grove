@@ -361,13 +361,9 @@ watch(
             <Cascader v-else-if="field.type === 'cascader'" v-model:value="editModel[field.key]"
               :options="field.options" :load-data="field.loadData" placeholder="请选择" change-on-select />
 
-            <!-- <OssUpload v-else-if="field.type === 'uploadImg'" :sts-endpoint="field.stsEndpoint" :prefix="field.prefix"
-              :max-size="field.maxSize ? field.maxSize : 50" :accept="field.accept || '.jpg,.jpeg,.png,.pdf'"
-              @success="handleSuccess" @error="handleError" /> -->
-
             <FileUpload v-else-if="field.type === 'uploadImg'" v-model:value="editModel[field.key]"
-              :storage-type="field.storageType || 'cos'" :prefix="field.prefix" :max-count="field.maxCount || 1"
-              :max-size="field.maxSize ? field.maxSize : 50" list-type="picture-card"
+              :disk="field.disk" :purpose="field.purpose || 'avatar'" :accept="field.accept"
+              :max-count="field.maxCount || 1" :max-size="field.maxSize ? field.maxSize : 5" list-type="picture-card"
               :upload-text="field.uploadText || '上传图片'" />
           </Form.Item>
         </template>

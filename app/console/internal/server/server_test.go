@@ -72,4 +72,7 @@ func TestRegisterLocalStorageRoutesServesLocalDisk(t *testing.T) {
 	if resp.Body.String() != "hello" {
 		t.Fatalf("unexpected body: %q", resp.Body.String())
 	}
+	if got := resp.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("expected nosniff header, got %q", got)
+	}
 }

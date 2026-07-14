@@ -1,13 +1,13 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/url"
 	"os"
 	"path"
@@ -53,7 +53,14 @@ func (d *LocalDriver) Name() string {
 	return "local"
 }
 
-func (d *LocalDriver) Put(_ context.Context, objectPath string, content []byte) error {
+func (d *LocalDriver) Put(ctx context.Context, objectPath string, content []byte) error {
+	return d.PutStream(ctx, objectPath, bytes.NewReader(content), int64(len(content)), contentTypeByPath(objectPath))
+}
+
+func (d *LocalDriver) PutStream(ctx context.Context, objectPath string, reader io.Reader, size int64, _ string) error {
+	if reader == nil || size < 0 {
+		return fmt.Errorf("invalid local object stream")
+	}
 	fullPath, err := d.fullPath(objectPath)
 	if err != nil {
 		return err
@@ -61,29 +68,48 @@ func (d *LocalDriver) Put(_ context.Context, objectPath string, content []byte) 
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 		return fmt.Errorf("create local storage directory: %w", err)
 	}
-	if err := os.WriteFile(fullPath, content, 0o600); err != nil {
+	tempFile, err := os.CreateTemp(filepath.Dir(fullPath), ".grove-upload-*")
+	if err != nil {
+		return fmt.Errorf("create local temporary object: %w", err)
+	}
+	tempPath := tempFile.Name()
+	committed := false
+	defer func() {
+		_ = tempFile.Close()
+		if !committed {
+			_ = os.Remove(tempPath)
+		}
+	}()
+
+	written, err := io.Copy(tempFile, io.LimitReader(contextReader{ctx: ctx, reader: reader}, size+1))
+	if err != nil {
 		return fmt.Errorf("write local object: %w", err)
 	}
+	if written != size {
+		return fmt.Errorf("write local object: expected %d bytes, copied %d", size, written)
+	}
+	if err := tempFile.Close(); err != nil {
+		return fmt.Errorf("close local object: %w", err)
+	}
+	if err := os.Rename(tempPath, fullPath); err != nil {
+		return fmt.Errorf("commit local object: %w", err)
+	}
+	committed = true
 	return nil
 }
 
-func (d *LocalDriver) PutFile(ctx context.Context, objectPath string, file *multipart.FileHeader) (string, error) {
-	src, err := file.Open()
-	if err != nil {
-		return "", fmt.Errorf("open upload file: %w", err)
-	}
-	defer src.Close()
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
 
-	content, err := io.ReadAll(src)
-	if err != nil {
-		return "", fmt.Errorf("read upload file: %w", err)
+func (r contextReader) Read(p []byte) (int, error) {
+	select {
+	case <-r.ctx.Done():
+		return 0, r.ctx.Err()
+	default:
+		return r.reader.Read(p)
 	}
-
-	targetPath := buildUploadedObjectPath(objectPath, file.Filename)
-	if err := d.Put(ctx, targetPath, content); err != nil {
-		return "", err
-	}
-	return targetPath, nil
 }
 
 func (d *LocalDriver) Delete(_ context.Context, objectPaths ...string) error {

@@ -36,10 +36,12 @@ export interface ConsoleFormField {
   onChange?: (value: any) => void;
   /** 加载数据（级联选择器用） */
   loadData?: (selectedOptions: any[]) => void;
-  /** 存储驱动类型（上传组件用） */
-  storageType?: 'cos' | 'oss' | 's3';
-  /** 文件路径前缀（上传组件用） */
-  prefix?: string;
+  /** 后端存储磁盘（上传组件用） */
+  disk?: string;
+  /** 后端命名上传策略（上传组件用） */
+  purpose?: string;
+  /** 接受的文件类型（上传组件用） */
+  accept?: string;
   /** 最大文件大小，单位MB（上传组件用） */
   maxSize?: number;
   /** 最大文件数量（上传组件用） */

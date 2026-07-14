@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -17,8 +18,8 @@ func TestGlobalAllowsNilConfig(t *testing.T) {
 	loader := NewMiddlewareLoader(nil, "api")
 
 	middlewares := loader.Global()
-	if len(middlewares) != 5 {
-		t.Fatalf("expected 5 default middlewares, got %d", len(middlewares))
+	if len(middlewares) != 6 {
+		t.Fatalf("expected 6 default middlewares, got %d", len(middlewares))
 	}
 }
 
@@ -49,6 +50,44 @@ func TestGlobalMiddlewareSetsSecurityHeaders(t *testing.T) {
 		if got := recorder.Header().Get(name); got != value {
 			t.Errorf("expected %s %q, got %q", name, value, got)
 		}
+	}
+}
+
+func TestGlobalBodyLimitPreservesCORSAndAccessLog(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	logBuffer := &testLogWriter{}
+	previous := logger.Logger()
+	logger.InitForTest(zerolog.New(logBuffer))
+	t.Cleanup(func() { logger.InitForTest(previous) })
+
+	engine := gin.New()
+	loader := NewMiddlewareLoader(&config.Config{
+		App:    config.AppConfig{Debug: false},
+		Server: config.ServerConfig{MaxBodyBytes: 4},
+		CORS: config.CORSConfig{
+			Enabled:        true,
+			AllowedOrigins: []string{"https://console.example.com"},
+			AllowedMethods: []string{"POST"},
+			AllowedHeaders: []string{"Content-Type"},
+		},
+	}, "console")
+	engine.Use(loader.Global()...)
+	engine.POST("/upload", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/upload", bytes.NewBufferString("12345"))
+	req.Header.Set("Origin", "https://console.example.com")
+	engine.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d", recorder.Code)
+	}
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "https://console.example.com" {
+		t.Fatalf("expected CORS header on rejected body, got %q", got)
+	}
+	if logBuffer.CountMessage("请求已完成") != 1 {
+		t.Fatalf("oversized request must be logged: %s", logBuffer.String())
 	}
 }
 

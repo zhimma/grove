@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -70,6 +71,7 @@ func defaultConfig() Config {
 			ReadTimeout:     30,
 			WriteTimeout:    30,
 			MaxHeaderBytes:  1 << 20,
+			MaxBodyBytes:    32 * 1024 * 1024,
 		},
 		Log: LogConfig{
 			Level:   "info",
@@ -104,7 +106,9 @@ func defaultConfig() Config {
 			Enforcers: map[string]CasbinEnforcerConfig{},
 		},
 		Storage: StorageConfig{
-			Default: "local",
+			Default:             "local",
+			DefaultUploadPolicy: "document",
+			UploadPolicies:      defaultUploadPolicies(),
 			Disks: map[string]StorageDiskConfig{
 				"local": {
 					Driver:  "local",
@@ -257,6 +261,9 @@ func applyEnvironmentOverrides(cfg *Config) {
 	if value := os.Getenv("CONSOLE_PORT"); value != "" {
 		cfg.ConsolePort = value
 	}
+	if value := os.Getenv("SERVER_MAX_BODY_BYTES"); value != "" {
+		cfg.Server.MaxBodyBytes = parseInt64(value, cfg.Server.MaxBodyBytes)
+	}
 	if value := os.Getenv("JWT_SECRET"); value != "" {
 		cfg.JWT.Secret = value
 	}
@@ -342,6 +349,14 @@ func parseInt(value string, fallback int) int {
 	return parsed
 }
 
+func parseInt64(value string, fallback int64) int64 {
+	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
 func (c *Config) normalize(service string, debugConfigured bool) {
 	if strings.TrimSpace(c.App.Name) == "" {
 		c.App.Name = "grove"
@@ -354,6 +369,9 @@ func (c *Config) normalize(service string, debugConfigured bool) {
 	}
 	if strings.TrimSpace(c.ConsolePort) == "" {
 		c.ConsolePort = "8081"
+	}
+	if c.Server.MaxBodyBytes <= 0 {
+		c.Server.MaxBodyBytes = 32 * 1024 * 1024
 	}
 	if strings.TrimSpace(c.Log.Path) == "" {
 		c.Log.Path = "./logs"
@@ -431,6 +449,12 @@ func (c *Config) normalize(service string, debugConfigured bool) {
 			break
 		}
 	}
+	if strings.TrimSpace(c.Storage.DefaultUploadPolicy) == "" {
+		c.Storage.DefaultUploadPolicy = "document"
+	}
+	if len(c.Storage.UploadPolicies) == 0 {
+		c.Storage.UploadPolicies = defaultUploadPolicies()
+	}
 	if len(c.Docs.Schemes) == 0 {
 		c.Docs.Schemes = []string{"http"}
 	}
@@ -500,8 +524,52 @@ func (c Config) Validate(service string) error {
 			return fmt.Errorf("storage disk %q uses unsupported driver %q", name, disk.Driver)
 		}
 	}
+	defaultPolicy := strings.ToLower(strings.TrimSpace(c.Storage.DefaultUploadPolicy))
+	if _, ok := c.Storage.UploadPolicies[defaultPolicy]; !ok {
+		return fmt.Errorf("storage default upload policy %q is not configured", defaultPolicy)
+	}
+	for name, policy := range c.Storage.UploadPolicies {
+		policyName := strings.ToLower(strings.TrimSpace(name))
+		if policyName == "" {
+			return fmt.Errorf("storage upload policy name cannot be empty")
+		}
+		if policy.MaxBytes <= 0 {
+			return fmt.Errorf("storage upload policy %q max_bytes must be positive", policyName)
+		}
+		if len(policy.Extensions) == 0 || len(policy.MIMETypes) == 0 {
+			return fmt.Errorf("storage upload policy %q requires extensions and mime_types", policyName)
+		}
+		cleanDir := strings.TrimPrefix(path.Clean("/"+strings.TrimSpace(policy.Directory)), "/")
+		if cleanDir == "." || cleanDir == "" || cleanDir != strings.Trim(strings.TrimSpace(policy.Directory), "/") {
+			return fmt.Errorf("storage upload policy %q directory is invalid", policyName)
+		}
+	}
 	_ = service
 	return nil
+}
+
+func defaultUploadPolicies() map[string]UploadPolicyConfig {
+	return map[string]UploadPolicyConfig{
+		"avatar": {
+			Directory:  "avatars",
+			MaxBytes:   5 * 1024 * 1024,
+			Extensions: []string{".jpg", ".jpeg", ".png", ".gif", ".webp"},
+			MIMETypes:  []string{"image/jpeg", "image/png", "image/gif", "image/webp"},
+		},
+		"document": {
+			Directory:  "documents",
+			MaxBytes:   20 * 1024 * 1024,
+			Extensions: []string{".pdf", ".txt", ".csv", ".doc", ".docx", ".xls", ".xlsx"},
+			MIMETypes: []string{
+				"application/pdf",
+				"text/plain",
+				"text/csv",
+				"application/x-ole-storage",
+				"application/zip",
+				"application/octet-stream",
+			},
+		},
+	}
 }
 
 func validatePort(name, value string) error {

@@ -36,5 +36,13 @@ func (l *MiddlewareLoader) Global() []gin.HandlerFunc {
 	if l.cfg != nil && l.cfg.CORS.Enabled {
 		middlewares = append(middlewares, appmiddleware.CORS(l.cfg.CORS))
 	}
+	middlewares = append(middlewares, appmiddleware.BodyLimit(bodyLimit(l.cfg)))
 	return middlewares
+}
+
+func bodyLimit(cfg *config.Config) int64 {
+	if cfg == nil {
+		return 0
+	}
+	return cfg.Server.MaxBodyBytes
 }

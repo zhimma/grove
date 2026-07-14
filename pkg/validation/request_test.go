@@ -143,6 +143,30 @@ func TestBindJSONUsesBadRequestForJSONSyntaxError(t *testing.T) {
 	}
 }
 
+func TestBindJSONUsesPayloadTooLargeForMaxBytesError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	type payload struct {
+		Name string `json:"name"`
+	}
+	req := httptest.NewRequest(http.MethodPost, "/roles", bytes.NewBufferString(`{"name":"too large"}`))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	req.Body = http.MaxBytesReader(recorder, req.Body, 4)
+
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = req
+	var input payload
+	err := BindJSON(c, &input)
+	if err == nil {
+		t.Fatal("expected payload-too-large error")
+	}
+	httpErr := errx.Normalize(err)
+	if httpErr.HTTPStatus != http.StatusRequestEntityTooLarge || httpErr.Code != "request_body_too_large" {
+		t.Fatalf("unexpected error: %#v", httpErr)
+	}
+}
+
 func TestBindJSONUsesValidationStatusForCustomValidate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
