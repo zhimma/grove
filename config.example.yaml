@@ -127,6 +127,7 @@ docs:
   description: ${DOCS_DESCRIPTION:API framework scaffold for interface-driven services}
   version: ${DOCS_VERSION:1.0.0}
   base_path: ${DOCS_BASE_PATH:/api/v1}
+  scalar_script_url: ${DOCS_SCALAR_SCRIPT_URL:https://cdn.jsdelivr.net/npm/@scalar/api-reference}
   schemes:
     - ${DOCS_SCHEME_1:http}
 

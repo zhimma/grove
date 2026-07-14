@@ -36,6 +36,9 @@ jobs:
       - name: Run backend tests
         run: go test ./...
 
+      - name: Check route and OpenAPI contracts
+        run: go test ./app/api/internal/docs ./app/console/internal/docs -run 'RouteContract' -v
+
       - name: Run PostgreSQL integration tests
         run: go test -tags=integration ./tests/integration -v
 

@@ -115,7 +115,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 - [x] Task 18：消除后端静态菜单真相源。
 - [x] Task 19：清理未使用的全局单例 API 和命名。
 - [x] Task 20：收敛重复分页和响应映射。
-- [ ] Task 21：完善 OpenAPI 合同和漂移检查。
+- [x] Task 21：完善 OpenAPI 合同和漂移检查。
 - [ ] Task 22：增加 readiness、指标、trace 和安全 CI。
 - [ ] Task 23：建立前端自定义代码测试基线。
 
@@ -1290,7 +1290,25 @@ go test ./pkg/scheduler -race -count=20
 
 ### Task 21：完善 OpenAPI 合同和漂移检查
 
-**Status:** `[ ] Planned`
+**Status:** `[x] Completed`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Completed at:** 2026-07-14
+
+**Design:** `docs/plans/2026-07-14-openapi-contract-design.md`
+
+**Verification:**
+
+- `go test ./...`、`go test -race ./...`、`go vet ./...`、`make build`、`git diff --check`：PASS。
+- `go test ./app/api/internal/docs ./app/console/internal/docs -run 'RouteContract' -v`：PASS。
+- API 合同覆盖 demo disabled、enabled 和 production ignored 三种路由状态；Console 合同覆盖全部 `/console/v1` 业务路由。
+- OpenAPI operation 包含唯一 operation ID、query/path/JSON/multipart 请求、成功 envelope、错误 envelope 和 Go 类型生成的 component schema。
+- Scalar 默认使用 CDN，同时支持 `docs.scalar_script_url` 配置同源或自托管脚本 URL；`docs.enabled=false` 继续完全关闭文档端点。
 
 **Files:**
 

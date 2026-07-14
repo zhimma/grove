@@ -134,12 +134,13 @@ func defaultConfig() Config {
 			},
 		},
 		Docs: DocsConfig{
-			Enabled:     true,
-			Title:       "Grove API",
-			Description: "API framework scaffold for interface-driven services",
-			Version:     "1.0.0",
-			BasePath:    "/api/v1",
-			Schemes:     []string{"http"},
+			Enabled:         true,
+			Title:           "Grove API",
+			Description:     "API framework scaffold for interface-driven services",
+			Version:         "1.0.0",
+			BasePath:        "/api/v1",
+			Schemes:         []string{"http"},
+			ScalarScriptURL: "https://cdn.jsdelivr.net/npm/@scalar/api-reference",
 		},
 		CORS: CORSConfig{
 			Enabled: true,
@@ -483,6 +484,9 @@ func (c *Config) normalize(service string, debugConfigured bool) {
 	}
 	if len(c.Docs.Schemes) == 0 {
 		c.Docs.Schemes = []string{"http"}
+	}
+	if strings.TrimSpace(c.Docs.ScalarScriptURL) == "" {
+		c.Docs.ScalarScriptURL = "https://cdn.jsdelivr.net/npm/@scalar/api-reference"
 	}
 	if c.Security.TrustedProxies == nil {
 		c.Security.TrustedProxies = []string{}

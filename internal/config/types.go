@@ -142,12 +142,13 @@ type StorageSTSConfig struct {
 }
 
 type DocsConfig struct {
-	Enabled     bool     `yaml:"enabled"`
-	Title       string   `yaml:"title"`
-	Description string   `yaml:"description"`
-	Version     string   `yaml:"version"`
-	BasePath    string   `yaml:"base_path"`
-	Schemes     []string `yaml:"schemes"`
+	Enabled         bool     `yaml:"enabled"`
+	Title           string   `yaml:"title"`
+	Description     string   `yaml:"description"`
+	Version         string   `yaml:"version"`
+	BasePath        string   `yaml:"base_path"`
+	Schemes         []string `yaml:"schemes"`
+	ScalarScriptURL string   `yaml:"scalar_script_url"`
 }
 
 type CORSConfig struct {

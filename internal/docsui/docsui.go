@@ -3,6 +3,7 @@ package docsui
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -12,128 +13,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const DefaultScalarScriptURL = "https://cdn.jsdelivr.net/npm/@scalar/api-reference"
+
 type OpenAPITarget struct {
 	ID          string
 	Label       string
 	UpstreamURL string
 }
 
-type Document struct {
-	Title       string
-	Description string
-	Version     string
-	Servers     []string
-	Paths       []Path
-}
-
-type Path struct {
-	Path       string
-	Operations []Operation
-}
-
-type Operation struct {
-	Method      string
-	Summary     string
-	Response200 string
-	BearerAuth  bool
-	Parameters  []Parameter
-}
-
-type Parameter struct {
-	Name        string
-	In          string
-	Required    bool
-	Type        string
-	Description string
-}
-
 type ScalarOptions struct {
 	Title       string
 	DocsPath    string
 	OpenAPIPath string
+	ScriptURL   string
 	Targets     []OpenAPITarget
 }
 
-type OpenAPIDocumentBuilder func(*gin.Context) (map[string]any, error)
-
-func BuildOpenAPIDocument(doc Document) map[string]any {
-	paths := make(map[string]any, len(doc.Paths))
-	for _, path := range doc.Paths {
-		operations := make(map[string]any, len(path.Operations))
-		for _, operation := range path.Operations {
-			method := strings.ToLower(strings.TrimSpace(operation.Method))
-			if method == "" {
-				continue
-			}
-
-			op := map[string]any{
-				"summary": operation.Summary,
-				"responses": map[string]any{
-					"200": map[string]any{
-						"description": operation.Response200,
-					},
-				},
-			}
-			if operation.BearerAuth {
-				op["security"] = []map[string]any{{"BearerAuth": []string{}}}
-			}
-			if len(operation.Parameters) > 0 {
-				parameters := make([]map[string]any, 0, len(operation.Parameters))
-				for _, parameter := range operation.Parameters {
-					param := map[string]any{
-						"name":     parameter.Name,
-						"in":       parameter.In,
-						"required": parameter.Required,
-						"schema": map[string]any{
-							"type": strings.TrimSpace(parameter.Type),
-						},
-					}
-					if parameter.Description != "" {
-						param["description"] = parameter.Description
-					}
-					parameters = append(parameters, param)
-				}
-				op["parameters"] = parameters
-			}
-			operations[method] = op
-		}
-		if len(operations) > 0 {
-			paths[path.Path] = operations
-		}
-	}
-
-	servers := make([]map[string]any, 0, len(doc.Servers))
-	for _, server := range doc.Servers {
-		server = strings.TrimSpace(server)
-		if server == "" {
-			continue
-		}
-		servers = append(servers, map[string]any{"url": server})
-	}
-
-	result := map[string]any{
-		"openapi": "3.0.3",
-		"info": map[string]any{
-			"title":       doc.Title,
-			"description": doc.Description,
-			"version":     doc.Version,
-		},
-		"paths": paths,
-		"components": map[string]any{
-			"securitySchemes": map[string]any{
-				"BearerAuth": map[string]any{
-					"type":         "http",
-					"scheme":       "bearer",
-					"bearerFormat": "JWT",
-				},
-			},
-		},
-	}
-	if len(servers) > 0 {
-		result["servers"] = servers
-	}
-	return result
-}
+type OpenAPIDocumentBuilder func(*gin.Context) (Document, error)
 
 func RegisterScalarDocs(router gin.IRoutes, builder OpenAPIDocumentBuilder, opts ScalarOptions) {
 	if router == nil || builder == nil {
@@ -149,14 +45,22 @@ func RegisterScalarDocs(router gin.IRoutes, builder OpenAPIDocumentBuilder, opts
 	if title == "" {
 		title = "API Docs"
 	}
+	scriptURL := normalizeScalarScriptURL(opts.ScriptURL)
 
-	router.GET(docsPath, serveScalarPage(title, openAPIPath))
+	router.GET(docsPath, serveScalarPage(title, openAPIPath, scriptURL))
 	router.GET(openAPIPath, func(c *gin.Context) {
 		doc, err := builder(c)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"code":    http.StatusInternalServerError,
 				"message": "构建接口文档失败",
+			})
+			return
+		}
+		if err := doc.Validate(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"code":    http.StatusInternalServerError,
+				"message": "接口文档合同无效",
 			})
 			return
 		}
@@ -175,7 +79,7 @@ func RegisterScalarDocs(router gin.IRoutes, builder OpenAPIDocumentBuilder, opts
 	}
 }
 
-func serveScalarPage(title string, openAPIPath string) gin.HandlerFunc {
+func serveScalarPage(title string, openAPIPath string, scriptURL string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		customCSS := `
         .light-mode {
@@ -189,7 +93,7 @@ func serveScalarPage(title string, openAPIPath string) gin.HandlerFunc {
           --scalar-border-color: rgba(15, 23, 42, 0.08);
         }
       `
-		html := fmt.Sprintf(`<!doctype html>
+		page := fmt.Sprintf(`<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -207,7 +111,7 @@ func serveScalarPage(title string, openAPIPath string) gin.HandlerFunc {
 </head>
 <body>
   <div id="app"></div>
-  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+  <script src="%s"></script>
   <script>
     const docsOpenApiUrl = new URL(%s, window.location.origin).toString()
     Scalar.createApiReference('#app', {
@@ -225,14 +129,40 @@ func serveScalarPage(title string, openAPIPath string) gin.HandlerFunc {
     })
   </script>
 </body>
-</html>`, title, strconv.Quote(openAPIPath), strconv.Quote(customCSS))
+</html>`, html.EscapeString(title), html.EscapeString(scriptURL), strconv.Quote(openAPIPath), strconv.Quote(customCSS))
 
 		c.Header(
 			"Content-Security-Policy",
-			"default-src 'self'; script-src 'self' 'unsafe-inline' blob: https://cdn.jsdelivr.net; script-src-elem 'self' 'unsafe-inline' blob: https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: https:;",
+			fmt.Sprintf("default-src 'self'; script-src 'self' 'unsafe-inline' blob: %s; script-src-elem 'self' 'unsafe-inline' blob: %s; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: https:;", scalarScriptSource(scriptURL), scalarScriptSource(scriptURL)),
 		)
-		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(page))
 	}
+}
+
+func normalizeScalarScriptURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return DefaultScalarScriptURL
+	}
+	if strings.HasPrefix(raw, "/") {
+		return raw
+	}
+	parsed, err := url.Parse(raw)
+	if err == nil && parsed.Host != "" && (parsed.Scheme == "http" || parsed.Scheme == "https") {
+		return parsed.String()
+	}
+	if !strings.Contains(raw, ":") {
+		return "/" + strings.TrimLeft(raw, "/")
+	}
+	return DefaultScalarScriptURL
+}
+
+func scalarScriptSource(scriptURL string) string {
+	parsed, err := url.Parse(scriptURL)
+	if err != nil || parsed.Host == "" {
+		return "'self'"
+	}
+	return parsed.Scheme + "://" + parsed.Host
 }
 
 func serveScalarProxy(targets []OpenAPITarget) gin.HandlerFunc {
