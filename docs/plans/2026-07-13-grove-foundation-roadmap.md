@@ -88,6 +88,8 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 
 完成条件：全新环境可以按文档初始化；重复 seed 不改变管理员密码；生成模块可直接编译；数据库删除语义明确。
 
+**Checkpoint 2026-07-14:** Task 1–7 已完成；`go test ./...`、`go vet ./...`、`make build` 通过。`go test -race ./...` 暴露 `pkg/scheduler.TestScheduler_Mutex` 共享计数器竞争，归入 Task 15。前端依赖未安装，按用户要求未执行下载，typecheck/build 待本地依赖可用后补跑。
+
 ### Milestone 2：认证、授权与输入安全
 
 - [ ] Task 8：实现可持久化 Console Session 和 refresh token 轮换。
@@ -927,6 +929,8 @@ type Store interface {
 - 增加 `scheduler.enabled` 和 `scheduler.timezone` 配置。
 - 明确哪些入口启用 Scheduler；不得存在文档有配置但运行时永远为 nil。
 - 修复 race 测试，使用 atomic 或 channel 同步。
+
+**Observed failure 2026-07-14:** `go test -race ./...` 在 `pkg/scheduler/scheduler_test.go:77` 读取计数器时，与测试任务函数第 58 行写入发生竞争；生产调度器并发语义仍需按本任务完整复核，不能只压掉测试告警。
 
 **Verification:**
 
