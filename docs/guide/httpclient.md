@@ -1,25 +1,16 @@
 # HTTP 客户端
 
-本文档介绍当前框架里的 `pkg/httpclient`。它用于调用第三方 API，风格接近链式客户端，但接口以当前仓库真实实现为准。
-
-## 当前能力
-
-- 基础请求：`Get/Post/Put/Patch/Delete`
-- 链式客户端配置：`BaseURL/WithHeader/WithQueryParam/WithRetry/Timeout`
-- 请求构建器：`NewRequest(...).JSON(...).Form(...).AddFile(...).Do()`
-- 文件下载：`Download`、`DownloadToFile`
-- 流式请求：`Stream`
-- 请求前后钩子：`BeforeRequest`、`AfterResponse`
+`pkg/httpclient` 用于调用第三方 HTTP API。共享 `Client` 只保存 Transport、基础 URL 和默认超时；header、query、body、retry 和 hook 都属于单次 Request。
 
 ## 快速开始
 
 ```go
-client := httpclient.New().
-    BaseURL("https://api.example.com").
-    WithHeader("Accept", "application/json").
-    WithRetry(3, time.Second)
+client := httpclient.New().BaseURL("https://api.example.com")
 
-resp, err := client.Get("/users")
+resp, err := client.NewRequest(http.MethodGet, "/users").
+    WithHeader("Authorization", "Bearer token").
+    WithQueryParam("page", "1").
+    DoWithContext(ctx)
 if err != nil {
     return err
 }
@@ -30,110 +21,150 @@ if err := resp.JSON(&users); err != nil {
 }
 ```
 
-## 常见用法
-
-### GET 与查询参数
+`Client` 配置方法返回新实例，不修改原值，因此 Provider 中的共享 Client 可被并发复用：
 
 ```go
-client := httpclient.New().
+apiClient := provider.HTTPClient.
     BaseURL("https://api.example.com").
-    WithQueryParam("page", "1").
-    WithQueryParam("limit", "10")
-
-resp, err := client.Get("/users")
+    Timeout(10 * time.Second)
 ```
 
-### POST JSON
+## 请求体
 
-```go
-payload := map[string]any{
-    "name":  "John",
-    "email": "john@example.com",
-}
-
-resp, err := client.Post("/users", payload)
-```
-
-### 使用请求构建器
+### JSON
 
 ```go
 resp, err := client.NewRequest(http.MethodPost, "/users").
-    WithHeader("Authorization", "Bearer token").
-    JSON(map[string]string{"name": "test"}).
-    Do()
+    JSON(map[string]string{"name": "grove"}).
+    DoWithContext(ctx)
 ```
 
-### 表单请求
+`Post/Put/Patch` 便捷方法仍可直接接收结构体并编码为 JSON：
 
 ```go
-resp, err := client.PostForm("/login", map[string]string{
-    "username": "admin",
-    "password": "secret",
-})
+resp, err := client.PostWithContext(ctx, "/users", CreateUserRequest{Name: "grove"})
 ```
 
-### 文件上传
+### Form
+
+```go
+resp, err := client.NewRequest(http.MethodPost, "/login").
+    Form(map[string]string{
+        "username": "admin",
+        "password": "secret",
+    }).
+    DoWithContext(ctx)
+```
+
+### Multipart 流式上传
+
+文件路径在发送请求时打开，并通过 pipe 流式写入，不会先完整读入内存：
 
 ```go
 resp, err := client.NewRequest(http.MethodPost, "/upload").
-    AddFileFromPath("avatar", "/path/to/avatar.jpg").
-    Do()
+    Form(map[string]string{"purpose": "avatar"}).
+    AddFileFromPath("file", "/path/to/avatar.jpg").
+    DoWithContext(ctx)
 ```
 
-### 下载文件
+小文件或已有字节内容可使用 `AddFile`。普通 JSON/body 不能和 multipart 文件混用。
+
+## 重试与幂等性
+
+- GET、HEAD、OPTIONS 默认最多重试 2 次。
+- 默认重试 transport error 和 5xx，不重试 4xx。
+- POST、PUT、PATCH、DELETE 默认不重试。
+- 非幂等请求必须显式设置 retry policy 或 idempotency key。
+- backoff 会响应 context 取消。
+
+显式 retry policy：
 
 ```go
-resp, err := client.Download("https://example.com/file.pdf")
-if err != nil {
-    return err
+resp, err := client.NewRequest(http.MethodPost, "/jobs").
+    WithRetry(2, 200*time.Millisecond).
+    JSON(payload).
+    DoWithContext(ctx)
+```
+
+幂等 key 会写入 `Idempotency-Key`，并允许使用默认 retry policy：
+
+```go
+resp, err := client.NewRequest(http.MethodPost, "/orders").
+    WithIdempotencyKey(orderRequestID).
+    JSON(payload).
+    DoWithContext(ctx)
+```
+
+任意 `io.Reader` body 默认只可消费一次；如果请求需要重试，会返回 `ErrBodyNotReplayable`。字符串、字节、JSON、Form 和 multipart 文件路径可重新创建请求体。
+
+## 响应大小限制
+
+普通响应默认最多读取 10 MiB。可按请求收紧限制：
+
+```go
+resp, err := client.NewRequest(http.MethodGet, "/metadata").
+    MaxResponseBytes(1 << 20).
+    DoWithContext(ctx)
+if errors.Is(err, httpclient.ErrResponseTooLarge) {
+    // 按上游协议处理超限
 }
-
-err = client.DownloadToFile("https://example.com/file.pdf", "/tmp/file.pdf")
 ```
 
-### 流式读取
+4xx 返回可检查的 `Response` 和 nil error。5xx 重试耗尽后同时返回最后一个 `Response` 和 error。
+
+## 流式读取和下载
 
 ```go
-err := client.Stream(ctx, http.MethodGet, "/large-file", nil, func(chunk []byte) error {
-    _, err := file.Write(chunk)
-    return err
+err := client.NewRequest(http.MethodGet, "/large-file").
+    Stream(ctx, func(chunk []byte) error {
+        _, err := file.Write(chunk)
+        return err
+    })
+```
+
+下载到文件使用临时文件和流式复制；失败时删除临时文件，成功后再替换目标文件：
+
+```go
+err := client.NewRequest(http.MethodGet, "/report").
+    WithHeader("Authorization", "Bearer token").
+    DownloadToFile(ctx, "/tmp/report.pdf")
+```
+
+无请求级 header/query 时，也可使用：
+
+```go
+err := client.DownloadToFile("https://example.com/file.pdf", "/tmp/file.pdf")
+```
+
+## 请求级 hook
+
+```go
+resp, err := client.NewRequest(http.MethodGet, "/users").
+    BeforeRequest(func(req *http.Request) error {
+        req.Header.Set("X-Signature", sign(req))
+        return nil
+    }).
+    AfterResponse(func(resp *httpclient.Response) error {
+        metrics.Record(resp.StatusCode)
+        return nil
+    }).
+    DoWithContext(ctx)
+```
+
+`BeforeRequest` 每次实际尝试都会执行，适合重新生成时间戳或签名。`AfterResponse` 只在普通响应的最终结果上执行。
+
+## 测试与 Transport
+
+测试第三方调用时注入自定义 `http.RoundTripper`，不要依赖真实网络：
+
+```go
+client := httpclient.NewWithConfig(httpclient.Config{
+    BaseURL:  "https://example.test",
+    Timeout:  time.Second,
+    Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+        return response, nil
+    }),
 })
 ```
 
-## 在服务层中使用
-
-推荐通过 `provider.Provider` 注入，而不是在 handler 里直接创建客户端。
-
-```go
-type PaymentService struct {
-    provider *provider.Provider
-}
-
-func NewPaymentService(p *provider.Provider) *PaymentService {
-    return &PaymentService{provider: p}
-}
-
-func (s *PaymentService) Query(ctx context.Context, paymentID string) error {
-    resp, err := s.provider.HTTPClient.
-        Clone().
-        BaseURL("https://api.example.com").
-        WithHeader("Authorization", "Bearer token").
-        GetWithContext(ctx, "/payments/"+paymentID)
-    if err != nil {
-        return err
-    }
-
-    if !resp.IsSuccess() {
-        return fmt.Errorf("上游请求失败: %d", resp.StatusCode)
-    }
-    return nil
-}
-```
-
-## 约定与注意事项
-
-- `Clone()` 会复制基础 URL、超时、请求头、查询参数、重试策略以及自定义 `Transport`。
-- 5xx 响应会被视为可重试错误；4xx 不会重试。
-- 推荐把认证头、基础 URL、重试策略放在客户端配置层，不要在每个 handler 里重复拼接。
-- 测试第三方调用时，优先注入自定义 `Transport`，不要依赖真实网络。
-- 日志仍统一走 `pkg/logger`，重试日志会记录请求 URL 与尝试次数。
+默认 Transport 已配置环境代理、连接池、dial timeout、TLS handshake timeout、response header timeout 和 idle timeout。

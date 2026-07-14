@@ -9,7 +9,11 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -22,429 +26,475 @@ func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func newTestClient(t *testing.T, handler func(*http.Request) (*http.Response, error)) *Client {
 	t.Helper()
-
-	client := New().BaseURL("https://example.test")
-	client.httpClient.Transport = roundTripFunc(handler)
-	return client
+	return NewWithConfig(Config{
+		BaseURL:   "https://example.test",
+		Timeout:   time.Second,
+		Transport: roundTripFunc(handler),
+	})
 }
 
-func jsonResponse(status int, body string) *http.Response {
+func textResponse(status int, body io.ReadCloser) *http.Response {
 	return &http.Response{
 		StatusCode: status,
 		Status:     fmt.Sprintf("%d %s", status, http.StatusText(status)),
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
-		Body:       io.NopCloser(strings.NewReader(body)),
+		Body:       body,
 	}
 }
 
-func TestNew(t *testing.T) {
+func jsonResponse(status int, body string) *http.Response {
+	return textResponse(status, io.NopCloser(strings.NewReader(body)))
+}
+
+func TestNewUsesSafeDefaults(t *testing.T) {
 	client := New()
-	if client == nil {
-		t.Fatal("expected client to be non-nil")
+	if client.timeout != 30*time.Second {
+		t.Fatalf("timeout = %v", client.timeout)
 	}
-	if client.httpClient.Timeout != 30*time.Second {
-		t.Fatalf("expected timeout 30s, got %v", client.httpClient.Timeout)
+	transport, ok := client.transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("transport type = %T", client.transport)
 	}
-}
-
-func TestNewWithConfig(t *testing.T) {
-	config := Config{
-		BaseURL:    "https://api.example.com",
-		Timeout:    60 * time.Second,
-		RetryCount: 3,
-		RetryDelay: 2 * time.Second,
-		Headers: map[string]string{
-			"Authorization": "Bearer token",
-		},
+	if transport.TLSHandshakeTimeout <= 0 || transport.ResponseHeaderTimeout <= 0 {
+		t.Fatalf("transport timeouts are not configured: %#v", transport)
 	}
-
-	client := NewWithConfig(config)
-	if client.baseURL != "https://api.example.com" {
-		t.Fatalf("expected baseURL, got %s", client.baseURL)
-	}
-	if client.httpClient.Timeout != 60*time.Second {
-		t.Fatalf("expected timeout 60s, got %v", client.httpClient.Timeout)
-	}
-	if client.retryCount != 3 {
-		t.Fatalf("expected retry count 3, got %d", client.retryCount)
-	}
-	if client.headers["Authorization"] != "Bearer token" {
-		t.Fatalf("expected auth header")
+	if transport.MaxIdleConns <= 0 || transport.MaxIdleConnsPerHost <= 0 {
+		t.Fatalf("transport pool is not configured: %#v", transport)
 	}
 }
 
-func TestClientGet(t *testing.T) {
-	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
-		if r.Method != http.MethodGet {
-			t.Errorf("expected GET, got %s", r.Method)
-		}
-		if r.URL.Path != "/users" {
-			t.Errorf("expected /users, got %s", r.URL.Path)
-		}
-		return jsonResponse(http.StatusOK, `{"message":"success"}`), nil
-	})
-	resp, err := client.Get("/users")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+func TestClientConfigurationReturnsCopies(t *testing.T) {
+	original := New()
+	transport := &http.Transport{}
+	configured := original.
+		BaseURL("https://api.example.com/").
+		Timeout(time.Minute).
+		WithTransport(transport)
 
-	if !resp.IsSuccess() {
-		t.Fatalf("expected success, got %d", resp.StatusCode)
+	if original.baseURL != "" || original.timeout == time.Minute || original.transport == transport {
+		t.Fatal("configuration mutated original client")
 	}
-
-	var result map[string]string
-	if err := resp.JSON(&result); err != nil {
-		t.Fatalf("failed to parse JSON: %v", err)
-	}
-	if result["message"] != "success" {
-		t.Fatalf("unexpected response: %v", result)
+	if configured.baseURL != "https://api.example.com" || configured.timeout != time.Minute || configured.transport != transport {
+		t.Fatalf("unexpected configured client: %#v", configured)
 	}
 }
 
-func TestClientPost(t *testing.T) {
-	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
-		if r.Method != http.MethodPost {
-			t.Errorf("expected POST, got %s", r.Method)
-		}
-
-		// 读取请求体
-		body, _ := io.ReadAll(r.Body)
-		var data map[string]any
-		json.Unmarshal(body, &data)
-
-		if data["name"] != "John" {
-			t.Errorf("expected name John, got %v", data["name"])
-		}
-
-		return jsonResponse(http.StatusCreated, `{"id":1,"name":"John"}`), nil
-	})
-	payload := map[string]string{"name": "John", "email": "john@example.com"}
-	resp, err := client.Post("/users", payload)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("expected 201, got %d", resp.StatusCode)
-	}
-
-	var result map[string]any
-	if err := resp.JSON(&result); err != nil {
-		t.Fatalf("failed to parse JSON: %v", err)
-	}
-	if result["id"] != float64(1) {
-		t.Fatalf("unexpected id: %v", result["id"])
-	}
-}
-
-func TestClientWithQueryParams(t *testing.T) {
-	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
-		query := r.URL.Query()
-		if query.Get("page") != "1" {
-			t.Errorf("expected page=1, got %s", query.Get("page"))
-		}
-		if query.Get("limit") != "10" {
-			t.Errorf("expected limit=10, got %s", query.Get("limit"))
-		}
-		return jsonResponse(http.StatusOK, `{}`), nil
-	}).WithQueryParam("page", "1").
-		WithQueryParam("page", "1").
-		WithQueryParam("limit", "10")
-
-	_, err := client.Get("/users")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestClientWithHeaders(t *testing.T) {
-	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
-		auth := r.Header.Get("Authorization")
-		if auth != "Bearer test-token" {
-			t.Errorf("expected Bearer test-token, got %s", auth)
-		}
-		return jsonResponse(http.StatusOK, `{}`), nil
-	}).WithHeader("Authorization", "Bearer test-token")
-
-	_, err := client.Get("/users")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestResponseIsSuccess(t *testing.T) {
-	tests := []struct {
-		code     int
-		expected bool
-	}{
-		{200, true},
-		{201, true},
-		{204, true},
-		{301, false},
-		{400, false},
-		{500, false},
-	}
-
-	for _, test := range tests {
-		resp := &Response{StatusCode: test.code}
-		if resp.IsSuccess() != test.expected {
-			t.Errorf("IsSuccess() for status %d: expected %v, got %v",
-				test.code, test.expected, resp.IsSuccess())
-		}
-	}
-}
-
-func TestResponseIsError(t *testing.T) {
-	tests := []struct {
-		code     int
-		expected bool
-	}{
-		{200, false},
-		{301, false},
-		{400, true},
-		{404, true},
-		{500, true},
-	}
-
-	for _, test := range tests {
-		resp := &Response{StatusCode: test.code}
-		if resp.IsError() != test.expected {
-			t.Errorf("IsError() for status %d: expected %v, got %v",
-				test.code, test.expected, resp.IsError())
-		}
-	}
-}
-
-func TestClientPostForm(t *testing.T) {
-	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
-		if r.Method != http.MethodPost {
-			t.Errorf("expected POST, got %s", r.Method)
-		}
-		if err := r.ParseForm(); err != nil {
-			t.Errorf("failed to parse form: %v", err)
-		}
-		if r.FormValue("username") != "john" {
-			t.Errorf("expected username john, got %s", r.FormValue("username"))
+func TestRequestBuildersIsolateConcurrentState(t *testing.T) {
+	client := newTestClient(t, func(req *http.Request) (*http.Response, error) {
+		want := req.URL.Query().Get("request")
+		if got := req.Header.Get("X-Request"); got != want {
+			return nil, fmt.Errorf("header %q does not match query %q", got, want)
 		}
 		return jsonResponse(http.StatusOK, `{}`), nil
 	})
-	data := map[string]string{
-		"username": "john",
-		"password": "secret",
-	}
-	resp, err := client.PostForm("/login", data)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !resp.IsSuccess() {
-		t.Fatalf("expected success, got %d", resp.StatusCode)
-	}
-}
 
-func TestClientWithContext(t *testing.T) {
-	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
-		select {
-		case <-time.After(100 * time.Millisecond):
-			return jsonResponse(http.StatusOK, `{}`), nil
-		case <-r.Context().Done():
-			return nil, r.Context().Err()
+	const workers = 32
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for i := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			value := fmt.Sprintf("request-%d", i)
+			_, err := client.NewRequest(http.MethodGet, "/users").
+				WithHeader("X-Request", value).
+				WithQueryParam("request", value).
+				Do()
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
 		}
-	})
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
-
-	_, err := client.GetWithContext(ctx, "/slow")
-	if err == nil {
-		t.Fatal("expected timeout error")
 	}
 }
 
-func TestClientRetry(t *testing.T) {
-	attemptCount := 0
-	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
-		attemptCount++
-		if attemptCount < 3 {
+func TestRequestJSONAndHooks(t *testing.T) {
+	var beforeCalls atomic.Int64
+	var afterCalls atomic.Int64
+	client := newTestClient(t, func(req *http.Request) (*http.Response, error) {
+		if req.Header.Get("Authorization") != "Bearer token" {
+			t.Fatal("missing request header")
+		}
+		var payload map[string]string
+		if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if payload["name"] != "grove" {
+			t.Fatalf("payload = %#v", payload)
+		}
+		return jsonResponse(http.StatusCreated, `{"ok":true}`), nil
+	})
+
+	resp, err := client.NewRequest(http.MethodPost, "/users").
+		WithHeader("Authorization", "Bearer token").
+		BeforeRequest(func(*http.Request) error {
+			beforeCalls.Add(1)
+			return nil
+		}).
+		AfterResponse(func(*Response) error {
+			afterCalls.Add(1)
+			return nil
+		}).
+		JSON(map[string]string{"name": "grove"}).
+		Do()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusCreated || beforeCalls.Load() != 1 || afterCalls.Load() != 1 {
+		t.Fatalf("response=%#v before=%d after=%d", resp, beforeCalls.Load(), afterCalls.Load())
+	}
+}
+
+func TestBeforeRequestErrorOnBodylessRequest(t *testing.T) {
+	hookErr := errors.New("reject request")
+	client := newTestClient(t, func(*http.Request) (*http.Response, error) {
+		t.Fatal("transport must not run")
+		return nil, nil
+	})
+
+	_, err := client.NewRequest(http.MethodGet, "/users").
+		BeforeRequest(func(*http.Request) error { return hookErr }).
+		Do()
+	if !errors.Is(err, hookErr) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestSafeMethodRetriesByDefault(t *testing.T) {
+	var attempts atomic.Int64
+	client := newTestClient(t, func(*http.Request) (*http.Response, error) {
+		if attempts.Add(1) < 3 {
 			return jsonResponse(http.StatusServiceUnavailable, `{}`), nil
 		}
 		return jsonResponse(http.StatusOK, `{}`), nil
-	}).WithRetry(3, 10*time.Millisecond)
+	})
 
 	resp, err := client.Get("/flaky")
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal(err)
 	}
-	if !resp.IsSuccess() {
-		t.Fatalf("expected success after retry, got %d", resp.StatusCode)
-	}
-	if attemptCount != 3 {
-		t.Fatalf("expected 3 attempts, got %d", attemptCount)
+	if !resp.IsSuccess() || attempts.Load() != 3 {
+		t.Fatalf("status=%d attempts=%d", resp.StatusCode, attempts.Load())
 	}
 }
 
-func TestClientRetryReusesRequestBody(t *testing.T) {
-	attemptCount := 0
-	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
-		attemptCount++
-		body, err := io.ReadAll(r.Body)
+func TestSafeMethodRetriesTransportErrors(t *testing.T) {
+	var attempts atomic.Int64
+	client := newTestClient(t, func(*http.Request) (*http.Response, error) {
+		if attempts.Add(1) == 1 {
+			return nil, errors.New("connection reset")
+		}
+		return jsonResponse(http.StatusOK, `{}`), nil
+	})
+
+	resp, err := client.Get("/flaky-transport")
+	if err != nil || !resp.IsSuccess() || attempts.Load() != 2 {
+		t.Fatalf("response=%#v attempts=%d err=%v", resp, attempts.Load(), err)
+	}
+}
+
+func TestUnsafeMethodDoesNotRetryWithoutOptIn(t *testing.T) {
+	var attempts atomic.Int64
+	client := newTestClient(t, func(*http.Request) (*http.Response, error) {
+		attempts.Add(1)
+		return jsonResponse(http.StatusServiceUnavailable, `{}`), nil
+	})
+
+	resp, err := client.Post("/orders", map[string]string{"item": "book"})
+	if err == nil || resp == nil || resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("response=%#v err=%v", resp, err)
+	}
+	if attempts.Load() != 1 {
+		t.Fatalf("attempts = %d", attempts.Load())
+	}
+}
+
+func TestIdempotencyKeyEnablesDefaultRetry(t *testing.T) {
+	var attempts atomic.Int64
+	client := newTestClient(t, func(req *http.Request) (*http.Response, error) {
+		if req.Header.Get("Idempotency-Key") != "order-123" {
+			t.Fatal("missing idempotency key")
+		}
+		if attempts.Add(1) == 1 {
+			return jsonResponse(http.StatusBadGateway, `{}`), nil
+		}
+		return jsonResponse(http.StatusOK, `{}`), nil
+	})
+
+	resp, err := client.NewRequest(http.MethodPost, "/orders").
+		WithIdempotencyKey("order-123").
+		JSON(map[string]string{"item": "book"}).
+		Do()
+	if err != nil || !resp.IsSuccess() || attempts.Load() != 2 {
+		t.Fatalf("response=%#v attempts=%d err=%v", resp, attempts.Load(), err)
+	}
+}
+
+func TestExplicitRetryReplaysRequestBody(t *testing.T) {
+	var attempts atomic.Int64
+	client := newTestClient(t, func(req *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(req.Body)
 		if err != nil {
-			t.Fatalf("read body: %v", err)
+			t.Fatal(err)
 		}
-		if string(body) != `{"name":"John"}` {
-			t.Fatalf("attempt %d got body %q", attemptCount, string(body))
+		if string(body) != `{"name":"grove"}` {
+			t.Fatalf("body = %q", body)
 		}
-		if attemptCount == 1 {
+		if attempts.Add(1) == 1 {
 			return jsonResponse(http.StatusServiceUnavailable, `{}`), nil
 		}
 		return jsonResponse(http.StatusOK, `{}`), nil
-	}).WithRetry(1, time.Millisecond)
-
-	resp, err := client.Post("/users", map[string]string{"name": "John"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !resp.IsSuccess() {
-		t.Fatalf("expected success, got %d", resp.StatusCode)
-	}
-	if attemptCount != 2 {
-		t.Fatalf("expected 2 attempts, got %d", attemptCount)
-	}
-}
-
-func TestClientClone(t *testing.T) {
-	client := New().
-		BaseURL("https://api.example.com").
-		WithHeader("X-API-Key", "secret").
-		WithQueryParam("lang", "zh-CN").
-		WithRetry(3, 1*time.Second)
-
-	cloned := client.Clone()
-
-	// 修改克隆后的客户端
-	cloned.WithHeader("X-Custom", "value")
-
-	// 原始客户端不应该受影响
-	if _, ok := client.headers["X-Custom"]; ok {
-		t.Fatal("original client should not have X-Custom header")
-	}
-
-	// 基础配置应该保留
-	if cloned.baseURL != client.baseURL {
-		t.Fatal("cloned client should have same baseURL")
-	}
-	if cloned.headers["X-API-Key"] != "secret" {
-		t.Fatal("cloned client should have X-API-Key header")
-	}
-	if cloned.queryParams["lang"] != "zh-CN" {
-		t.Fatal("cloned client should copy query params")
-	}
-}
-
-func TestRequestBuilder(t *testing.T) {
-	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
-		if r.Method != http.MethodPost {
-			t.Errorf("expected POST, got %s", r.Method)
-		}
-
-		auth := r.Header.Get("Authorization")
-		if auth != "Bearer token" {
-			t.Errorf("expected auth header, got %s", auth)
-		}
-
-		body, _ := io.ReadAll(r.Body)
-		var data map[string]any
-		json.Unmarshal(body, &data)
-
-		if data["name"] != "test" {
-			t.Errorf("expected name test, got %v", data["name"])
-		}
-
-		return jsonResponse(http.StatusOK, `{"name":"test"}`), nil
 	})
-	resp, err := client.NewRequest(http.MethodPost, "/users").
-		WithHeader("Authorization", "Bearer token").
-		JSON(map[string]string{"name": "test"}).
-		Do()
 
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !resp.IsSuccess() {
-		t.Fatalf("expected success, got %d", resp.StatusCode)
+	resp, err := client.NewRequest(http.MethodPost, "/users").
+		WithRetry(1, time.Millisecond).
+		JSON(map[string]string{"name": "grove"}).
+		Do()
+	if err != nil || !resp.IsSuccess() || attempts.Load() != 2 {
+		t.Fatalf("response=%#v attempts=%d err=%v", resp, attempts.Load(), err)
 	}
 }
 
-func TestPostMultipartWritesFieldsInMultipartBody(t *testing.T) {
-	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
-		if r.URL.RawQuery != "" {
-			t.Fatalf("expected no query fields, got %q", r.URL.RawQuery)
-		}
+func TestRetryBackoffHonorsContextCancellation(t *testing.T) {
+	var attempts atomic.Int64
+	client := newTestClient(t, func(*http.Request) (*http.Response, error) {
+		attempts.Add(1)
+		return jsonResponse(http.StatusServiceUnavailable, `{}`), nil
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
 
-		mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		if err != nil {
-			t.Fatalf("parse content type: %v", err)
-		}
-		if mediaType != "multipart/form-data" {
-			t.Fatalf("expected multipart/form-data, got %q", mediaType)
-		}
+	_, err := client.NewRequest(http.MethodGet, "/slow").
+		WithRetry(3, time.Second).
+		DoWithContext(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error = %v", err)
+	}
+	if attempts.Load() != 1 {
+		t.Fatalf("attempts = %d", attempts.Load())
+	}
+}
 
-		reader := multipart.NewReader(r.Body, params["boundary"])
-		form, err := reader.ReadForm(1024)
-		if err != nil {
-			t.Fatalf("read multipart form: %v", err)
+func TestReaderBodyReportsNotReplayable(t *testing.T) {
+	var attempts atomic.Int64
+	client := newTestClient(t, func(req *http.Request) (*http.Response, error) {
+		attempts.Add(1)
+		_, _ = io.Copy(io.Discard, req.Body)
+		return jsonResponse(http.StatusServiceUnavailable, `{}`), nil
+	})
+
+	resp, err := client.NewRequest(http.MethodGet, "/reader").
+		Body(io.LimitReader(strings.NewReader("payload"), 7)).
+		Do()
+	if !errors.Is(err, ErrBodyNotReplayable) || resp == nil {
+		t.Fatalf("response=%#v err=%v", resp, err)
+	}
+	if attempts.Load() != 1 {
+		t.Fatalf("attempts = %d", attempts.Load())
+	}
+}
+
+func TestResponseBodyLimit(t *testing.T) {
+	client := newTestClient(t, func(*http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, "12345"), nil
+	})
+
+	resp, err := client.NewRequest(http.MethodGet, "/large").
+		MaxResponseBytes(4).
+		Do()
+	if !errors.Is(err, ErrResponseTooLarge) || resp == nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("response=%#v err=%v", resp, err)
+	}
+	if got := string(resp.Body); got != "1234" {
+		t.Fatalf("limited body = %q", got)
+	}
+}
+
+func TestFinalServerErrorRetainsResponse(t *testing.T) {
+	client := newTestClient(t, func(*http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusServiceUnavailable, `{"error":"busy"}`), nil
+	})
+
+	resp, err := client.NewRequest(http.MethodGet, "/busy").WithRetry(1, time.Millisecond).Do()
+	if err == nil || resp == nil || resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("response=%#v err=%v", resp, err)
+	}
+	if !strings.Contains(resp.String(), "busy") {
+		t.Fatalf("body = %q", resp.String())
+	}
+}
+
+func TestClientErrorDoesNotRetry(t *testing.T) {
+	var attempts atomic.Int64
+	client := newTestClient(t, func(*http.Request) (*http.Response, error) {
+		attempts.Add(1)
+		return jsonResponse(http.StatusBadRequest, `{"error":"bad"}`), nil
+	})
+
+	resp, err := client.Get("/bad")
+	if err != nil || resp.StatusCode != http.StatusBadRequest || attempts.Load() != 1 {
+		t.Fatalf("response=%#v attempts=%d err=%v", resp, attempts.Load(), err)
+	}
+}
+
+func TestPostFormAndQuery(t *testing.T) {
+	client := newTestClient(t, func(req *http.Request) (*http.Response, error) {
+		if req.URL.Query().Get("source") != "console" {
+			t.Fatal("missing query")
 		}
-		if got := form.Value["name"]; len(got) != 1 || got[0] != "john" {
-			t.Fatalf("expected multipart field name=john, got %#v", got)
+		if err := req.ParseForm(); err != nil {
+			t.Fatal(err)
 		}
-		if files := form.File["avatar"]; len(files) != 1 || files[0].Filename != "avatar.txt" {
-			t.Fatalf("expected avatar file, got %#v", files)
+		if req.FormValue("username") != "grove" {
+			t.Fatalf("form = %#v", req.Form)
 		}
 		return jsonResponse(http.StatusOK, `{}`), nil
 	})
 
-	resp, err := client.PostMultipart("/upload", map[string]string{
-		"name": "john",
-	}, map[string]FileField{
-		"avatar": {
-			FieldName: "avatar",
-			FileName:  "avatar.txt",
-			Content:   []byte("hello"),
-		},
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !resp.IsSuccess() {
-		t.Fatalf("expected success, got %d", resp.StatusCode)
+	resp, err := client.NewRequest(http.MethodPost, "/login").
+		WithQueryParam("source", "console").
+		Form(map[string]string{"username": "grove"}).
+		Do()
+	if err != nil || !resp.IsSuccess() {
+		t.Fatalf("response=%#v err=%v", resp, err)
 	}
 }
 
-func ExampleClient_Get() {
-	// 使用客户端
-	client := New().BaseURL("https://example.test")
-	client.httpClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		return jsonResponse(http.StatusOK, `{"message": "Hello, World!"}`), nil
+func TestMultipartFilePathOpensAtSendTime(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "avatar.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	client := newTestClient(t, func(req *http.Request) (*http.Response, error) {
+		if _, ok := req.Body.(*io.PipeReader); !ok {
+			t.Fatalf("multipart body type = %T, expected streaming pipe", req.Body)
+		}
+		mediaType, params, err := mime.ParseMediaType(req.Header.Get("Content-Type"))
+		if err != nil || mediaType != "multipart/form-data" {
+			t.Fatalf("content type = %q err=%v", mediaType, err)
+		}
+		form, err := multipart.NewReader(req.Body, params["boundary"]).ReadForm(1024)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer form.RemoveAll()
+		if got := form.Value["name"]; len(got) != 1 || got[0] != "grove" {
+			t.Fatalf("fields = %#v", form.Value)
+		}
+		file, err := form.File["avatar"][0].Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer file.Close()
+		content, _ := io.ReadAll(file)
+		if string(content) != "hello" {
+			t.Fatalf("content = %q", content)
+		}
+		return jsonResponse(http.StatusOK, `{}`), nil
 	})
-	resp, err := client.Get("/hello")
-	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		return
+
+	builder := client.NewRequest(http.MethodPost, "/upload").
+		Form(map[string]string{"name": "grove"}).
+		AddFileFromPath("avatar", path)
+	resp, err := builder.Do()
+	if err != nil || !resp.IsSuccess() {
+		t.Fatalf("response=%#v err=%v", resp, err)
 	}
 
-	fmt.Printf("Status: %d\n", resp.StatusCode)
-	fmt.Printf("Body: %s", resp.String())
-	// Output:
-	// Status: 200
-	// Body: {"message": "Hello, World!"}
-	//
+	missing := client.NewRequest(http.MethodPost, "/upload").AddFileFromPath("avatar", path)
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := missing.Do(); err == nil {
+		t.Fatal("expected send-time file open error")
+	}
 }
 
-func TestClientRequestReturnsTransportError(t *testing.T) {
-	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
-		return nil, errors.New("boom")
+func TestMultipartRejectsConflictingBody(t *testing.T) {
+	client := newTestClient(t, func(*http.Request) (*http.Response, error) {
+		t.Fatal("transport must not run")
+		return nil, nil
 	})
 
-	_, err := client.Get("/users")
+	_, err := client.NewRequest(http.MethodPost, "/upload").
+		JSON(map[string]string{"name": "grove"}).
+		AddFile("avatar", "avatar.txt", []byte("hello")).
+		Do()
 	if err == nil {
-		t.Fatal("expected transport error")
+		t.Fatal("expected conflicting multipart body error")
 	}
 }
+
+func TestDownloadToFileCleansPartialFile(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "download.bin")
+	if err := os.WriteFile(target, []byte("original"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	client := newTestClient(t, func(*http.Request) (*http.Response, error) {
+		return textResponse(http.StatusOK, &failingReadCloser{reader: strings.NewReader("partial")}), nil
+	})
+
+	err := client.DownloadToFile("/download", target)
+	if err == nil {
+		t.Fatal("expected download error")
+	}
+	content, readErr := os.ReadFile(target)
+	if readErr != nil || string(content) != "original" {
+		t.Fatalf("target content=%q err=%v", content, readErr)
+	}
+	matches, _ := filepath.Glob(filepath.Join(dir, ".download.bin.tmp-*"))
+	if len(matches) != 0 {
+		t.Fatalf("temporary files remain: %#v", matches)
+	}
+}
+
+func TestStreamPropagatesHandlerError(t *testing.T) {
+	handlerErr := errors.New("stop")
+	client := newTestClient(t, func(*http.Request) (*http.Response, error) {
+		return textResponse(http.StatusOK, io.NopCloser(strings.NewReader("payload"))), nil
+	})
+
+	err := client.NewRequest(http.MethodGet, "/stream").Stream(context.Background(), func([]byte) error {
+		return handlerErr
+	})
+	if !errors.Is(err, handlerErr) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestResponseHelpers(t *testing.T) {
+	resp := &Response{
+		StatusCode: http.StatusOK,
+		Headers:    http.Header{"X-Test": []string{"value"}},
+		Body:       []byte(`{"ok":true}`),
+	}
+	var payload map[string]bool
+	if !resp.IsSuccess() || resp.IsError() || resp.Header("X-Test") != "value" {
+		t.Fatalf("unexpected response helpers: %#v", resp)
+	}
+	if err := resp.JSON(&payload); err != nil || !payload["ok"] {
+		t.Fatalf("payload=%#v err=%v", payload, err)
+	}
+	if string(resp.Bytes()) != resp.String() {
+		t.Fatal("byte and string response differ")
+	}
+}
+
+type failingReadCloser struct {
+	reader *strings.Reader
+}
+
+func (r *failingReadCloser) Read(p []byte) (int, error) {
+	if r.reader.Len() == 0 {
+		return 0, errors.New("read failed")
+	}
+	return r.reader.Read(p)
+}
+
+func (*failingReadCloser) Close() error { return nil }

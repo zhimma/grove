@@ -103,7 +103,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 ### Milestone 3：基础组件契约稳定化
 
 - [x] Task 13：重构 Cache 契约和生命周期。
-- [ ] Task 14：重构 HTTP Client 为请求级不可变状态。
+- [x] Task 14：重构 HTTP Client 为请求级不可变状态。
 - [ ] Task 15：修复 Scheduler 并发、配置和取消语义。
 - [ ] Task 16：修复 Event 异步投递语义。
 - [ ] Task 17：统一 Provider 生命周期和按服务配置校验。
@@ -1000,7 +1000,7 @@ type Store interface {
 
 ### Task 14：重构 HTTP Client 为请求级不可变状态
 
-**Status:** `[-] In Progress`
+**Status:** `[x] Completed`
 
 **Owner:** Codex
 
@@ -1008,7 +1008,18 @@ type Store interface {
 
 **Started at:** 2026-07-14
 
+**Completed at:** 2026-07-14
+
 **Design:** `docs/plans/2026-07-14-http-client-request-state-design.md`
+
+**Verification:**
+
+- `go test ./...`、`go vet ./...`、`make build`、`git diff --check`：PASS。
+- `go test -race ./pkg/httpclient -count=10`：PASS。
+- 32 路并发 RequestBuilder header/query 状态隔离，race detector 无共享状态竞争。
+- 测试覆盖 GET 默认 retry、非幂等请求默认不 retry、idempotency key、显式 retry、body replay、transport error、4xx/5xx 和 context 取消。
+- 普通响应大小上限、最终 5xx Response 保留、multipart 文件路径发送时打开、pipe 流式上传、下载临时文件清理和 stream handler 错误传播均有回归测试。
+- 默认 Transport 的连接池、TLS handshake timeout 和 response header timeout 有断言；测试通过自定义 RoundTripper 完成，未访问真实外部网络。
 
 **Files:**
 
@@ -1016,6 +1027,7 @@ type Store interface {
 - Split: `pkg/httpclient/request.go`
 - Split: `pkg/httpclient/retry.go`
 - Split: `pkg/httpclient/stream.go`
+- Modify: `docs/guide/httpclient.md`
 - Test: `pkg/httpclient/client_test.go`
 
 **Required behavior:**
