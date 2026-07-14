@@ -863,7 +863,15 @@ go test ./pkg/storage ./app/console/internal/router -v
 
 ### Task 11：修复系统配置敏感值和审计泄漏
 
-**Status:** `[ ] Planned`
+**Status:** `[-] In Progress`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Design:** `docs/plans/2026-07-14-system-config-secrets-design.md`
 
 **Files:**
 
