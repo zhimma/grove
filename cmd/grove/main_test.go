@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -254,6 +256,224 @@ func register() {
 
 	router := mustRead(t, filepath.Join(root, "app/console/internal/router/router.go"))
 	assertContains(t, router, "\thandler.RegisterProductCategoryRoutes(protected, r.p)\n")
+}
+
+func TestMakeModuleGeneratedPackagesCompile(t *testing.T) {
+	root := prepareModuleCompileWorkspace(t)
+
+	previousWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get wd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir temp root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(previousWD) })
+
+	cmd := newMakeModuleCmd()
+	cmd.SetArgs([]string{"ProductCategory"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("make:module failed: %v", err)
+	}
+
+	goTest := exec.Command("go", "test", "./internal/model", "./app/console/internal/service", "./app/console/internal/handler", "./app/console/internal/router")
+	goTest.Dir = root
+	output, err := goTest.CombinedOutput()
+	if err != nil {
+		t.Fatalf("generated packages do not compile: %v\n%s", err, output)
+	}
+}
+
+func TestMakeModulePreflightsBeforeWriting(t *testing.T) {
+	root := prepareModuleWorkspace(t, `package router
+
+func register() {
+	// marker missing on purpose
+}
+`)
+
+	previousWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get wd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir temp root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(previousWD) })
+
+	cmd := newMakeModuleCmd()
+	cmd.SetArgs([]string{"ProductCategory"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected missing router marker error")
+	}
+
+	for _, path := range []string{
+		"internal/model/product_category.go",
+		"app/console/internal/service/product_category.go",
+		"app/console/internal/handler/product_category.go",
+	} {
+		if _, err := os.Stat(filepath.Join(root, path)); !os.IsNotExist(err) {
+			t.Fatalf("preflight failure left generated file %s", path)
+		}
+	}
+}
+
+func TestMakeModuleRejectsInvalidNameBeforeWriting(t *testing.T) {
+	root := prepareModuleWorkspace(t, `package router
+
+func register() {
+	// grove:register-routes
+}
+`)
+
+	previousWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get wd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir temp root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(previousWD) })
+
+	cmd := newMakeModuleCmd()
+	cmd.SetArgs([]string{"123-product"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected invalid Go identifier error")
+	}
+
+	if _, err := os.Stat(filepath.Join(root, "internal/model/123_product.go")); !os.IsNotExist(err) {
+		t.Fatal("invalid module name left a generated file")
+	}
+}
+
+func TestMakeModuleChecksAllTargetsBeforeWriting(t *testing.T) {
+	root := prepareModuleWorkspace(t, `package router
+
+func register() {
+	// grove:register-routes
+}
+`)
+	existingService := filepath.Join(root, "app/console/internal/service/product_category.go")
+	mustWrite(t, existingService, "package service\n")
+
+	previousWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get wd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir temp root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(previousWD) })
+
+	cmd := newMakeModuleCmd()
+	cmd.SetArgs([]string{"ProductCategory"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected existing service error")
+	}
+	for _, path := range []string{
+		"internal/model/product_category.go",
+		"app/console/internal/handler/product_category.go",
+	} {
+		if _, err := os.Stat(filepath.Join(root, path)); !os.IsNotExist(err) {
+			t.Fatalf("target preflight left generated file %s", path)
+		}
+	}
+}
+
+func TestCommitGeneratedModuleRollsBackFilesWhenRouterWriteFails(t *testing.T) {
+	root := t.TempDir()
+	routerPath := filepath.Join(root, "router")
+	mustMkdir(t, routerPath)
+	sources := []generatedSource{
+		{path: filepath.Join(root, "model.go"), content: []byte("package model\n")},
+		{path: filepath.Join(root, "service.go"), content: []byte("package service\n")},
+	}
+
+	if err := commitGeneratedModule(sources, routerPath, []byte("package router\n")); err == nil {
+		t.Fatal("expected router replacement failure")
+	}
+	for _, source := range sources {
+		if _, err := os.Stat(source.path); !os.IsNotExist(err) {
+			t.Fatalf("router failure left generated file %s", source.path)
+		}
+	}
+}
+
+func prepareModuleWorkspace(t *testing.T, router string) string {
+	t.Helper()
+	root := t.TempDir()
+	repoRoot := filepath.Join("..", "..")
+	for _, dir := range []string{"internal", "pkg", "app/console"} {
+		copyTree(t, filepath.Join(repoRoot, dir), filepath.Join(root, dir))
+	}
+	mustMkdir(t, filepath.Join(root, "app/console/internal/router"))
+	mustWrite(t, filepath.Join(root, "app/console/internal/router/router.go"), router)
+	copyFile(t, filepath.Join(repoRoot, "go.mod"), filepath.Join(root, "go.mod"))
+	copyFile(t, filepath.Join(repoRoot, "go.sum"), filepath.Join(root, "go.sum"))
+	return root
+}
+
+func prepareModuleCompileWorkspace(t *testing.T) string {
+	return prepareModuleWorkspace(t, `package router
+
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/zhimma/grove/app/console/internal/handler"
+	"github.com/zhimma/grove/internal/provider"
+)
+
+type Router struct { p *provider.Provider }
+
+func (r *Router) register(protected *gin.RouterGroup) {
+	// grove:register-routes
+	_ = handler.RegisterProductCategoryRoutes
+}
+`)
+}
+
+func copyTree(t *testing.T, source, target string) {
+	t.Helper()
+	err := filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.HasSuffix(info.Name(), "_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		destination := filepath.Join(target, rel)
+		if info.IsDir() {
+			return os.MkdirAll(destination, info.Mode().Perm())
+		}
+		return copyFile(t, path, destination)
+	})
+	if err != nil {
+		t.Fatalf("copy tree %s: %v", source, err)
+	}
+}
+
+func copyFile(t *testing.T, source, target string) error {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		return err
+	}
+	in, err := os.Open(filepath.Clean(source))
+	if err != nil {
+		t.Fatalf("open source %s: %v", source, err)
+	}
+	defer in.Close()
+	out, err := os.OpenFile(filepath.Clean(target), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatalf("create target %s: %v", target, err)
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, in); err != nil {
+		t.Fatalf("copy %s: %v", source, err)
+	}
+	return nil
 }
 
 func mustMkdir(t *testing.T, path string) {

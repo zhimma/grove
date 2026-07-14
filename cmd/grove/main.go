@@ -1,14 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"unicode"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/bcrypt"
@@ -384,9 +382,9 @@ func newMakeModuleCmd() *cobra.Command {
 
 会生成：
 - internal/model
-- app/console/service
-- app/console/handler
-- app/console/router 路由注册
+- app/console/internal/service
+- app/console/internal/handler
+- app/console/internal/router 路由注册
 
 不会生成：
 - database/migrations
@@ -394,120 +392,19 @@ func newMakeModuleCmd() *cobra.Command {
 - 菜单或权限数据`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := toPascal(args[0])
-			snake := toSnake(args[0])
-
-			modelPath := filepath.Join("internal/model", snake+".go")
-			if err := writeFile(modelPath, modelTemplate(name, snake)); err != nil {
-				return err
-			}
-
-			servicePath := filepath.Join("app/console/internal/service", snake+".go")
-			if err := writeFile(servicePath, consoleServiceTemplate(name, snake)); err != nil {
-				return err
-			}
-
-			handlerPath := filepath.Join("app/console/internal/handler", snake+".go")
-			if err := writeFile(handlerPath, consoleHandlerTemplate(name, snake)); err != nil {
-				return err
-			}
-
-			line := fmt.Sprintf("\thandler.Register%sRoutes(protected, r.p)\n", name)
-			if err := insertRouteRegistration("app/console/internal/router/router.go", line); err != nil {
+			paths, err := generateConsoleModule(args[0])
+			if err != nil {
 				return err
 			}
 
 			fmt.Println("已生成以下文件：")
-			fmt.Println(modelPath)
-			fmt.Println(servicePath)
-			fmt.Println(handlerPath)
+			for _, path := range paths {
+				fmt.Println(path)
+			}
 			fmt.Println("已自动写入 console 路由注册，请继续补充迁移、前端页面和业务逻辑。")
 			return nil
 		},
 	}
-}
-
-func modelTemplate(name, snake string) string {
-	return fmt.Sprintf(`package model
-
-type %s struct {
-	Base
-}
-
-func (%s) TableName() string {
-	return "%s"
-}
-`, name, name, toSnakePlural(snake))
-}
-
-func consoleServiceTemplate(name, snake string) string {
-	return fmt.Sprintf(`package service
-
-import (
-	"context"
-
-	"github.com/zhimma/grove/pkg/database"
-	"github.com/zhimma/grove/pkg/errx"
-)
-
-type %sService struct {
-	dbRepo database.Repo
-}
-
-type %sListInput struct{}
-
-type %sListOutput struct {
-	Message string `+"`json:\"message\"`"+`
-}
-
-func New%sService(dbRepo database.Repo) *%sService {
-	return &%sService{dbRepo: dbRepo}
-}
-
-func (s *%sService) List(_ context.Context, _ %sListInput) (*%sListOutput, error) {
-	if s.dbRepo == nil || s.dbRepo.Default() == nil {
-		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
-	}
-	return &%sListOutput{Message: "%s 模块已就绪"}, nil
-}
-`, name, name, name, name, name, name, name, name, name, name, name)
-}
-
-func consoleHandlerTemplate(name, snake string) string {
-	routePath := "/" + toKebabPlural(snake)
-	return fmt.Sprintf(`package handler
-
-import (
-	"github.com/gin-gonic/gin"
-
-	consoleservice "github.com/zhimma/grove/app/console/service"
-	"github.com/zhimma/grove/internal/provider"
-	"github.com/zhimma/grove/pkg/response"
-	"github.com/zhimma/grove/pkg/route"
-)
-
-type %sHandler struct {
-	%sSvc *consoleservice.%sService
-}
-
-func Register%sRoutes(protected *gin.RouterGroup, p *provider.Provider) {
-	h := &%sHandler{
-		%sSvc: consoleservice.New%sService(p.DB),
-	}
-
-	group := route.Wrap(protected.Group("%s"))
-	group.GET("", h.List).Name("%s.列表")
-}
-
-func (h *%sHandler) List(c *gin.Context) {
-	out, err := h.%sSvc.List(c.Request.Context(), consoleservice.%sListInput{})
-	if err != nil {
-		response.Fail(c, err)
-		return
-	}
-	response.Success(c, out)
-}
-`, name, snake, name, name, name, snake, name, routePath, name, name, snake, name)
 }
 
 func openDefaultDB() (*gorm.DB, func(), error) {
@@ -559,92 +456,6 @@ func writeFile(path, content string) error {
 		return fmt.Errorf("文件已存在: %s", path)
 	}
 	return os.WriteFile(filepath.Clean(path), []byte(content), 0o600)
-}
-
-func insertRouteRegistration(path, line string) error {
-	const marker = "\t// grove:register-routes\n"
-
-	body, err := os.ReadFile(filepath.Clean(path))
-	if err != nil {
-		return err
-	}
-	if bytes.Contains(body, []byte(line)) {
-		return nil
-	}
-	if !bytes.Contains(body, []byte(marker)) {
-		return fmt.Errorf("未在 %s 中找到 grove 路由标记", path)
-	}
-
-	updated := strings.Replace(string(body), marker, line+marker, 1)
-	return os.WriteFile(filepath.Clean(path), []byte(updated), 0o600)
-}
-
-func toSnake(input string) string {
-	input = strings.TrimSpace(input)
-	if input == "" {
-		return ""
-	}
-
-	var out []rune
-	for i, r := range input {
-		if unicode.IsUpper(r) {
-			if i > 0 && out[len(out)-1] != '_' {
-				out = append(out, '_')
-			}
-			out = append(out, unicode.ToLower(r))
-			continue
-		}
-		if r == '-' || r == ' ' {
-			if len(out) > 0 && out[len(out)-1] != '_' {
-				out = append(out, '_')
-			}
-			continue
-		}
-		out = append(out, unicode.ToLower(r))
-	}
-	return strings.Trim(string(out), "_")
-}
-
-func toKebabPlural(input string) string {
-	base := strings.ReplaceAll(toSnake(input), "_", "-")
-	return pluralize(base)
-}
-
-func toSnakePlural(input string) string {
-	return pluralize(toSnake(input))
-}
-
-func pluralize(base string) string {
-	if base == "" {
-		return ""
-	}
-	if strings.HasSuffix(base, "y") && len(base) > 1 {
-		prev := base[len(base)-2]
-		if !strings.ContainsRune("aeiou", rune(prev)) {
-			return strings.TrimSuffix(base, "y") + "ies"
-		}
-	}
-	if strings.HasSuffix(base, "s") {
-		return base
-	}
-	return base + "s"
-}
-
-func toPascal(input string) string {
-	parts := strings.Split(toSnake(input), "_")
-	var out strings.Builder
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-		runes := []rune(strings.ToLower(part))
-		runes[0] = unicode.ToUpper(runes[0])
-		out.WriteString(string(runes))
-	}
-	if out.Len() == 0 {
-		return ""
-	}
-	return out.String()
 }
 
 func statusText(enabled bool) string {

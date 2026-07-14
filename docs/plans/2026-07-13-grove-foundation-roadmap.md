@@ -82,7 +82,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 - [x] Task 2：补齐数据库 schema 和可回滚迁移。
 - [x] Task 3：拆分安全 bootstrap seed 与 demo seed。
 - [x] Task 4：替换迁移引擎并使用真实 PostgreSQL 验证生命周期。
-- [ ] Task 5：修复 `make:module` 生成代码和原子性。
+- [x] Task 5：修复 `make:module` 生成代码和原子性。
 - [ ] Task 6：明确软删除语义并增加数据库约束。
 - [ ] Task 7：隔离 API 演示接口和虚拟数据。
 
@@ -466,7 +466,26 @@ git commit -m "test: verify postgres bootstrap lifecycle"
 
 ### Task 5：修复 `make:module` 生成代码和原子性
 
-**Status:** `[ ] Planned`
+**Status:** `[x] Completed`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Completed at:** 2026-07-14
+
+**Architecture note:** 模板和命名逻辑从 CLI 命令文件拆出；`make:module` 在写入前完成名称、全部目标文件和 router marker 预检。生成源码先经 `go/format`，新文件使用同目录临时文件和原子 hard link 创建，router 原子替换失败时回滚本次生成文件。
+
+**Verification:**
+
+- `go test ./cmd/grove -v`：PASS。
+- 临时同模块工作区执行生成后 `go test` 编译 model/service/handler/router：PASS。
+- `go test ./...`：PASS。
+- `go test -race ./cmd/grove`：PASS。
+- `go vet ./cmd/grove`：PASS。
+- 搜索旧 `app/console/service`、`app/console/handler`、`app/console/router` 模板路径：无残留。
 
 **Files:**
 
