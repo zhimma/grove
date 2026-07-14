@@ -68,7 +68,7 @@ func TestRouterPingAndProfile(t *testing.T) {
 	}).Error; err != nil {
 		t.Fatalf("create API user: %v", err)
 	}
-	p.DB = database.NewRepoWithConnections(db, nil)
+	p.DB = database.NewConnectionsFromDBs(db, nil)
 
 	engine := gin.New()
 	engine.Use(appmiddleware.RequestID(), appmiddleware.RequestMeta("api"), appmiddleware.Recovery())

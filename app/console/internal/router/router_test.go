@@ -80,7 +80,7 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = p.Close() })
 
-	p.DB = database.NewRepoWithConnections(db, nil)
+	p.DB = database.NewConnectionsFromDBs(db, nil)
 	p.Enforcers = map[string]*rbac.Enforcer{
 		"console": enforcer,
 	}
@@ -623,8 +623,8 @@ func TestConsoleRouterCreatedAdminCanReadPermissionsAndMenus(t *testing.T) {
 	enforcer := openConsoleTestEnforcer(t, db)
 	seedConsoleTestData(t, db, enforcer)
 
-	adminSvc := consoleservice.NewAdminService(database.NewRepoWithConnections(db, nil), enforcer)
-	roleSvc := consoleservice.NewRoleService(database.NewRepoWithConnections(db, nil), enforcer)
+	adminSvc := consoleservice.NewAdminService(database.NewConnectionsFromDBs(db, nil), enforcer)
+	roleSvc := consoleservice.NewRoleService(database.NewConnectionsFromDBs(db, nil), enforcer)
 
 	role, err := roleSvc.CreateRole(context.Background(), consoleservice.CreateRoleInput{
 		Name:        "Support",
@@ -693,7 +693,7 @@ func TestConsoleRouterRejectsDisabledAdminEvenWithOldToken(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = p.Close() })
 
-	p.DB = database.NewRepoWithConnections(db, nil)
+	p.DB = database.NewConnectionsFromDBs(db, nil)
 	p.Enforcers = map[string]*rbac.Enforcer{"console": enforcer}
 
 	engine := gin.New()
@@ -749,7 +749,7 @@ func TestConsoleRouterCreateRoleValidationErrorUsesFieldMessages(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = p.Close() })
 
-	p.DB = database.NewRepoWithConnections(db, nil)
+	p.DB = database.NewConnectionsFromDBs(db, nil)
 	p.Enforcers = map[string]*rbac.Enforcer{"console": enforcer}
 
 	engine := gin.New()
@@ -812,7 +812,7 @@ func TestConsoleRouterCreateRoleConflictReturnsStableErrorCode(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = p.Close() })
 
-	p.DB = database.NewRepoWithConnections(db, nil)
+	p.DB = database.NewConnectionsFromDBs(db, nil)
 	p.Enforcers = map[string]*rbac.Enforcer{"console": enforcer}
 
 	engine := gin.New()

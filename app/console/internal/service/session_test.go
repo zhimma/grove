@@ -142,5 +142,5 @@ func newSessionTestService(t *testing.T) (*SessionService, *gorm.DB, *auth.Manag
 	if err != nil {
 		t.Fatalf("new token manager: %v", err)
 	}
-	return NewSessionService(database.NewRepoWithConnections(db, nil), manager), db, manager
+	return NewSessionService(database.NewConnectionsFromDBs(db, nil), manager), db, manager
 }

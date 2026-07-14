@@ -381,61 +381,6 @@ func (d *Dispatcher) Listeners(eventName string) []Listener {
 	return d.getListeners(eventName)
 }
 
-var (
-	defaultDispatcherMu sync.RWMutex
-	defaultDispatcher   *Dispatcher
-)
-
-func Init(dispatcher *Dispatcher) {
-	defaultDispatcherMu.Lock()
-	defaultDispatcher = dispatcher
-	defaultDispatcherMu.Unlock()
-}
-
-func currentDispatcher() *Dispatcher {
-	defaultDispatcherMu.RLock()
-	dispatcher := defaultDispatcher
-	defaultDispatcherMu.RUnlock()
-	return dispatcher
-}
-
-func getOrCreateDispatcher() *Dispatcher {
-	if dispatcher := currentDispatcher(); dispatcher != nil {
-		return dispatcher
-	}
-	defaultDispatcherMu.Lock()
-	defer defaultDispatcherMu.Unlock()
-	if defaultDispatcher == nil {
-		defaultDispatcher = New()
-	}
-	return defaultDispatcher
-}
-
-func Listen(eventName string, listener Listener) error {
-	return getOrCreateDispatcher().Listen(eventName, listener)
-}
-
-func ListenFunc(eventName string, handler ListenerFunc) error {
-	return getOrCreateDispatcher().ListenFunc(eventName, handler)
-}
-
-func Dispatch(ctx context.Context, event Event) error {
-	return getOrCreateDispatcher().Dispatch(ctx, event)
-}
-
-func DispatchAsync(ctx context.Context, event Event) error {
-	return getOrCreateDispatcher().DispatchAsync(ctx, event)
-}
-
-func TryDispatchAsync(ctx context.Context, event Event) error {
-	return getOrCreateDispatcher().TryDispatchAsync(ctx, event)
-}
-
-func HasListeners(eventName string) bool {
-	dispatcher := currentDispatcher()
-	return dispatcher != nil && dispatcher.HasListeners(eventName)
-}
-
 func Subscribe[T Event](dispatcher *Dispatcher, handler func(ctx context.Context, event T) error) error {
 	if dispatcher == nil {
 		return fmt.Errorf("event dispatcher is required")

@@ -6,19 +6,19 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestRepoSupportsNamedResources(t *testing.T) {
+func TestConnectionsSupportNamedResources(t *testing.T) {
 	defaultDB := &gorm.DB{}
 	ordersDB := &gorm.DB{}
 
-	repo := NewRepoWithConnections(defaultDB, map[string]*gorm.DB{
+	dbs := NewConnectionsFromDBs(defaultDB, map[string]*gorm.DB{
 		"orders": ordersDB,
 	})
 
-	if got := repo.Default(); got != defaultDB {
+	if got := dbs.Default(); got != defaultDB {
 		t.Fatal("expected default database to match")
 	}
 
-	got, err := repo.Get("orders")
+	got, err := dbs.Get("orders")
 	if err != nil {
 		t.Fatalf("get orders db: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestRepoSupportsNamedResources(t *testing.T) {
 		t.Fatal("expected orders database to match")
 	}
 
-	if !repo.Has("default") || !repo.Has("orders") {
-		t.Fatal("expected repo to report configured resources")
+	if !dbs.Has("default") || !dbs.Has("orders") {
+		t.Fatal("expected dbs to report configured resources")
 	}
 }

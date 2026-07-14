@@ -126,7 +126,7 @@ func newLoginTestService(t *testing.T, failureLimit int) *AuthService {
 		FailureLimit:      failureLimit,
 		LockDuration:      time.Minute,
 	})
-	return NewAuthService(database.NewRepoWithConnections(db, nil), nil, manager, guard)
+	return NewAuthService(database.NewConnectionsFromDBs(db, nil), nil, manager, guard)
 }
 
 func loginWithIP(service *AuthService, account, password, clientIP string) error {

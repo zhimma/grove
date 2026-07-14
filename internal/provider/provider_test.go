@@ -70,7 +70,7 @@ func TestNewRequiresConfig(t *testing.T) {
 	}
 }
 
-func TestWithCasbinRequiresDatabaseRepo(t *testing.T) {
+func TestWithCasbinRequiresDatabaseConnections(t *testing.T) {
 	p := &Provider{
 		Config: &config.Config{
 			Casbin: config.CasbinConfig{
@@ -88,16 +88,16 @@ func TestWithCasbinRequiresDatabaseRepo(t *testing.T) {
 
 	err := WithCasbin()(p)
 	if err == nil {
-		t.Fatal("expected casbin init to fail without database repo")
+		t.Fatal("expected casbin init to fail without database connections")
 	}
-	if err.Error() != "权限控制依赖数据库仓储" {
+	if err.Error() != "权限控制依赖数据库连接" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestGetEnforcerReturnsNilWhenMissing(t *testing.T) {
 	p := &Provider{
-		DB: database.NewRepoWithConnections(nil, nil),
+		DB: database.NewConnectionsFromDBs(nil, nil),
 	}
 
 	if got := p.GetEnforcer("api"); got != nil {

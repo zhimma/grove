@@ -48,8 +48,8 @@ func TestChangePasswordClearsMustChangePassword(t *testing.T) {
 		t.Fatalf("create session: %v", err)
 	}
 
-	repo := database.NewRepoWithConnections(db, nil)
-	service := NewAuthService(repo, nil, nil)
+	dbs := database.NewConnectionsFromDBs(db, nil)
+	service := NewAuthService(dbs, nil, nil)
 	if err := service.ChangePassword(context.Background(), ChangePasswordInput{
 		AdminID:     admin.ID,
 		OldPassword: "old-password",
@@ -100,7 +100,7 @@ func TestResetPasswordRevokesSessions(t *testing.T) {
 		t.Fatalf("create session: %v", err)
 	}
 
-	service := NewAdminService(database.NewRepoWithConnections(db, nil), nil)
+	service := NewAdminService(database.NewConnectionsFromDBs(db, nil), nil)
 	if err := service.ResetPassword(context.Background(), ResetAdminPasswordInput{AdminID: admin.ID, Password: "new-password"}); err != nil {
 		t.Fatalf("reset password: %v", err)
 	}

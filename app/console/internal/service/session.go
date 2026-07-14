@@ -18,7 +18,7 @@ import (
 const sessionActivityWriteInterval = 5 * time.Minute
 
 type SessionService struct {
-	dbRepo       database.Repo
+	dbs          database.Connections
 	tokenManager *auth.Manager
 }
 
@@ -42,8 +42,8 @@ type ListSessionsResult struct {
 	Meta ListMeta
 }
 
-func NewSessionService(dbRepo database.Repo, tokenManager *auth.Manager) *SessionService {
-	return &SessionService{dbRepo: dbRepo, tokenManager: tokenManager}
+func NewSessionService(dbs database.Connections, tokenManager *auth.Manager) *SessionService {
+	return &SessionService{dbs: dbs, tokenManager: tokenManager}
 }
 
 func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (*model.ConsoleSession, *auth.TokenPair, error) {
@@ -114,7 +114,7 @@ func (s *SessionService) Rotate(ctx context.Context, refreshToken string) (*auth
 		}
 		return nil, errx.Internal().WithCause(err)
 	}
-	if _, err := NewAdminAuthStateResolver(s.dbRepo).ResolveAdminAuthState(ctx, session.AdminID); err != nil {
+	if _, err := NewAdminAuthStateResolver(s.dbs).ResolveAdminAuthState(ctx, session.AdminID); err != nil {
 		return nil, err
 	}
 
@@ -252,10 +252,10 @@ func (s *SessionService) List(ctx context.Context, input ListSessionsInput) (*Li
 }
 
 func (s *SessionService) db(ctx context.Context) (*gorm.DB, error) {
-	if s == nil || s.dbRepo == nil || s.dbRepo.Default() == nil {
+	if s == nil || s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
-	return transaction.GetDB(ctx, s.dbRepo.Default()), nil
+	return transaction.GetDB(ctx, s.dbs.Default()), nil
 }
 
 func invalidRefreshToken(cause error) error {

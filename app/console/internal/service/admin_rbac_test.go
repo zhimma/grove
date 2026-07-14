@@ -27,9 +27,9 @@ func (f *failingAdminRoleBindings) ReplaceConsoleRoleForUser(adminID, roleID str
 }
 
 func TestCreateAdminCompensatesDatabaseWhenGroupingFails(t *testing.T) {
-	repo, db, oldRoleID, _ := openAdminRBACTestContext(t)
+	dbs, db, oldRoleID, _ := openAdminRBACTestContext(t)
 	bindings := &failingAdminRoleBindings{failRole: oldRoleID}
-	service := &AdminService{dbRepo: repo, roleBindings: bindings}
+	service := &AdminService{dbs: dbs, roleBindings: bindings}
 
 	_, err := service.CreateAdmin(context.Background(), CreateAdminInput{
 		Account:  "operator",
@@ -49,7 +49,7 @@ func TestCreateAdminCompensatesDatabaseWhenGroupingFails(t *testing.T) {
 }
 
 func TestUpdateAdminRoleCompensatesDatabaseWhenGroupingFails(t *testing.T) {
-	repo, db, oldRoleID, newRoleID := openAdminRBACTestContext(t)
+	dbs, db, oldRoleID, newRoleID := openAdminRBACTestContext(t)
 	admin := model.ConsoleAdmin{
 		Account:  "operator",
 		Username: "operator",
@@ -61,7 +61,7 @@ func TestUpdateAdminRoleCompensatesDatabaseWhenGroupingFails(t *testing.T) {
 		t.Fatalf("create admin: %v", err)
 	}
 	bindings := &failingAdminRoleBindings{failRole: newRoleID}
-	service := &AdminService{dbRepo: repo, roleBindings: bindings}
+	service := &AdminService{dbs: dbs, roleBindings: bindings}
 
 	_, err := service.UpdateAdmin(context.Background(), UpdateAdminInput{AdminID: admin.ID, RoleID: &newRoleID})
 	if err == nil {
@@ -80,7 +80,7 @@ func TestUpdateAdminRoleCompensatesDatabaseWhenGroupingFails(t *testing.T) {
 }
 
 func TestDeleteAdminDoesNotDeleteDatabaseRowWhenGroupingRemovalFails(t *testing.T) {
-	repo, db, oldRoleID, _ := openAdminRBACTestContext(t)
+	dbs, db, oldRoleID, _ := openAdminRBACTestContext(t)
 	admin := model.ConsoleAdmin{
 		Account:  "operator",
 		Username: "operator",
@@ -92,7 +92,7 @@ func TestDeleteAdminDoesNotDeleteDatabaseRowWhenGroupingRemovalFails(t *testing.
 		t.Fatalf("create admin: %v", err)
 	}
 	bindings := &failingAdminRoleBindings{failRole: ""}
-	service := &AdminService{dbRepo: repo, roleBindings: bindings}
+	service := &AdminService{dbs: dbs, roleBindings: bindings}
 
 	if err := service.DeleteAdmin(context.Background(), DeleteAdminInput{AdminID: admin.ID}); err == nil {
 		t.Fatal("expected grouping removal failure")
@@ -107,7 +107,7 @@ func TestDeleteAdminDoesNotDeleteDatabaseRowWhenGroupingRemovalFails(t *testing.
 }
 
 func TestUpdateAdminRoleSynchronizesDatabaseAndGrouping(t *testing.T) {
-	repo, db, oldRoleID, newRoleID := openAdminRBACTestContext(t)
+	dbs, db, oldRoleID, newRoleID := openAdminRBACTestContext(t)
 	enforcer, err := rbac.New(db, &rbac.Config{TableName: "console_casbin_rules"})
 	if err != nil {
 		t.Fatalf("new enforcer: %v", err)
@@ -125,7 +125,7 @@ func TestUpdateAdminRoleSynchronizesDatabaseAndGrouping(t *testing.T) {
 	if err := enforcer.ReplaceConsoleRoleForUser(admin.ID, oldRoleID); err != nil {
 		t.Fatalf("seed old grouping: %v", err)
 	}
-	service := NewAdminService(repo, enforcer)
+	service := NewAdminService(dbs, enforcer)
 
 	if _, err := service.UpdateAdmin(context.Background(), UpdateAdminInput{AdminID: admin.ID, RoleID: &newRoleID}); err != nil {
 		t.Fatalf("update admin role: %v", err)
@@ -146,7 +146,7 @@ func TestUpdateAdminRoleSynchronizesDatabaseAndGrouping(t *testing.T) {
 	}
 }
 
-func openAdminRBACTestContext(t *testing.T) (database.Repo, *gorm.DB, string, string) {
+func openAdminRBACTestContext(t *testing.T) (database.Connections, *gorm.DB, string, string) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/admin-rbac.db"), &gorm.Config{})
 	if err != nil {
@@ -178,5 +178,5 @@ ON console_casbin_rules (ptype, v0, v1, v2, v3, v4, v5);`).Error; err != nil {
 	if err := db.Create(&newRole).Error; err != nil {
 		t.Fatalf("create new role: %v", err)
 	}
-	return database.NewRepoWithConnections(db, nil), db, oldRole.ID, newRole.ID
+	return database.NewConnectionsFromDBs(db, nil), db, oldRole.ID, newRole.ID
 }

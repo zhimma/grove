@@ -8,7 +8,7 @@ import (
 )
 
 type DashboardService struct {
-	dbRepo database.Repo
+	dbs database.Connections
 }
 
 type SummaryOutput struct {
@@ -19,12 +19,12 @@ type SummaryOutput struct {
 	Message        string `json:"message"`
 }
 
-func NewDashboardService(dbRepo database.Repo) *DashboardService {
-	return &DashboardService{dbRepo: dbRepo}
+func NewDashboardService(dbs database.Connections) *DashboardService {
+	return &DashboardService{dbs: dbs}
 }
 
 func (s *DashboardService) Summary(ctx context.Context) (SummaryOutput, error) {
-	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+	if s.dbs == nil || s.dbs.Default() == nil {
 		return SummaryOutput{}, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
 
@@ -34,7 +34,7 @@ func (s *DashboardService) Summary(ctx context.Context) (SummaryOutput, error) {
 		operationCount int64
 		loginCount     int64
 	)
-	db := s.dbRepo.Default().WithContext(ctx)
+	db := s.dbs.Default().WithContext(ctx)
 	if err := db.Table("console_admins").Count(&adminCount).Error; err != nil {
 		return SummaryOutput{}, errx.Internal().WithCause(err)
 	}

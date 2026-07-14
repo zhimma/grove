@@ -138,31 +138,6 @@ func (m *Manager) Close() error {
 	return m.closeErr
 }
 
-var (
-	defaultManagerMu sync.RWMutex
-	defaultManager   *Manager
-)
-
-func Init(manager *Manager) {
-	defaultManagerMu.Lock()
-	defaultManager = manager
-	defaultManagerMu.Unlock()
-}
-
-func GetStore(name string) Store {
-	defaultManagerMu.RLock()
-	manager := defaultManager
-	defaultManagerMu.RUnlock()
-	if manager == nil {
-		return nil
-	}
-	return manager.Store(name)
-}
-
-func DefaultStore() Store {
-	return GetStore("")
-}
-
 func normalizeStoreName(name string) string {
 	return strings.TrimSpace(strings.ToLower(name))
 }

@@ -20,7 +20,7 @@ import (
 )
 
 type AuthService struct {
-	dbRepo       database.Repo
+	dbs          database.Connections
 	enforcer     *rbac.Enforcer
 	tokenManager *auth.Manager
 	sessions     *SessionService
@@ -80,12 +80,12 @@ type GetAuthorizationOverviewOutput struct {
 	MenuKeys       []string `json:"menu_keys"`
 }
 
-func NewAuthService(dbRepo database.Repo, enforcer *rbac.Enforcer, tm *auth.Manager, guards ...ratelimit.LoginGuard) *AuthService {
+func NewAuthService(dbs database.Connections, enforcer *rbac.Enforcer, tm *auth.Manager, guards ...ratelimit.LoginGuard) *AuthService {
 	service := &AuthService{
-		dbRepo:       dbRepo,
+		dbs:          dbs,
 		enforcer:     enforcer,
 		tokenManager: tm,
-		sessions:     NewSessionService(dbRepo, tm),
+		sessions:     NewSessionService(dbs, tm),
 	}
 	if len(guards) > 0 {
 		service.loginGuard = guards[0]
@@ -94,7 +94,7 @@ func NewAuthService(dbRepo database.Repo, enforcer *rbac.Enforcer, tm *auth.Mana
 }
 
 func (s *AuthService) Login(ctx context.Context, input LoginInput) (LoginOutput, error) {
-	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+	if s.dbs == nil || s.dbs.Default() == nil {
 		return LoginOutput{}, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
 	if s.tokenManager == nil {
@@ -122,7 +122,7 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (LoginOutput,
 	}
 
 	var admin model.ConsoleAdmin
-	if err := s.dbRepo.Default().WithContext(ctx).
+	if err := s.dbs.Default().WithContext(ctx).
 		Preload("Role").
 		Where("account = ? OR LOWER(email) = LOWER(?) OR phone = ?", account, account, account).
 		First(&admin).Error; err != nil {
@@ -154,7 +154,7 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (LoginOutput,
 
 	now := time.Now()
 	var tokenPair *auth.TokenPair
-	if err := s.dbRepo.Default().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := s.dbs.Default().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txCtx := transaction.WithDB(ctx, tx)
 		_, pair, createErr := s.sessions.Create(txCtx, CreateSessionInput{
 			AdminID:    admin.ID,
@@ -249,7 +249,7 @@ func (s *AuthService) Logout(ctx context.Context, input LogoutInput) error {
 }
 
 func (s *AuthService) writeLoginLog(ctx context.Context, adminID, account string, success bool, failureReason string) {
-	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+	if s.dbs == nil || s.dbs.Default() == nil {
 		logger.Warn().
 			Str("module", "console_login").
 			Str("account", strings.TrimSpace(account)).
@@ -266,7 +266,7 @@ func (s *AuthService) writeLoginLog(ctx context.Context, adminID, account string
 		ClientIP:      truncateLoginIP(meta.ClientIP),
 		UserAgent:     truncateLoginUA(meta.UserAgent),
 	}
-	if err := s.dbRepo.Default().WithContext(ctx).Create(&record).Error; err != nil {
+	if err := s.dbs.Default().WithContext(ctx).Create(&record).Error; err != nil {
 		logger.Warn().
 			Err(err).
 			Str("module", "console_login").
@@ -292,12 +292,12 @@ func truncateLoginUA(value string) string {
 }
 
 func (s *AuthService) GetCurrentAdmin(ctx context.Context, adminID string) (*model.ConsoleAdmin, error) {
-	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+	if s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
 
 	var admin model.ConsoleAdmin
-	if err := s.dbRepo.Default().WithContext(ctx).
+	if err := s.dbs.Default().WithContext(ctx).
 		Preload("Role").
 		Where("id = ?", adminID).
 		First(&admin).Error; err != nil {
@@ -311,10 +311,10 @@ func (s *AuthService) GetCurrentAdmin(ctx context.Context, adminID string) (*mod
 }
 
 func (s *AuthService) ChangePassword(ctx context.Context, input ChangePasswordInput) error {
-	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+	if s.dbs == nil || s.dbs.Default() == nil {
 		return errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
-	return s.dbRepo.Default().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return s.dbs.Default().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var admin model.ConsoleAdmin
 		if err := tx.Where("id = ?", input.AdminID).First(&admin).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
@@ -342,7 +342,7 @@ func (s *AuthService) ChangePassword(ctx context.Context, input ChangePasswordIn
 }
 
 func (s *AuthService) UpdateCurrentAdmin(ctx context.Context, input UpdateCurrentAdminInput) (*model.ConsoleAdmin, error) {
-	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+	if s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
 
@@ -371,7 +371,7 @@ func (s *AuthService) UpdateCurrentAdmin(ctx context.Context, input UpdateCurren
 		"display_name": strings.TrimSpace(input.DisplayName),
 		"avatar":       strings.TrimSpace(input.Avatar),
 	}
-	if err := s.dbRepo.Default().WithContext(ctx).
+	if err := s.dbs.Default().WithContext(ctx).
 		Model(&model.ConsoleAdmin{}).
 		Where("id = ?", adminID).
 		Updates(updates).Error; err != nil {
@@ -448,7 +448,7 @@ func (s *AuthService) ensureCurrentAdminUnique(ctx context.Context, excludeID, a
 		if check.value == "" {
 			continue
 		}
-		query := s.dbRepo.Default().WithContext(ctx).Model(&model.ConsoleAdmin{}).Where(check.column+" = ?", check.value)
+		query := s.dbs.Default().WithContext(ctx).Model(&model.ConsoleAdmin{}).Where(check.column+" = ?", check.value)
 		if excludeID != "" {
 			query = query.Where("id <> ?", excludeID)
 		}

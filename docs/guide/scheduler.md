@@ -38,7 +38,7 @@ if err != nil {
 ```go
 err := p.Scheduler.Register(&scheduler.Task{
     Name:     "sync_stats",
-    Schedule: scheduler.CronExpression.EveryMinute,
+    Schedule: scheduler.EveryMinuteSchedule,
     Mutex:    true,
     Timeout:  2 * time.Minute,
     Job: scheduler.JobFunc(func(ctx context.Context) error {

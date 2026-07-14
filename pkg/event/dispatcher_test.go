@@ -380,28 +380,6 @@ func TestForgetFlushAndHasListeners(t *testing.T) {
 	}
 }
 
-func TestGlobalDispatcher(t *testing.T) {
-	d := New()
-	Init(d)
-	t.Cleanup(func() {
-		Init(nil)
-		_ = d.Close()
-	})
-	var calls atomic.Int64
-	if err := ListenFunc("test.event", func(context.Context, Event) error {
-		calls.Add(1)
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Dispatch(context.Background(), testEvent{}); err != nil {
-		t.Fatal(err)
-	}
-	if calls.Load() != 1 {
-		t.Fatalf("calls = %d", calls.Load())
-	}
-}
-
 func TestSubscribe(t *testing.T) {
 	d := New()
 	t.Cleanup(func() { _ = d.Close() })

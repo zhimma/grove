@@ -13,12 +13,12 @@ import (
 
 // OperationLogService 操作日志服务
 type OperationLogService struct {
-	dbRepo database.Repo
+	dbs database.Connections
 }
 
 // NewOperationLogService 创建操作日志服务
-func NewOperationLogService(dbRepo database.Repo) *OperationLogService {
-	return &OperationLogService{dbRepo: dbRepo}
+func NewOperationLogService(dbs database.Connections) *OperationLogService {
+	return &OperationLogService{dbs: dbs}
 }
 
 // ListInput 列表输入参数
@@ -153,8 +153,8 @@ func (s *OperationLogService) Clear(ctx context.Context, in *OperationLogClearIn
 }
 
 func (s *OperationLogService) defaultDB(ctx context.Context) (*gorm.DB, error) {
-	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+	if s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
-	return s.dbRepo.Default().WithContext(ctx), nil
+	return s.dbs.Default().WithContext(ctx), nil
 }

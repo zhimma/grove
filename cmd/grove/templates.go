@@ -26,7 +26,7 @@ import (
 )
 
 type %sService struct {
-	dbRepo database.Repo
+	dbs database.Connections
 }
 
 type %sListInput struct{}
@@ -35,12 +35,12 @@ type %sListOutput struct {
 	Message string `+"`json:\"message\"`"+`
 }
 
-func New%sService(dbRepo database.Repo) *%sService {
-	return &%sService{dbRepo: dbRepo}
+func New%sService(dbs database.Connections) *%sService {
+	return &%sService{dbs: dbs}
 }
 
 func (s *%sService) List(_ context.Context, _ %sListInput) (*%sListOutput, error) {
-	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+	if s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
 	return &%sListOutput{Message: "%s 模块已就绪"}, nil

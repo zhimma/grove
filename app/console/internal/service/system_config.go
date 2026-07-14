@@ -16,7 +16,7 @@ import (
 const SecretMask = "********"
 
 type SystemConfigService struct {
-	dbRepo    database.Repo
+	dbs       database.Connections
 	secretBox *secretbox.Box
 }
 
@@ -63,9 +63,9 @@ type GetGroupConfigsInput struct {
 	Group string
 }
 
-func NewSystemConfigService(dbRepo database.Repo, secretBox *secretbox.Box) *SystemConfigService {
+func NewSystemConfigService(dbs database.Connections, secretBox *secretbox.Box) *SystemConfigService {
 	return &SystemConfigService{
-		dbRepo:    dbRepo,
+		dbs:       dbs,
 		secretBox: secretBox,
 	}
 }
@@ -324,10 +324,10 @@ func (s *SystemConfigService) getByID(ctx context.Context, id string) (*model.Sy
 }
 
 func (s *SystemConfigService) defaultDB(ctx context.Context) (*gorm.DB, error) {
-	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+	if s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
-	return s.dbRepo.Default().WithContext(ctx), nil
+	return s.dbs.Default().WithContext(ctx), nil
 }
 
 func normalizeConfigValueType(valueType string) string {

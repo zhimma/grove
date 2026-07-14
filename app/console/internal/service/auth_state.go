@@ -22,16 +22,16 @@ type AdminAuthStateResolver interface {
 }
 
 type adminAuthStateResolver struct {
-	dbRepo database.Repo
+	dbs database.Connections
 }
 
-func NewAdminAuthStateResolver(dbRepo database.Repo) AdminAuthStateResolver {
-	return &adminAuthStateResolver{dbRepo: dbRepo}
+func NewAdminAuthStateResolver(dbs database.Connections) AdminAuthStateResolver {
+	return &adminAuthStateResolver{dbs: dbs}
 }
 
 func (r *adminAuthStateResolver) ResolveAdminAuthState(ctx context.Context, adminID string) (*AdminAuthState, error) {
 	var admin model.ConsoleAdmin
-	if err := r.dbRepo.Default().WithContext(ctx).
+	if err := r.dbs.Default().WithContext(ctx).
 		Preload("Role").
 		Where("id = ?", adminID).
 		First(&admin).Error; err != nil {

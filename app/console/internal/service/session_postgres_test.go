@@ -51,7 +51,7 @@ func TestPostgresConcurrentRefreshOnlySucceedsOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new token manager: %v", err)
 	}
-	sessions := NewSessionService(database.NewRepoWithConnections(db, nil), manager)
+	sessions := NewSessionService(database.NewConnectionsFromDBs(db, nil), manager)
 	_, pair, err := sessions.Create(context.Background(), CreateSessionInput{AdminID: admin.ID})
 	if err != nil {
 		t.Fatalf("create session: %v", err)

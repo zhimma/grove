@@ -155,15 +155,15 @@ func newSystemConfigSecretService(t *testing.T, withBox bool) (*SystemConfigServ
 	if err := db.AutoMigrate(&model.SystemConfig{}); err != nil {
 		t.Fatalf("migrate system config: %v", err)
 	}
-	repo := database.NewRepoWithConnections(db, nil)
+	dbs := database.NewConnectionsFromDBs(db, nil)
 	if !withBox {
-		return NewSystemConfigService(repo, nil), db
+		return NewSystemConfigService(dbs, nil), db
 	}
 	box, err := secretbox.New("0123456789abcdef0123456789abcdef")
 	if err != nil {
 		t.Fatalf("new secret box: %v", err)
 	}
-	return NewSystemConfigService(repo, box), db
+	return NewSystemConfigService(dbs, box), db
 }
 
 func assertMaskedSystemConfig(t *testing.T, config *model.SystemConfig) {

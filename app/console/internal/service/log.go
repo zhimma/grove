@@ -13,7 +13,7 @@ import (
 )
 
 type LogService struct {
-	dbRepo database.Repo
+	dbs database.Connections
 }
 
 type ListOperationLogsInput struct {
@@ -65,8 +65,8 @@ type OperationLogDetail struct {
 	Detail map[string]any
 }
 
-func NewLogService(dbRepo database.Repo) *LogService {
-	return &LogService{dbRepo: dbRepo}
+func NewLogService(dbs database.Connections) *LogService {
+	return &LogService{dbs: dbs}
 }
 
 func (s *LogService) ListOperationLogs(ctx context.Context, in ListOperationLogsInput) (*ListOperationLogsOutput, error) {
@@ -217,8 +217,8 @@ func queryConsoleLogs[T any, R any](
 }
 
 func (s *LogService) defaultDB(ctx context.Context) (*gorm.DB, error) {
-	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+	if s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
-	return s.dbRepo.Default().WithContext(ctx), nil
+	return s.dbs.Default().WithContext(ctx), nil
 }

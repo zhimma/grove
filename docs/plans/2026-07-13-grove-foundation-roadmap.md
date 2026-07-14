@@ -113,7 +113,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 ### Milestone 4：代码组织与开发体验
 
 - [x] Task 18：消除后端静态菜单真相源。
-- [ ] Task 19：清理未使用的全局单例 API 和命名。
+- [x] Task 19：清理未使用的全局单例 API 和命名。
 - [ ] Task 20：收敛重复分页和响应映射。
 - [ ] Task 21：完善 OpenAPI 合同和漂移检查。
 - [ ] Task 22：增加 readiness、指标、trace 和安全 CI。
@@ -1222,7 +1222,22 @@ go test ./pkg/scheduler -race -count=20
 
 ### Task 19：清理未使用的全局单例 API 和命名
 
-**Status:** `[ ] Planned`
+**Status:** `[x] Completed`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Completed at:** 2026-07-14
+
+**Verification:**
+
+- `go test ./...`、`go test -race ./...`、`go vet ./...`、`make build`、`git diff --check`：PASS。
+- `go test -race ./pkg/cache ./pkg/event ./pkg/scheduler ./pkg/database ./internal/provider -count=20`：PASS。
+- 本机 PostgreSQL build-tag 集成测试：PASS；未使用 Docker 或下载依赖。
+- `rg` 确认业务代码中不存在 `database.Repo`、`dbRepo`、`NewRepo*` 和 cache/event/scheduler 默认实例入口。
 
 **Files:**
 

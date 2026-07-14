@@ -16,7 +16,7 @@ import (
 )
 
 type AdminService struct {
-	dbRepo       database.Repo
+	dbs          database.Connections
 	roleBindings adminRoleBindings
 }
 
@@ -91,12 +91,12 @@ type ResetAdminPasswordInput struct {
 	Password string
 }
 
-func NewAdminService(dbRepo database.Repo, enforcer *rbac.Enforcer) *AdminService {
-	return &AdminService{dbRepo: dbRepo, roleBindings: enforcer}
+func NewAdminService(dbs database.Connections, enforcer *rbac.Enforcer) *AdminService {
+	return &AdminService{dbs: dbs, roleBindings: enforcer}
 }
 
 func (s *AdminService) ListAdmins(ctx context.Context, in ListAdminsInput) (*ListAdminsResult, error) {
-	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+	if s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
 
@@ -108,7 +108,7 @@ func (s *AdminService) ListAdmins(ctx context.Context, in ListAdminsInput) (*Lis
 		ListAll:  in.ListAll,
 	})
 
-	query := s.dbRepo.Default().WithContext(ctx).Model(&model.ConsoleAdmin{}).Preload("Role")
+	query := s.dbs.Default().WithContext(ctx).Model(&model.ConsoleAdmin{}).Preload("Role")
 	if keyword := strings.TrimSpace(in.Keyword); keyword != "" {
 		like := "%" + keyword + "%"
 		query = query.Where(
@@ -173,7 +173,7 @@ func (s *AdminService) GetAdmin(ctx context.Context, in GetAdminInput) (*model.C
 }
 
 func (s *AdminService) CreateAdmin(ctx context.Context, in CreateAdminInput) (*model.ConsoleAdmin, error) {
-	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+	if s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
 
@@ -224,7 +224,7 @@ func (s *AdminService) CreateAdmin(ctx context.Context, in CreateAdminInput) (*m
 		admin.Status = in.Status
 	}
 
-	db := s.dbRepo.Default().WithContext(ctx)
+	db := s.dbs.Default().WithContext(ctx)
 	if err := db.Create(&admin).Error; err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}
@@ -309,7 +309,7 @@ func (s *AdminService) UpdateAdmin(ctx context.Context, in UpdateAdminInput) (*m
 	if err := s.ensureAdminUnique(ctx, in.AdminID, newAccount, newEmail, newPhone); err != nil {
 		return nil, err
 	}
-	db := s.dbRepo.Default().WithContext(ctx)
+	db := s.dbs.Default().WithContext(ctx)
 	roleChanged := newRoleID != admin.RoleID
 	if roleChanged {
 		if s.roleBindings != nil {
@@ -354,7 +354,7 @@ func (s *AdminService) UpdateAdminStatus(ctx context.Context, in UpdateAdminStat
 		return nil, errx.InvalidParams().WithHTTPStatus(422).WithMessage("管理员状态不合法")
 	}
 
-	if err := s.dbRepo.Default().WithContext(ctx).
+	if err := s.dbs.Default().WithContext(ctx).
 		Model(&model.ConsoleAdmin{}).
 		Where("id = ?", in.AdminID).
 		Update("status", in.Status).Error; err != nil {
@@ -380,7 +380,7 @@ func (s *AdminService) DeleteAdmin(ctx context.Context, in DeleteAdminInput) err
 			return rbacSyncError("管理员角色绑定删除失败", err, nil)
 		}
 	}
-	if err := s.dbRepo.Default().WithContext(ctx).Delete(&model.ConsoleAdmin{}, "id = ?", in.AdminID).Error; err != nil {
+	if err := s.dbs.Default().WithContext(ctx).Delete(&model.ConsoleAdmin{}, "id = ?", in.AdminID).Error; err != nil {
 		var compensationErr error
 		if s.roleBindings != nil {
 			compensationErr = s.roleBindings.ReplaceConsoleRoleForUser(in.AdminID, admin.RoleID)
@@ -407,7 +407,7 @@ func (s *AdminService) ResetPassword(ctx context.Context, in ResetAdminPasswordI
 	if err != nil {
 		return errx.Internal().WithCause(err)
 	}
-	return s.dbRepo.Default().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return s.dbs.Default().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&model.ConsoleAdmin{}).
 			Where("id = ?", in.AdminID).
 			Updates(map[string]any{
@@ -416,17 +416,17 @@ func (s *AdminService) ResetPassword(ctx context.Context, in ResetAdminPasswordI
 			}).Error; err != nil {
 			return errx.Internal().WithCause(err)
 		}
-		return NewSessionService(s.dbRepo, nil).RevokeAdmin(transaction.WithDB(ctx, tx), in.AdminID, "password_reset")
+		return NewSessionService(s.dbs, nil).RevokeAdmin(transaction.WithDB(ctx, tx), in.AdminID, "password_reset")
 	})
 }
 
 func (s *AdminService) loadAdmin(ctx context.Context, adminID string) (*model.ConsoleAdmin, error) {
-	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+	if s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
 
 	var admin model.ConsoleAdmin
-	if err := s.dbRepo.Default().WithContext(ctx).
+	if err := s.dbs.Default().WithContext(ctx).
 		Preload("Role").
 		First(&admin, "id = ?", strings.TrimSpace(adminID)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -440,7 +440,7 @@ func (s *AdminService) loadAdmin(ctx context.Context, adminID string) (*model.Co
 
 func (s *AdminService) ensureRoleExists(ctx context.Context, roleID string) error {
 	var count int64
-	if err := s.dbRepo.Default().WithContext(ctx).
+	if err := s.dbs.Default().WithContext(ctx).
 		Model(&model.ConsoleRole{}).
 		Where("id = ?", roleID).
 		Count(&count).Error; err != nil {
@@ -468,7 +468,7 @@ func (s *AdminService) ensureAdminUnique(ctx context.Context, excludeID, account
 		if check.value == "" {
 			continue
 		}
-		query := s.dbRepo.Default().WithContext(ctx).Model(&model.ConsoleAdmin{}).Where(check.column+" = ?", check.value)
+		query := s.dbs.Default().WithContext(ctx).Model(&model.ConsoleAdmin{}).Where(check.column+" = ?", check.value)
 		if strings.TrimSpace(excludeID) != "" {
 			query = query.Where("id <> ?", excludeID)
 		}
@@ -505,7 +505,7 @@ func (s *AdminService) restoreAdminRole(ctx context.Context, adminID, roleID str
 			return err
 		}
 	}
-	if err := s.dbRepo.Default().WithContext(ctx).
+	if err := s.dbs.Default().WithContext(ctx).
 		Model(&model.ConsoleAdmin{}).
 		Where("id = ?", adminID).
 		Update("role_id", roleID).Error; err != nil {

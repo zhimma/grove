@@ -26,7 +26,7 @@ type Config struct {
 	ConnMaxLifetime int
 }
 
-type Repo interface {
+type Connections interface {
 	Default() *gorm.DB
 	Get(name string) (*gorm.DB, error)
 	Has(name string) bool
@@ -34,13 +34,13 @@ type Repo interface {
 	Close() error
 }
 
-type repo struct {
+type connections struct {
 	defaultDB *gorm.DB
 	resources map[string]*gorm.DB
 }
 
-func NewRepo(defaultConfig Config, resourceConfigs map[string]Config) (Repo, error) {
-	r := &repo{
+func NewConnections(defaultConfig Config, resourceConfigs map[string]Config) (Connections, error) {
+	dbs := &connections{
 		resources: map[string]*gorm.DB{},
 	}
 
@@ -48,9 +48,9 @@ func NewRepo(defaultConfig Config, resourceConfigs map[string]Config) (Repo, err
 	if err != nil {
 		return nil, err
 	}
-	r.defaultDB = defaultDB
+	dbs.defaultDB = defaultDB
 	if defaultDB != nil {
-		r.resources["default"] = defaultDB
+		dbs.resources["default"] = defaultDB
 	}
 
 	for name, cfg := range resourceConfigs {
@@ -60,24 +60,24 @@ func NewRepo(defaultConfig Config, resourceConfigs map[string]Config) (Repo, err
 		}
 		db, err := open(cfg)
 		if err != nil {
-			_ = r.Close()
+			_ = dbs.Close()
 			return nil, fmt.Errorf("open database resource %q: %w", resourceName, err)
 		}
 		if db != nil {
-			r.resources[resourceName] = db
+			dbs.resources[resourceName] = db
 		}
 	}
 
-	return r, nil
+	return dbs, nil
 }
 
-func NewRepoWithConnections(defaultDB *gorm.DB, resources map[string]*gorm.DB) Repo {
-	r := &repo{
+func NewConnectionsFromDBs(defaultDB *gorm.DB, resources map[string]*gorm.DB) Connections {
+	dbs := &connections{
 		defaultDB: defaultDB,
 		resources: map[string]*gorm.DB{},
 	}
 	if defaultDB != nil {
-		r.resources["default"] = defaultDB
+		dbs.resources["default"] = defaultDB
 	}
 	for name, db := range resources {
 		resourceName := strings.TrimSpace(strings.ToLower(name))
@@ -85,52 +85,52 @@ func NewRepoWithConnections(defaultDB *gorm.DB, resources map[string]*gorm.DB) R
 			continue
 		}
 		if resourceName == "default" {
-			r.defaultDB = db
+			dbs.defaultDB = db
 		}
-		r.resources[resourceName] = db
+		dbs.resources[resourceName] = db
 	}
-	return r
+	return dbs
 }
 
-func (r *repo) Default() *gorm.DB {
-	if r == nil {
+func (c *connections) Default() *gorm.DB {
+	if c == nil {
 		return nil
 	}
-	return r.defaultDB
+	return c.defaultDB
 }
 
-func (r *repo) Get(name string) (*gorm.DB, error) {
-	if r == nil {
-		return nil, fmt.Errorf("database repo is nil")
+func (c *connections) Get(name string) (*gorm.DB, error) {
+	if c == nil {
+		return nil, fmt.Errorf("database connections are nil")
 	}
 	resourceName := strings.TrimSpace(strings.ToLower(name))
 	if resourceName == "" || resourceName == "default" {
-		if r.defaultDB == nil {
+		if c.defaultDB == nil {
 			return nil, fmt.Errorf("default database is not configured")
 		}
-		return r.defaultDB, nil
+		return c.defaultDB, nil
 	}
-	db, ok := r.resources[resourceName]
+	db, ok := c.resources[resourceName]
 	if !ok || db == nil {
 		return nil, fmt.Errorf("database resource %q is not configured", resourceName)
 	}
 	return db, nil
 }
 
-func (r *repo) Has(name string) bool {
-	if r == nil {
+func (c *connections) Has(name string) bool {
+	if c == nil {
 		return false
 	}
-	_, err := r.Get(name)
+	_, err := c.Get(name)
 	return err == nil
 }
 
-func (r *repo) Names() []string {
-	if r == nil {
+func (c *connections) Names() []string {
+	if c == nil {
 		return nil
 	}
-	names := make([]string, 0, len(r.resources))
-	for name, db := range r.resources {
+	names := make([]string, 0, len(c.resources))
+	for name, db := range c.resources {
 		if db == nil {
 			continue
 		}
@@ -140,13 +140,13 @@ func (r *repo) Names() []string {
 	return names
 }
 
-func (r *repo) Close() error {
-	if r == nil {
+func (c *connections) Close() error {
+	if c == nil {
 		return nil
 	}
 
 	closed := map[*sql.DB]struct{}{}
-	for _, db := range r.resources {
+	for _, db := range c.resources {
 		if db == nil {
 			continue
 		}

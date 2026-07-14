@@ -13,12 +13,12 @@ import (
 
 // LoginLogService 登录日志服务
 type LoginLogService struct {
-	dbRepo database.Repo
+	dbs database.Connections
 }
 
 // NewLoginLogService 创建登录日志服务
-func NewLoginLogService(dbRepo database.Repo) *LoginLogService {
-	return &LoginLogService{dbRepo: dbRepo}
+func NewLoginLogService(dbs database.Connections) *LoginLogService {
+	return &LoginLogService{dbs: dbs}
 }
 
 // ListInput 列表输入参数
@@ -145,8 +145,8 @@ func (s *LoginLogService) Clear(ctx context.Context, in *LoginLogClearInput) err
 }
 
 func (s *LoginLogService) defaultDB(ctx context.Context) (*gorm.DB, error) {
-	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+	if s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
-	return s.dbRepo.Default().WithContext(ctx), nil
+	return s.dbs.Default().WithContext(ctx), nil
 }

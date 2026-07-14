@@ -422,7 +422,7 @@ func loadCLIConfig() (*config.Config, error) {
 }
 
 func openDefaultDBWithConfig(cfg *config.Config) (*gorm.DB, func(), error) {
-	repo, err := database.NewRepo(database.Config{
+	dbs, err := database.NewConnections(database.Config{
 		Enabled:         cfg.Databases.Default.Enabled,
 		Driver:          cfg.Databases.Default.Driver,
 		Host:            cfg.Databases.Default.Host,
@@ -438,12 +438,12 @@ func openDefaultDBWithConfig(cfg *config.Config) (*gorm.DB, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if repo.Default() == nil {
+	if dbs.Default() == nil {
 		return nil, nil, fmt.Errorf("默认数据库未启用")
 	}
 
-	return repo.Default(), func() {
-		_ = repo.Close()
+	return dbs.Default(), func() {
+		_ = dbs.Close()
 	}, nil
 }
 

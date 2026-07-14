@@ -27,7 +27,7 @@ import (
 
 type Provider struct {
 	Config        *config.Config
-	DB            database.Repo
+	DB            database.Connections
 	RedisClient   *redis.Client
 	TokenManager  *auth.Manager
 	JobClient     *job.Client
@@ -169,12 +169,12 @@ func WithDatabase() Option {
 				ConnMaxLifetime: cfg.ConnMaxLifetime,
 			}
 		}
-		repo, err := database.NewRepo(defaultCfg, resourceConfigs)
+		dbs, err := database.NewConnections(defaultCfg, resourceConfigs)
 		if err != nil {
 			return err
 		}
-		p.DB = repo
-		p.AddCloser("database", repo.Close)
+		p.DB = dbs
+		p.AddCloser("database", dbs.Close)
 		return nil
 	}
 }
@@ -185,7 +185,7 @@ func WithCasbin() Option {
 			p.Enforcers = map[string]*rbac.Enforcer{}
 		}
 		if p.DB == nil {
-			return fmt.Errorf("权限控制依赖数据库仓储")
+			return fmt.Errorf("权限控制依赖数据库连接")
 		}
 
 		for name, cfg := range p.Config.Casbin.Enforcers {

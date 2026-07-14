@@ -39,10 +39,10 @@ func (r *recordingRolePolicies) ReplaceConsolePoliciesForRole(_ string, permissi
 }
 
 func TestRoleServicePreservesHistoricalAndAcceptsNewMenuKeys(t *testing.T) {
-	repo, _, roleID := openRoleServiceTestContext(t)
-	service := NewRoleService(repo, nil)
+	dbs, _, roleID := openRoleServiceTestContext(t)
+	service := NewRoleService(dbs, nil)
 
-	if err := repo.Default().
+	if err := dbs.Default().
 		Model(&model.ConsoleRole{}).
 		Where("id = ?", roleID).
 		Update("menu_keys", datatype.NewStringArray([]string{"ConsoleDashboard", "legacy.invalid", "ConsoleFuture"})).Error; err != nil {
@@ -80,7 +80,7 @@ func TestRoleServicePreservesHistoricalAndAcceptsNewMenuKeys(t *testing.T) {
 }
 
 func TestRoleServiceValidatesRuntimeAPIPermissions(t *testing.T) {
-	repo, enforcer, roleID := openRoleServiceTestContext(t)
+	dbs, enforcer, roleID := openRoleServiceTestContext(t)
 
 	engine := gin.New()
 	engine.GET("/console/v1/dashboard/summary", func(*gin.Context) {})
@@ -89,7 +89,7 @@ func TestRoleServiceValidatesRuntimeAPIPermissions(t *testing.T) {
 	catalog := NewRuntimePermissionCatalog()
 	catalog.LoadRoutes(engine.Routes())
 
-	service := NewRoleService(repo, enforcer, catalog)
+	service := NewRoleService(dbs, enforcer, catalog)
 	if err := service.SetRolePermissions(context.Background(), SetRolePermissionsInput{
 		RoleID:         roleID,
 		APIPermissions: []string{"GET /console/v1/roles", "POST /console/v1/unknown"},
@@ -99,7 +99,7 @@ func TestRoleServiceValidatesRuntimeAPIPermissions(t *testing.T) {
 }
 
 func TestRoleServiceSetPermissionsUsesSingleAtomicReplacement(t *testing.T) {
-	repo, _, roleID := openRoleServiceTestContext(t)
+	dbs, _, roleID := openRoleServiceTestContext(t)
 
 	engine := gin.New()
 	engine.GET("/console/v1/roles", func(*gin.Context) {})
@@ -108,7 +108,7 @@ func TestRoleServiceSetPermissionsUsesSingleAtomicReplacement(t *testing.T) {
 	catalog.LoadRoutes(engine.Routes())
 
 	policies := &recordingRolePolicies{}
-	service := &RoleService{dbRepo: repo, rolePolicies: policies, runtimePermission: catalog}
+	service := &RoleService{dbs: dbs, rolePolicies: policies, runtimePermission: catalog}
 	if err := service.SetRolePermissions(context.Background(), SetRolePermissionsInput{
 		RoleID:         roleID,
 		APIPermissions: []string{"GET /console/v1/roles"},
@@ -121,13 +121,13 @@ func TestRoleServiceSetPermissionsUsesSingleAtomicReplacement(t *testing.T) {
 }
 
 func TestRoleServiceSetPermissionsReturnsReplacementFailure(t *testing.T) {
-	repo, _, roleID := openRoleServiceTestContext(t)
+	dbs, _, roleID := openRoleServiceTestContext(t)
 	engine := gin.New()
 	engine.GET("/console/v1/roles", func(*gin.Context) {})
 	catalog := NewRuntimePermissionCatalog()
 	catalog.LoadRoutes(engine.Routes())
 	policies := &recordingRolePolicies{replaceErr: errors.New("injected policy failure")}
-	service := &RoleService{dbRepo: repo, rolePolicies: policies, runtimePermission: catalog}
+	service := &RoleService{dbs: dbs, rolePolicies: policies, runtimePermission: catalog}
 	if err := service.SetRolePermissions(context.Background(), SetRolePermissionsInput{
 		RoleID:         roleID,
 		APIPermissions: []string{"GET /console/v1/roles"},
@@ -137,8 +137,8 @@ func TestRoleServiceSetPermissionsReturnsReplacementFailure(t *testing.T) {
 }
 
 func TestDeleteRoleRestoresPoliciesWhenDatabaseDeleteFails(t *testing.T) {
-	repo, _, roleID := openRoleServiceTestContext(t)
-	if err := repo.Default().Exec(`
+	dbs, _, roleID := openRoleServiceTestContext(t)
+	if err := dbs.Default().Exec(`
 CREATE TRIGGER fail_role_soft_delete
 BEFORE UPDATE OF deleted_at ON console_roles
 WHEN OLD.id = '` + roleID + `'
@@ -148,7 +148,7 @@ END;`).Error; err != nil {
 		t.Fatalf("create role delete trigger: %v", err)
 	}
 	policies := &recordingRolePolicies{current: []string{"GET /console/v1/roles"}}
-	service := &RoleService{dbRepo: repo, rolePolicies: policies}
+	service := &RoleService{dbs: dbs, rolePolicies: policies}
 
 	if err := service.DeleteRole(context.Background(), DeleteRoleInput{RoleID: roleID}); err == nil {
 		t.Fatal("expected role delete failure")
@@ -161,7 +161,7 @@ END;`).Error; err != nil {
 	}
 }
 
-func openRoleServiceTestContext(t *testing.T) (database.Repo, *rbac.Enforcer, string) {
+func openRoleServiceTestContext(t *testing.T) (database.Connections, *rbac.Enforcer, string) {
 	t.Helper()
 
 	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/role-service.db"), &gorm.Config{})
@@ -202,5 +202,5 @@ CREATE TABLE IF NOT EXISTS console_casbin_rules (
 		t.Fatalf("create role: %v", err)
 	}
 
-	return database.NewRepoWithConnections(db, nil), enforcer, role.ID
+	return database.NewConnectionsFromDBs(db, nil), enforcer, role.ID
 }

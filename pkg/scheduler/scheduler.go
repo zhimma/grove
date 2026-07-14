@@ -15,7 +15,18 @@ import (
 	"github.com/zhimma/grove/pkg/logger"
 )
 
-const defaultStopTimeout = 30 * time.Second
+const (
+	defaultStopTimeout         = 30 * time.Second
+	EverySecondSchedule        = "* * * * * *"
+	EveryMinuteSchedule        = "0 * * * * *"
+	EveryFiveMinutesSchedule   = "0 */5 * * * *"
+	EveryTenMinutesSchedule    = "0 */10 * * * *"
+	EveryThirtyMinutesSchedule = "0 */30 * * * *"
+	HourlySchedule             = "0 0 * * * *"
+	DailySchedule              = "0 0 0 * * *"
+	WeeklySchedule             = "0 0 0 * * 0"
+	MonthlySchedule            = "0 0 0 1 * *"
+)
 
 var (
 	ErrTaskRunning      = errors.New("scheduler task is already running")
@@ -348,31 +359,31 @@ func (s *Scheduler) IsRunning(name string) bool {
 }
 
 func (s *Scheduler) EverySecond(name string, job Job) error {
-	return s.Register(&Task{Name: name, Schedule: "* * * * * *", Job: job})
+	return s.Register(&Task{Name: name, Schedule: EverySecondSchedule, Job: job})
 }
 
 func (s *Scheduler) EveryMinute(name string, job Job) error {
-	return s.Register(&Task{Name: name, Schedule: "0 * * * * *", Job: job})
+	return s.Register(&Task{Name: name, Schedule: EveryMinuteSchedule, Job: job})
 }
 
 func (s *Scheduler) EveryFiveMinutes(name string, job Job) error {
-	return s.Register(&Task{Name: name, Schedule: "0 */5 * * * *", Job: job})
+	return s.Register(&Task{Name: name, Schedule: EveryFiveMinutesSchedule, Job: job})
 }
 
 func (s *Scheduler) EveryTenMinutes(name string, job Job) error {
-	return s.Register(&Task{Name: name, Schedule: "0 */10 * * * *", Job: job})
+	return s.Register(&Task{Name: name, Schedule: EveryTenMinutesSchedule, Job: job})
 }
 
 func (s *Scheduler) EveryThirtyMinutes(name string, job Job) error {
-	return s.Register(&Task{Name: name, Schedule: "0 */30 * * * *", Job: job})
+	return s.Register(&Task{Name: name, Schedule: EveryThirtyMinutesSchedule, Job: job})
 }
 
 func (s *Scheduler) Hourly(name string, job Job) error {
-	return s.Register(&Task{Name: name, Schedule: "0 0 * * * *", Job: job})
+	return s.Register(&Task{Name: name, Schedule: HourlySchedule, Job: job})
 }
 
 func (s *Scheduler) Daily(name string, job Job) error {
-	return s.Register(&Task{Name: name, Schedule: "0 0 0 * * *", Job: job})
+	return s.Register(&Task{Name: name, Schedule: DailySchedule, Job: job})
 }
 
 func (s *Scheduler) DailyAt(name string, hour, minute int, job Job) error {
@@ -380,89 +391,9 @@ func (s *Scheduler) DailyAt(name string, hour, minute int, job Job) error {
 }
 
 func (s *Scheduler) Weekly(name string, job Job) error {
-	return s.Register(&Task{Name: name, Schedule: "0 0 0 * * 0", Job: job})
+	return s.Register(&Task{Name: name, Schedule: WeeklySchedule, Job: job})
 }
 
 func (s *Scheduler) Monthly(name string, job Job) error {
-	return s.Register(&Task{Name: name, Schedule: "0 0 0 1 * *", Job: job})
-}
-
-var (
-	defaultSchedulerMu sync.RWMutex
-	defaultScheduler   *Scheduler
-)
-
-func Init(scheduler *Scheduler) {
-	defaultSchedulerMu.Lock()
-	defaultScheduler = scheduler
-	defaultSchedulerMu.Unlock()
-}
-
-func currentScheduler() *Scheduler {
-	defaultSchedulerMu.RLock()
-	scheduler := defaultScheduler
-	defaultSchedulerMu.RUnlock()
-	return scheduler
-}
-
-func Register(task *Task) error {
-	scheduler := currentScheduler()
-	if scheduler == nil {
-		return fmt.Errorf("scheduler not initialized")
-	}
-	return scheduler.Register(task)
-}
-
-func RegisterFunc(name, schedule string, fn JobFunc) error {
-	scheduler := currentScheduler()
-	if scheduler == nil {
-		return fmt.Errorf("scheduler not initialized")
-	}
-	return scheduler.RegisterFunc(name, schedule, fn)
-}
-
-func Start() error {
-	scheduler := currentScheduler()
-	if scheduler == nil {
-		return fmt.Errorf("scheduler not initialized")
-	}
-	return scheduler.Start()
-}
-
-func Stop() error {
-	scheduler := currentScheduler()
-	if scheduler == nil {
-		return nil
-	}
-	return scheduler.Stop()
-}
-
-func Run(name string) error {
-	scheduler := currentScheduler()
-	if scheduler == nil {
-		return fmt.Errorf("scheduler not initialized")
-	}
-	return scheduler.Run(name)
-}
-
-var CronExpression = struct {
-	EverySecond        string
-	EveryMinute        string
-	EveryFiveMinutes   string
-	EveryTenMinutes    string
-	EveryThirtyMinutes string
-	Hourly             string
-	Daily              string
-	Weekly             string
-	Monthly            string
-}{
-	EverySecond:        "* * * * * *",
-	EveryMinute:        "0 * * * * *",
-	EveryFiveMinutes:   "0 */5 * * * *",
-	EveryTenMinutes:    "0 */10 * * * *",
-	EveryThirtyMinutes: "0 */30 * * * *",
-	Hourly:             "0 0 * * * *",
-	Daily:              "0 0 0 * * *",
-	Weekly:             "0 0 0 * * 0",
-	Monthly:            "0 0 0 1 * *",
+	return s.Register(&Task{Name: name, Schedule: MonthlySchedule, Job: job})
 }

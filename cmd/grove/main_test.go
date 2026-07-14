@@ -247,7 +247,7 @@ func register() {
 	service := mustRead(t, filepath.Join(root, "app/console/internal/service/product_category.go"))
 	assertContains(t, service, "package service")
 	assertContains(t, service, "type ProductCategoryService struct")
-	assertContains(t, service, "database.Repo")
+	assertContains(t, service, "database.Connections")
 	assertContains(t, service, "errx.ServiceUnavailable")
 
 	model := mustRead(t, filepath.Join(root, "internal/model/product_category.go"))

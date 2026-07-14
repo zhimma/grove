@@ -250,7 +250,7 @@ func TestStartAndStopAreIdempotent(t *testing.T) {
 	}
 }
 
-func TestConvenienceMethodsAndCronExpressions(t *testing.T) {
+func TestConvenienceMethodsAndSchedules(t *testing.T) {
 	s, _ := NewDefault()
 	job := JobFunc(func(context.Context) error { return nil })
 	registrations := []func() error{
@@ -270,27 +270,8 @@ func TestConvenienceMethodsAndCronExpressions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if CronExpression.EveryMinute != "0 * * * * *" || CronExpression.Daily != "0 0 0 * * *" {
-		t.Fatalf("unexpected cron expressions: %#v", CronExpression)
-	}
-}
-
-func TestGlobalScheduler(t *testing.T) {
-	Init(nil)
-	t.Cleanup(func() { Init(nil) })
-	if err := RegisterFunc("test", "0 0 0 * * *", func(context.Context) error { return nil }); err == nil {
-		t.Fatal("expected uninitialized scheduler error")
-	}
-	s, _ := NewDefault()
-	Init(s)
-	if err := RegisterFunc("test", "0 0 0 * * *", func(context.Context) error { return nil }); err != nil {
-		t.Fatal(err)
-	}
-	if err := Start(); err != nil {
-		t.Fatal(err)
-	}
-	if err := Stop(); err != nil {
-		t.Fatal(err)
+	if EveryMinuteSchedule != "0 * * * * *" || DailySchedule != "0 0 0 * * *" {
+		t.Fatalf("unexpected cron expressions: minute=%q daily=%q", EveryMinuteSchedule, DailySchedule)
 	}
 }
 
