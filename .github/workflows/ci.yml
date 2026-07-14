@@ -36,6 +36,9 @@ jobs:
       - name: Run backend tests
         run: go test ./...
 
+      - name: Run PostgreSQL integration tests
+        run: go test -tags=integration ./tests/integration -v
+
       - name: Build backend binaries
         run: make build
 

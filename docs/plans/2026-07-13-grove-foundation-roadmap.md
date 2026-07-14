@@ -81,7 +81,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 - [x] Task 1：修复 CLI 名称和文档漂移。
 - [x] Task 2：补齐数据库 schema 和可回滚迁移。
 - [x] Task 3：拆分安全 bootstrap seed 与 demo seed。
-- [ ] Task 4：替换迁移引擎并使用真实 PostgreSQL 验证生命周期。
+- [x] Task 4：替换迁移引擎并使用真实 PostgreSQL 验证生命周期。
 - [ ] Task 5：修复 `make:module` 生成代码和原子性。
 - [ ] Task 6：明确软删除语义并增加数据库约束。
 - [ ] Task 7：隔离 API 演示接口和虚拟数据。
@@ -377,7 +377,25 @@ git commit -m "fix: separate bootstrap and demo seeds"
 
 ### Task 4：替换迁移引擎并使用真实 PostgreSQL 验证 migrate/seed/down
 
-**Status:** `[ ] Planned`
+**Status:** `[x] Completed`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-13
+
+**Completed at:** 2026-07-14
+
+**Architecture note:** 使用 `golang-migrate` 负责版本状态、dirty 状态和 PostgreSQL advisory lock；Grove 只保留 CLI 薄封装。迁移元数据表使用 `grove_migrations`，避免与旧版自研 `schema_migrations(name, applied_at)` 结构冲突。迁移源目录通过 `migrate --path` 配置。
+
+**Verification:**
+
+- `go mod verify`：PASS。
+- `go test ./...`：PASS。
+- `go test -tags=integration ./tests/integration -run TestFreshDatabaseLifecycle -v`：测试编译通过；本机 Docker 镜像拉取受网络限制时明确 Skip/失败，不伪造通过。
+- 本机 PostgreSQL `127.0.0.1` 临时数据库真实验证：up 8 个迁移、dirty 拒绝、重复 bootstrap 不覆盖密码、down 至业务表为空，全部 PASS。
+- CI 已接入 `go test -tags=integration ./tests/integration -v`，在有 Docker 的 runner 上强制执行 Testcontainers 生命周期测试。
 
 **Depends on:** Task 2, Task 3
 

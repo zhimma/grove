@@ -1,15 +1,24 @@
 package migrate
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	golangmigrate "github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"gorm.io/gorm"
 )
+
+const metadataTable = "grove_migrations"
 
 type Manager struct {
 	db  *gorm.DB
@@ -21,8 +30,9 @@ type Status struct {
 	Applied bool
 }
 
-type appliedMigration struct {
-	Name string `gorm:"column:name"`
+type migrationFile struct {
+	Version uint
+	Name    string
 }
 
 func NewManager(db *gorm.DB, dir string) *Manager {
@@ -32,130 +42,173 @@ func NewManager(db *gorm.DB, dir string) *Manager {
 	}
 }
 
-func (m *Manager) Init() error {
-	return m.db.Exec(`
-		CREATE TABLE IF NOT EXISTS schema_migrations (
-			name VARCHAR(255) PRIMARY KEY,
-			applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-		)
-	`).Error
-}
-
 func (m *Manager) Up() (int, error) {
-	if err := m.Init(); err != nil {
-		return 0, err
-	}
-
-	applied, err := m.appliedSet()
+	files, err := listMigrations(m.dir)
 	if err != nil {
 		return 0, err
 	}
-
-	files, err := listFiles(m.dir, ".up.sql")
+	engine, closeEngine, err := m.openEngine()
 	if err != nil {
 		return 0, err
 	}
+	defer closeEngine()
 
-	appliedCount := 0
-	for _, file := range files {
-		name := strings.TrimSuffix(filepath.Base(file), ".up.sql")
-		if applied[name] {
-			continue
-		}
-
-		body, err := os.ReadFile(filepath.Clean(file))
-		if err != nil {
-			return appliedCount, err
-		}
-
-		tx := m.db.Begin()
-		if err := tx.Exec(string(body)).Error; err != nil {
-			tx.Rollback()
-			return appliedCount, err
-		}
-		if err := tx.Exec(
-			`INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`,
-			name,
-			time.Now(),
-		).Error; err != nil {
-			tx.Rollback()
-			return appliedCount, err
-		}
-		if err := tx.Commit().Error; err != nil {
-			return appliedCount, err
-		}
-		appliedCount++
+	before, _, err := migrationVersion(engine)
+	if err != nil {
+		return 0, err
 	}
-
-	return appliedCount, nil
+	if err := engine.Up(); err != nil && !errors.Is(err, golangmigrate.ErrNoChange) {
+		return 0, err
+	}
+	after, _, err := migrationVersion(engine)
+	if err != nil {
+		return 0, err
+	}
+	return countApplied(files, before, after), nil
 }
 
 func (m *Manager) Down() (string, error) {
-	if err := m.Init(); err != nil {
-		return "", err
-	}
-
-	var last struct {
-		Name string `gorm:"column:name"`
-	}
-	if err := m.db.Raw(`
-		SELECT name
-		FROM schema_migrations
-		ORDER BY applied_at DESC, name DESC
-		LIMIT 1
-	`).Scan(&last).Error; err != nil {
-		return "", err
-	}
-	if last.Name == "" {
-		return "", nil
-	}
-
-	downFile := filepath.Join(m.dir, last.Name+".down.sql")
-	body, err := os.ReadFile(filepath.Clean(downFile))
+	files, err := listMigrations(m.dir)
 	if err != nil {
 		return "", err
 	}
+	engine, closeEngine, err := m.openEngine()
+	if err != nil {
+		return "", err
+	}
+	defer closeEngine()
 
-	tx := m.db.Begin()
-	if err := tx.Exec(string(body)).Error; err != nil {
-		tx.Rollback()
+	current, hasVersion, err := migrationVersion(engine)
+	if err != nil {
 		return "", err
 	}
-	if err := tx.Exec(`DELETE FROM schema_migrations WHERE name = ?`, last.Name).Error; err != nil {
-		tx.Rollback()
+	if !hasVersion {
+		return "", nil
+	}
+	name := migrationName(files, current)
+	if name == "" {
+		return "", fmt.Errorf("migration version %d has no matching file", current)
+	}
+	if err := engine.Steps(-1); err != nil && !errors.Is(err, golangmigrate.ErrNoChange) {
 		return "", err
 	}
-	if err := tx.Commit().Error; err != nil {
-		return "", err
-	}
-
-	return last.Name, nil
+	return name, nil
 }
 
 func (m *Manager) Status() ([]Status, error) {
-	if err := m.Init(); err != nil {
-		return nil, err
-	}
-
-	applied, err := m.appliedSet()
+	files, err := listMigrations(m.dir)
 	if err != nil {
 		return nil, err
 	}
+	engine, closeEngine, err := m.openEngine()
+	if err != nil {
+		return nil, err
+	}
+	defer closeEngine()
 
-	files, err := listFiles(m.dir, ".up.sql")
+	current, hasVersion, err := migrationVersion(engine)
 	if err != nil {
 		return nil, err
 	}
 
 	statuses := make([]Status, 0, len(files))
 	for _, file := range files {
-		name := strings.TrimSuffix(filepath.Base(file), ".up.sql")
 		statuses = append(statuses, Status{
-			Name:    name,
-			Applied: applied[name],
+			Name:    file.Name,
+			Applied: hasVersion && file.Version <= current,
 		})
 	}
 	return statuses, nil
+}
+
+func (m *Manager) openEngine() (*golangmigrate.Migrate, func(), error) {
+	if m.db == nil {
+		return nil, nil, fmt.Errorf("migration database is required")
+	}
+	sqlDB, err := m.db.DB()
+	if err != nil {
+		return nil, nil, err
+	}
+	conn, err := sqlDB.Conn(context.Background())
+	if err != nil {
+		return nil, nil, err
+	}
+	driver, err := postgres.WithConnection(context.Background(), conn, &postgres.Config{
+		MigrationsTable: metadataTable,
+	})
+	if err != nil {
+		_ = conn.Close()
+		return nil, nil, err
+	}
+
+	absDir, err := filepath.Abs(m.dir)
+	if err != nil {
+		_ = driver.Close()
+		return nil, nil, err
+	}
+	sourceURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(absDir)}).String()
+	engine, err := golangmigrate.NewWithDatabaseInstance(sourceURL, "postgres", driver)
+	if err != nil {
+		_ = driver.Close()
+		return nil, nil, err
+	}
+	return engine, func() {
+		_, _ = engine.Close()
+	}, nil
+}
+
+func migrationVersion(engine *golangmigrate.Migrate) (uint, bool, error) {
+	version, dirty, err := engine.Version()
+	if errors.Is(err, golangmigrate.ErrNilVersion) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	if dirty {
+		return 0, false, fmt.Errorf("migration version %d is dirty", version)
+	}
+	return version, true, nil
+}
+
+func listMigrations(dir string) ([]migrationFile, error) {
+	paths, err := listFiles(dir, ".up.sql")
+	if err != nil {
+		return nil, err
+	}
+	files := make([]migrationFile, 0, len(paths))
+	for _, path := range paths {
+		name := strings.TrimSuffix(filepath.Base(path), ".up.sql")
+		versionText, _, ok := strings.Cut(name, "_")
+		if !ok {
+			return nil, fmt.Errorf("invalid migration filename %q", filepath.Base(path))
+		}
+		version, err := strconv.ParseUint(versionText, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid migration version in %q: %w", filepath.Base(path), err)
+		}
+		files = append(files, migrationFile{Version: uint(version), Name: name})
+	}
+	return files, nil
+}
+
+func countApplied(files []migrationFile, before uint, after uint) int {
+	count := 0
+	for _, file := range files {
+		if file.Version > before && file.Version <= after {
+			count++
+		}
+	}
+	return count
+}
+
+func migrationName(files []migrationFile, version uint) string {
+	for _, file := range files {
+		if file.Version == version {
+			return file.Name
+		}
+	}
+	return ""
 }
 
 func CreateFiles(dir, name string) (string, string, error) {
@@ -209,18 +262,6 @@ func RunSQLDirWithReplacements(db *gorm.DB, dir string, replacements map[string]
 		count++
 	}
 	return count, nil
-}
-
-func (m *Manager) appliedSet() (map[string]bool, error) {
-	var rows []appliedMigration
-	if err := m.db.Raw(`SELECT name FROM schema_migrations ORDER BY name ASC`).Scan(&rows).Error; err != nil {
-		return nil, err
-	}
-	result := make(map[string]bool, len(rows))
-	for _, row := range rows {
-		result[row.Name] = true
-	}
-	return result, nil
 }
 
 func listFiles(dir, suffix string) ([]string, error) {

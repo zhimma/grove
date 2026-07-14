@@ -69,6 +69,19 @@ func TestSeedCommandListsExplicitSafetyModes(t *testing.T) {
 	assertContains(t, content, "demo")
 }
 
+func TestMigrateCommandSupportsCustomSourcePath(t *testing.T) {
+	cmd := newMigrateCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--help"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("migrate help failed: %v", err)
+	}
+	assertContains(t, out.String(), "--path")
+}
+
 func TestDemoSeedRefusesProduction(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.yaml")

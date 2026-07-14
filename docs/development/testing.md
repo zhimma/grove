@@ -7,6 +7,7 @@
 当前仓库主要包含：
 
 - Go 单元测试与集成测试
+- Testcontainers 驱动的真实 PostgreSQL 生命周期测试
 - 路由与服务层测试
 - 前端类型检查
 
@@ -30,6 +31,14 @@ make verify
 - 后端构建
 - 管理后台类型检查
 
+### 运行 PostgreSQL 集成测试
+
+```bash
+go test -tags=integration ./tests/integration -v
+```
+
+集成测试会通过 Testcontainers 启动 PostgreSQL，并验证迁移、bootstrap seed、重复执行密码不覆盖、dirty 状态和完整 down 生命周期。本地需要 Docker、OrbStack 或其他兼容容器运行时；本地容器不可用时测试会 Skip，CI 中容器启动失败会直接失败。
+
 ## 编写约定
 
 - 测试文件使用 `*_test.go`
@@ -48,8 +57,8 @@ make verify
 
 ## 边界
 
-- 当前仓库不维护独立的 `tests/` 顶层目录体系
-- 前端以类型检查为主，不在本轮文档中展开 UI 自动化测试规范
+- `tests/integration/` 仅放依赖真实基础设施的跨包生命周期测试。
+- 前端以类型检查为主，不在本轮文档中展开 UI 自动化测试规范。
 
 ## 相关文档
 

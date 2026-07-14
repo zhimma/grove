@@ -113,10 +113,12 @@ func newDoctorCmd() *cobra.Command {
 }
 
 func newMigrateCmd() *cobra.Command {
+	migrationPath := "database/migrations"
 	cmd := &cobra.Command{
 		Use:   "migrate",
 		Short: "管理 SQL 迁移",
 	}
+	cmd.PersistentFlags().StringVar(&migrationPath, "path", migrationPath, "迁移文件目录")
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "up",
@@ -128,7 +130,7 @@ func newMigrateCmd() *cobra.Command {
 			}
 			defer cleanup()
 
-			m := migrate.NewManager(db, "database/migrations")
+			m := migrate.NewManager(db, migrationPath)
 			count, err := m.Up()
 			if err != nil {
 				return err
@@ -148,7 +150,7 @@ func newMigrateCmd() *cobra.Command {
 			}
 			defer cleanup()
 
-			m := migrate.NewManager(db, "database/migrations")
+			m := migrate.NewManager(db, migrationPath)
 			name, err := m.Down()
 			if err != nil {
 				return err
@@ -172,7 +174,7 @@ func newMigrateCmd() *cobra.Command {
 			}
 			defer cleanup()
 
-			m := migrate.NewManager(db, "database/migrations")
+			m := migrate.NewManager(db, migrationPath)
 			statuses, err := m.Status()
 			if err != nil {
 				return err
@@ -197,7 +199,7 @@ func newMigrateCmd() *cobra.Command {
 		Short: "创建新的迁移文件对",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			upPath, downPath, err := migrate.CreateFiles("database/migrations", args[0])
+			upPath, downPath, err := migrate.CreateFiles(migrationPath, args[0])
 			if err != nil {
 				return err
 			}

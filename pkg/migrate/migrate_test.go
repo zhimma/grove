@@ -110,6 +110,36 @@ func TestRunSQLDirWithReplacements(t *testing.T) {
 	}
 }
 
+func TestListMigrationsParsesVersionedFiles(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{
+		"202604150002_second.up.sql",
+		"202604150001_first.up.sql",
+		"202604150001_first.down.sql",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("-- migration\n"), 0o600); err != nil {
+			t.Fatalf("write migration %s: %v", name, err)
+		}
+	}
+
+	files, err := listMigrations(dir)
+	if err != nil {
+		t.Fatalf("list migrations: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected two up migrations, got %d", len(files))
+	}
+	if files[0].Version != 202604150001 || files[0].Name != "202604150001_first" {
+		t.Fatalf("unexpected first migration: %#v", files[0])
+	}
+	if files[1].Version != 202604150002 || files[1].Name != "202604150002_second" {
+		t.Fatalf("unexpected second migration: %#v", files[1])
+	}
+	if countApplied(files, 202604150001, 202604150002) != 1 {
+		t.Fatal("applied migration count must use version boundaries")
+	}
+}
+
 func TestCreateFilesSanitizesUnsafeMigrationName(t *testing.T) {
 	dir := t.TempDir()
 
