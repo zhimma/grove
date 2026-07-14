@@ -3,7 +3,6 @@ package model
 import (
 	"context"
 	stderrors "errors"
-	"fmt"
 	"strings"
 
 	"gorm.io/gorm"
@@ -28,11 +27,7 @@ func FindUserByID(ctx context.Context, db *gorm.DB, userID string) (*User, error
 	}
 
 	if db == nil {
-		return &User{
-			Base:  Base{ID: userID},
-			Name:  "API User",
-			Email: fmt.Sprintf("%s@example.com", userID),
-		}, nil
+		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
 
 	var user User

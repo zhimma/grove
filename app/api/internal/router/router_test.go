@@ -8,39 +8,67 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/config"
 	appmiddleware "github.com/zhimma/grove/internal/middleware"
+	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/database"
 )
+
+func TestRouterDoesNotRegisterDemoRoutesInProduction(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := newRouterTestConfig(t, "production")
+	cfg.Demo.Enabled = true
+	engine, _ := newRouterTestEngine(t, cfg)
+
+	for _, request := range []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodGet, path: "/api/v1/ping"},
+		{method: http.MethodPost, path: "/api/v1/auth/access-token"},
+		{method: http.MethodGet, path: "/api/v1/profile"},
+		{method: http.MethodPost, path: "/api/v1/jobs/echo"},
+	} {
+		resp := httptest.NewRecorder()
+		req := httptest.NewRequest(request.method, request.path, nil)
+		engine.ServeHTTP(resp, req)
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("%s %s expected 404, got %d body=%s", request.method, request.path, resp.Code, resp.Body.String())
+		}
+	}
+}
 
 func TestRouterPingAndProfile(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	cfg := &config.Config{
-		App:  config.AppConfig{Name: "grove", Env: "test"},
-		Port: "8080",
-		Log: config.LogConfig{
-			Level:   "error",
-			Path:    t.TempDir(),
-			Console: false,
-			Service: "api-test",
-		},
-		JWT: config.JWTConfig{
-			Secret:            "test-secret",
-			Issuer:            "grove",
-			AccessExpiryHours: 24,
-		},
-		API: config.APIConfig{
-			Prefix: "/api/v1",
-		},
-	}
+	cfg := newRouterTestConfig(t, "test")
+	cfg.Demo.Enabled = true
 
 	p, err := provider.New(cfg, "api", provider.WithAuth())
 	if err != nil {
 		t.Fatalf("new provider: %v", err)
 	}
 	t.Cleanup(func() { _ = p.Close() })
+	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/api.db"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open test database: %v", err)
+	}
+	if err := db.AutoMigrate(&model.User{}); err != nil {
+		t.Fatalf("migrate users: %v", err)
+	}
+	if err := db.Create(&model.User{
+		Base:  model.Base{ID: "api-user"},
+		Name:  "API User",
+		Email: "api-user@example.test",
+	}).Error; err != nil {
+		t.Fatalf("create API user: %v", err)
+	}
+	p.DB = database.NewRepoWithConnections(db, nil)
 
 	engine := gin.New()
 	engine.Use(appmiddleware.RequestID(), appmiddleware.RequestMeta("api"), appmiddleware.Recovery())
@@ -83,34 +111,9 @@ func TestRouterPingAndProfile(t *testing.T) {
 func TestRouterReturnsFieldErrorsForInvalidRequests(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	cfg := &config.Config{
-		App:  config.AppConfig{Name: "grove", Env: "test"},
-		Port: "8080",
-		Log: config.LogConfig{
-			Level:   "error",
-			Path:    t.TempDir(),
-			Console: false,
-			Service: "api-test",
-		},
-		JWT: config.JWTConfig{
-			Secret:            "test-secret",
-			Issuer:            "grove",
-			AccessExpiryHours: 24,
-		},
-		API: config.APIConfig{
-			Prefix: "/api/v1",
-		},
-	}
-
-	p, err := provider.New(cfg, "api", provider.WithAuth())
-	if err != nil {
-		t.Fatalf("new provider: %v", err)
-	}
-	t.Cleanup(func() { _ = p.Close() })
-
-	engine := gin.New()
-	engine.Use(appmiddleware.RequestID(), appmiddleware.RequestMeta("api"), appmiddleware.Recovery())
-	New(cfg, p).InstallToEngine(engine)
+	cfg := newRouterTestConfig(t, "test")
+	cfg.Demo.Enabled = true
+	engine, p := newRouterTestEngine(t, cfg)
 
 	resp := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/access-token", strings.NewReader(`{}`))
@@ -146,4 +149,40 @@ func assertFieldError(t *testing.T, resp *httptest.ResponseRecorder, status int,
 	if len(values) != 1 || values[0] != message {
 		t.Fatalf("expected %s error %q, got %#v", field, message, payload)
 	}
+}
+
+func newRouterTestConfig(t *testing.T, env string) *config.Config {
+	t.Helper()
+	return &config.Config{
+		App:  config.AppConfig{Name: "grove", Env: env},
+		Port: "8080",
+		Log: config.LogConfig{
+			Level:   "error",
+			Path:    t.TempDir(),
+			Console: false,
+			Service: "api-test",
+		},
+		JWT: config.JWTConfig{
+			Secret:            "0123456789abcdef0123456789abcdef",
+			Issuer:            "grove",
+			AccessExpiryHours: 24,
+		},
+		API: config.APIConfig{
+			Prefix: "/api/v1",
+		},
+	}
+}
+
+func newRouterTestEngine(t *testing.T, cfg *config.Config) (*gin.Engine, *provider.Provider) {
+	t.Helper()
+	p, err := provider.New(cfg, "api", provider.WithAuth())
+	if err != nil {
+		t.Fatalf("new provider: %v", err)
+	}
+	t.Cleanup(func() { _ = p.Close() })
+
+	engine := gin.New()
+	engine.Use(appmiddleware.RequestID(), appmiddleware.RequestMeta("api"), appmiddleware.Recovery())
+	New(cfg, p).InstallToEngine(engine)
+	return engine, p
 }

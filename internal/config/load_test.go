@@ -235,3 +235,41 @@ func TestValidateRejectsInvalidPort(t *testing.T) {
 		t.Fatal("expected invalid port validation error")
 	}
 }
+
+func TestLoadConfigExampleDefaultsDemoOff(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "config.example.yaml"))
+	if err != nil {
+		t.Fatalf("read config example: %v", err)
+	}
+	configPath := filepath.Join(t.TempDir(), "config.example.yaml")
+	if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+		t.Fatalf("copy config example: %v", err)
+	}
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("DEMO_ENABLED", "")
+
+	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "api"})
+	if err != nil {
+		t.Fatalf("load config example: %v", err)
+	}
+	if cfg.Demo.Enabled {
+		t.Fatal("demo must be disabled by default")
+	}
+}
+
+func TestLoadWithOptionsReadsDemoEnabledOverride(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte("demo:\n  enabled: false\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("DEMO_ENABLED", "true")
+
+	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "api"})
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.Demo.Enabled {
+		t.Fatal("expected DEMO_ENABLED to enable demo routes")
+	}
+}

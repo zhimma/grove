@@ -11,8 +11,8 @@ import (
 	"github.com/zhimma/grove/pkg/validation"
 )
 
-type StarterHandler struct {
-	starterSvc *service.StarterService
+type DemoStarterHandler struct {
+	starterSvc *service.DemoStarterService
 }
 
 type PingRequest struct {
@@ -40,20 +40,20 @@ type DispatchEchoJobResponse struct {
 	TaskID string `json:"task_id"`
 }
 
-func RegisterStarterRoutes(public *gin.RouterGroup, protected *gin.RouterGroup, p *provider.Provider) {
+func RegisterDemoStarterRoutes(public *gin.RouterGroup, protected *gin.RouterGroup, p *provider.Provider) {
 	h := newStarterHandler(p)
 	public.GET("/ping", h.Ping)
 	protected.GET("/profile", h.Profile)
 	protected.POST("/jobs/echo", h.DispatchEchoJob)
 }
 
-func newStarterHandler(p *provider.Provider) *StarterHandler {
-	return &StarterHandler{
-		starterSvc: service.NewStarterService(defaultDB(p), p.JobClient),
+func newStarterHandler(p *provider.Provider) *DemoStarterHandler {
+	return &DemoStarterHandler{
+		starterSvc: service.NewDemoStarterService(defaultDB(p), p.JobClient),
 	}
 }
 
-func (h *StarterHandler) Ping(c *gin.Context) {
+func (h *DemoStarterHandler) Ping(c *gin.Context) {
 	var req PingRequest
 	if err := validation.BindQuery(c, &req); err != nil {
 		response.Fail(c, err)
@@ -75,7 +75,7 @@ func (h *StarterHandler) Ping(c *gin.Context) {
 	})
 }
 
-func (h *StarterHandler) Profile(c *gin.Context) {
+func (h *DemoStarterHandler) Profile(c *gin.Context) {
 	out, err := h.starterSvc.Profile(c.Request.Context(), service.ProfileInput{
 		UserID: request.GetUserID(c),
 	})
@@ -92,7 +92,7 @@ func (h *StarterHandler) Profile(c *gin.Context) {
 	})
 }
 
-func (h *StarterHandler) DispatchEchoJob(c *gin.Context) {
+func (h *DemoStarterHandler) DispatchEchoJob(c *gin.Context) {
 	var req DispatchEchoJobRequest
 	if err := validation.BindJSON(c, &req); err != nil {
 		response.Fail(c, err)

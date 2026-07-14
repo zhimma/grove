@@ -20,6 +20,7 @@ type Config struct {
 	Docs        DocsConfig      `yaml:"docs"`
 	CORS        CORSConfig      `yaml:"cors"`
 	API         APIConfig       `yaml:"api"`
+	Demo        DemoConfig      `yaml:"demo"`
 }
 
 type AppConfig struct {
@@ -145,4 +146,8 @@ type APIConfig struct {
 	Prefix         string `yaml:"prefix"`
 	DefaultPerPage int    `yaml:"default_per_page"`
 	MaxPerPage     int    `yaml:"max_per_page"`
+}
+
+type DemoConfig struct {
+	Enabled bool `yaml:"enabled"`
 }

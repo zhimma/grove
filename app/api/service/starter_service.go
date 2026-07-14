@@ -12,7 +12,7 @@ import (
 	"github.com/zhimma/grove/pkg/request"
 )
 
-type StarterService struct {
+type DemoStarterService struct {
 	db   *gorm.DB
 	jobs *job.Client
 }
@@ -48,14 +48,14 @@ type DispatchEchoJobOutput struct {
 	TaskID string
 }
 
-func NewStarterService(db *gorm.DB, jobs *job.Client) *StarterService {
-	return &StarterService{
+func NewDemoStarterService(db *gorm.DB, jobs *job.Client) *DemoStarterService {
+	return &DemoStarterService{
 		db:   db,
 		jobs: jobs,
 	}
 }
 
-func (s *StarterService) Ping(ctx context.Context, input PingInput) (PingOutput, error) {
+func (s *DemoStarterService) Ping(ctx context.Context, input PingInput) (PingOutput, error) {
 	name := strings.TrimSpace(input.Name)
 	if name == "" {
 		name = "world"
@@ -69,7 +69,7 @@ func (s *StarterService) Ping(ctx context.Context, input PingInput) (PingOutput,
 	}, nil
 }
 
-func (s *StarterService) Profile(ctx context.Context, input ProfileInput) (ProfileOutput, error) {
+func (s *DemoStarterService) Profile(ctx context.Context, input ProfileInput) (ProfileOutput, error) {
 	user, err := model.FindUserByID(ctx, s.db, input.UserID)
 	if err != nil {
 		return ProfileOutput{}, err
@@ -84,7 +84,7 @@ func (s *StarterService) Profile(ctx context.Context, input ProfileInput) (Profi
 	}, nil
 }
 
-func (s *StarterService) DispatchEchoJob(ctx context.Context, input DispatchEchoJobInput) (DispatchEchoJobOutput, error) {
+func (s *DemoStarterService) DispatchEchoJob(ctx context.Context, input DispatchEchoJobInput) (DispatchEchoJobOutput, error) {
 	if s.jobs == nil {
 		return DispatchEchoJobOutput{}, errx.ServiceUnavailable().WithMessage("任务客户端未启用")
 	}

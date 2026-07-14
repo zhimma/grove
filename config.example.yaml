@@ -115,7 +115,7 @@ docs:
 cors:
   enabled: ${CORS_ENABLED:true}
   allowed_origins:
-    - ${CORS_ALLOWED_ORIGIN_1:*}
+    - "${CORS_ALLOWED_ORIGIN_1:*}"
   allowed_methods:
     - ${CORS_ALLOWED_METHOD_1:GET}
     - ${CORS_ALLOWED_METHOD_2:POST}
@@ -134,3 +134,7 @@ api:
   prefix: ${API_PREFIX:/api/v1}
   default_per_page: ${API_DEFAULT_PER_PAGE:20}
   max_per_page: ${API_MAX_PER_PAGE:100}
+
+demo:
+  # Demo endpoints are intended for local development and tests. Production always ignores this switch.
+  enabled: ${DEMO_ENABLED:false}

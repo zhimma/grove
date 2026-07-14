@@ -3,7 +3,6 @@ package router
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/zhimma/grove/app/api/handler"
 	apimiddleware "github.com/zhimma/grove/app/api/middleware"
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/internal/provider"
@@ -36,7 +35,6 @@ func (r *Router) InstallToEngine(engine *gin.Engine) {
 	protected := v1.Group("")
 	protected.Use(r.userAuth.Required())
 
-	handler.RegisterAuthRoutes(public, r.p)
-	handler.RegisterStarterRoutes(public, protected, r.p)
+	r.installDemoRoutes(public, protected)
 	// grove:register-routes
 }

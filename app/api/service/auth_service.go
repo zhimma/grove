@@ -8,7 +8,7 @@ import (
 	"github.com/zhimma/grove/pkg/errx"
 )
 
-type AuthService struct {
+type DemoAuthService struct {
 	tokenManager *auth.Manager
 }
 
@@ -22,11 +22,11 @@ type IssueAccessTokenOutput struct {
 	TokenType   string
 }
 
-func NewAuthService(tokenManager *auth.Manager) *AuthService {
-	return &AuthService{tokenManager: tokenManager}
+func NewDemoAuthService(tokenManager *auth.Manager) *DemoAuthService {
+	return &DemoAuthService{tokenManager: tokenManager}
 }
 
-func (s *AuthService) IssueAccessToken(_ context.Context, input IssueAccessTokenInput) (IssueAccessTokenOutput, error) {
+func (s *DemoAuthService) IssueAccessToken(_ context.Context, input IssueAccessTokenInput) (IssueAccessTokenOutput, error) {
 	if s.tokenManager == nil {
 		return IssueAccessTokenOutput{}, errx.ServiceUnavailable().WithMessage("令牌管理器未配置")
 	}

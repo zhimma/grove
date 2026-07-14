@@ -84,7 +84,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 - [x] Task 4：替换迁移引擎并使用真实 PostgreSQL 验证生命周期。
 - [x] Task 5：修复 `make:module` 生成代码和原子性。
 - [ ] Task 6：明确软删除语义并增加数据库约束。
-- [ ] Task 7：隔离 API 演示接口和虚拟数据。
+- [x] Task 7：隔离 API 演示接口和虚拟数据。
 
 完成条件：全新环境可以按文档初始化；重复 seed 不改变管理员密码；生成模块可直接编译；数据库删除语义明确。
 
@@ -620,19 +620,40 @@ git commit -m "fix: define deletion and database integrity semantics"
 
 ### Task 7：隔离 API 演示接口和虚拟数据
 
-**Status:** `[ ] Planned`
+**Status:** `[x] Completed`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Completed at:** 2026-07-14
+
+**Architecture note:** 使用显式 `demo.enabled` 和独立 demo 路由注册函数。演示端点默认关闭，production 即使误设为 true 也不注册；正式模块生成路由标记保持在 demo 条件之外。
+
+**Verification:**
+
+- `go test ./app/api/... ./internal/config ./internal/model -v`：PASS。
+- `go test -race ./app/api/... ./internal/config ./internal/model`：PASS。
+- production 且 `demo.enabled=true`：`/ping`、`/auth/access-token`、`/profile`、`/jobs/echo` 全部返回 404。
+- `APP_ENV=development DEMO_ENABLED=false go run ./cmd/grove --config config.example.yaml about`：PASS。
+- `go test ./...`、`go vet ./...`、`git diff --check`：PASS。
 
 **Files:**
 
-- Create: `examples/starter-api/`
+- Create: `app/api/internal/router/demo.go`
 - Modify: `app/api/internal/router/router.go`
 - Modify: `app/api/handler/auth_handler.go`
 - Modify: `app/api/service/auth_service.go`
+- Modify: `app/api/handler/starter_handler.go`
+- Modify: `app/api/service/starter_service.go`
+- Modify: `app/api/internal/docs/docs.go`
 - Modify: `internal/model/user.go`
 - Modify: `internal/config/types.go`
 - Modify: `internal/config/load.go`
 - Modify: `config.example.yaml`
-- Test: `app/api/internal/router/router_test.go`
+- Test: router、docs、config、model tests
 
 **Step 1：增加 production 禁用测试**
 

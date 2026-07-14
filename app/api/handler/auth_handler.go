@@ -9,8 +9,8 @@ import (
 	"github.com/zhimma/grove/pkg/validation"
 )
 
-type AuthHandler struct {
-	authSvc *service.AuthService
+type DemoAuthHandler struct {
+	authSvc *service.DemoAuthService
 }
 
 type IssueAccessTokenRequest struct {
@@ -23,14 +23,14 @@ type IssueAccessTokenResponse struct {
 	TokenType   string `json:"token_type"`
 }
 
-func RegisterAuthRoutes(public *gin.RouterGroup, p *provider.Provider) {
-	h := &AuthHandler{
-		authSvc: service.NewAuthService(p.TokenManager),
+func RegisterDemoAuthRoutes(public *gin.RouterGroup, p *provider.Provider) {
+	h := &DemoAuthHandler{
+		authSvc: service.NewDemoAuthService(p.TokenManager),
 	}
 	public.POST("/auth/access-token", h.IssueAccessToken)
 }
 
-func (h *AuthHandler) IssueAccessToken(c *gin.Context) {
+func (h *DemoAuthHandler) IssueAccessToken(c *gin.Context) {
 	var req IssueAccessTokenRequest
 	if c.Request.ContentLength > 0 {
 		if err := validation.BindJSON(c, &req); err != nil {

@@ -285,6 +285,9 @@ func applyEnvironmentOverrides(cfg *Config) {
 	if value := os.Getenv("WORKER_ENABLED"); value != "" {
 		cfg.Job.Enabled = parseBool(value)
 	}
+	if value := os.Getenv("DEMO_ENABLED"); value != "" {
+		cfg.Demo.Enabled = parseBool(value)
+	}
 }
 
 func parseBool(value string) bool {

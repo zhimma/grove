@@ -34,52 +34,65 @@ func RegisterDocs(router *gin.Engine, cfg *config.Config) {
 
 func spec(cfg *config.Config) map[string]any {
 	basePath := resolveAPIBasePath(cfg)
+	paths := []docsui.Path{
+		{
+			Path: "/health",
+			Operations: []docsui.Operation{
+				{Method: "GET", Summary: "Health check", Response200: "ok"},
+			},
+		},
+	}
+	if demoEnabled(cfg) {
+		paths = append(paths, demoPaths()...)
+	}
 
 	return docsui.BuildOpenAPIDocument(docsui.Document{
 		Title:       cfg.Docs.Title,
 		Description: cfg.Docs.Description,
 		Version:     cfg.Docs.Version,
 		Servers:     []string{basePath},
-		Paths: []docsui.Path{
-			{
-				Path: "/health",
-				Operations: []docsui.Operation{
-					{Method: "GET", Summary: "Health check", Response200: "ok"},
-				},
-			},
-			{
-				Path: "/ping",
-				Operations: []docsui.Operation{
-					{
-						Method:      "GET",
-						Summary:     "Public ping",
-						Response200: "pong",
-						Parameters: []docsui.Parameter{
-							{Name: "name", In: "query", Type: "string"},
-						},
+		Paths:       paths,
+	})
+}
+
+func demoPaths() []docsui.Path {
+	return []docsui.Path{
+		{
+			Path: "/ping",
+			Operations: []docsui.Operation{
+				{
+					Method:      "GET",
+					Summary:     "Public ping",
+					Response200: "pong",
+					Parameters: []docsui.Parameter{
+						{Name: "name", In: "query", Type: "string"},
 					},
 				},
 			},
-			{
-				Path: "/auth/access-token",
-				Operations: []docsui.Operation{
-					{Method: "POST", Summary: "Issue access token", Response200: "token issued"},
-				},
-			},
-			{
-				Path: "/profile",
-				Operations: []docsui.Operation{
-					{Method: "GET", Summary: "Current user profile", Response200: "profile", BearerAuth: true},
-				},
-			},
-			{
-				Path: "/jobs/echo",
-				Operations: []docsui.Operation{
-					{Method: "POST", Summary: "Enqueue echo job", Response200: "queued", BearerAuth: true},
-				},
+		},
+		{
+			Path: "/auth/access-token",
+			Operations: []docsui.Operation{
+				{Method: "POST", Summary: "Issue access token", Response200: "token issued"},
 			},
 		},
-	})
+		{
+			Path: "/profile",
+			Operations: []docsui.Operation{
+				{Method: "GET", Summary: "Current user profile", Response200: "profile", BearerAuth: true},
+			},
+		},
+		{
+			Path: "/jobs/echo",
+			Operations: []docsui.Operation{
+				{Method: "POST", Summary: "Enqueue echo job", Response200: "queued", BearerAuth: true},
+			},
+		},
+	}
+}
+
+func demoEnabled(cfg *config.Config) bool {
+	return cfg != nil && cfg.Demo.Enabled && !strings.EqualFold(strings.TrimSpace(cfg.App.Env), "production")
 }
 
 func resolveAPIBasePath(cfg *config.Config) string {
