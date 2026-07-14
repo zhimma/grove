@@ -2,359 +2,449 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"reflect"
+	"sort"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/robfig/cron/v3"
 	"github.com/zhimma/grove/pkg/logger"
 )
 
-// Job 任务接口
+const defaultStopTimeout = 30 * time.Second
+
+var (
+	ErrTaskRunning      = errors.New("scheduler task is already running")
+	ErrSchedulerStopped = errors.New("scheduler is stopped")
+	ErrStopTimeout      = errors.New("scheduler stop timed out")
+)
+
 type Job interface {
-	// Run 执行任务
 	Run(ctx context.Context) error
 }
 
-// JobFunc 任务函数类型
 type JobFunc func(ctx context.Context) error
 
-// Run 实现Job接口
 func (f JobFunc) Run(ctx context.Context) error {
 	return f(ctx)
 }
 
-// Task 计划任务
 type Task struct {
 	Name     string
 	Schedule string
 	Job      Job
-	Mutex    bool // 是否启用互斥锁（防止重叠执行）
+	Mutex    bool
+	Timeout  time.Duration
 }
 
-// Scheduler 任务调度器
-type Scheduler struct {
-	cron     *cron.Cron
-	tasks    map[string]*Task
-	entries  map[string]cron.EntryID
-	mutex    sync.RWMutex
-	running  map[string]*sync.Mutex // 任务级互斥锁
-	stopCh   chan struct{}
-	location *time.Location
-}
-
-// Config 调度器配置
 type Config struct {
-	Location string // 时区，默认Local
+	Location    string
+	StopTimeout time.Duration
 }
 
-// DefaultConfig 默认配置
+type Scheduler struct {
+	cron        *cron.Cron
+	tasks       map[string]*scheduledTask
+	entries     map[string]cron.EntryID
+	running     map[string]*taskState
+	mu          sync.RWMutex
+	wg          sync.WaitGroup
+	rootCtx     context.Context
+	cancel      context.CancelFunc
+	started     bool
+	stopped     bool
+	stopOnce    sync.Once
+	stoppedCh   chan struct{}
+	stopTimeout time.Duration
+	location    *time.Location
+}
+
+type scheduledTask struct {
+	task  Task
+	state *taskState
+}
+
+type taskState struct {
+	active atomic.Int64
+	locked atomic.Bool
+}
+
 func DefaultConfig() Config {
 	return Config{
-		Location: "Local",
+		Location:    "Local",
+		StopTimeout: defaultStopTimeout,
 	}
 }
 
-// New 创建调度器
 func New(config Config) (*Scheduler, error) {
+	locationName := strings.TrimSpace(config.Location)
+	if locationName == "" {
+		locationName = "Local"
+	}
 	location := time.Local
-	if config.Location != "" && config.Location != "Local" {
-		loc, err := time.LoadLocation(config.Location)
+	if locationName != "Local" {
+		loaded, err := time.LoadLocation(locationName)
 		if err != nil {
-			return nil, fmt.Errorf("load location: %w", err)
+			return nil, fmt.Errorf("load scheduler location %q: %w", locationName, err)
 		}
-		location = loc
+		location = loaded
 	}
-
+	if config.StopTimeout <= 0 {
+		config.StopTimeout = defaultStopTimeout
+	}
+	rootCtx, cancel := context.WithCancel(context.Background())
 	s := &Scheduler{
-		tasks:    make(map[string]*Task),
-		entries:  make(map[string]cron.EntryID),
-		running:  make(map[string]*sync.Mutex),
-		stopCh:   make(chan struct{}),
-		location: location,
+		tasks:       make(map[string]*scheduledTask),
+		entries:     make(map[string]cron.EntryID),
+		running:     make(map[string]*taskState),
+		rootCtx:     rootCtx,
+		cancel:      cancel,
+		stoppedCh:   make(chan struct{}),
+		stopTimeout: config.StopTimeout,
+		location:    location,
 	}
-
-	// 创建cron调度器（启用秒字段）
 	s.cron = cron.New(
 		cron.WithLocation(location),
 		cron.WithSeconds(),
 		cron.WithLogger(cron.VerbosePrintfLogger(&cronLogger{})),
 	)
-
 	return s, nil
 }
 
-// NewDefault 创建默认调度器
 func NewDefault() (*Scheduler, error) {
 	return New(DefaultConfig())
 }
 
-// cronLogger 适配cron的日志接口
 type cronLogger struct{}
 
-func (l *cronLogger) Printf(format string, v ...interface{}) {
-	logger.Debug().Msgf(format, v...)
+func (*cronLogger) Printf(format string, values ...interface{}) {
+	logger.Debug().Msgf(format, values...)
 }
 
-// Register 注册任务
 func (s *Scheduler) Register(task *Task) error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	if _, exists := s.tasks[task.Name]; exists {
-		return fmt.Errorf("task %s already exists", task.Name)
-	}
-
-	// 包装任务执行
-	wrapper := func() {
-		s.executeTask(task)
-	}
-
-	// 添加到cron
-	entryID, err := s.cron.AddFunc(task.Schedule, wrapper)
+	normalized, err := normalizeTask(task)
 	if err != nil {
-		return fmt.Errorf("add cron job: %w", err)
+		return err
 	}
+	record := &scheduledTask{task: normalized, state: &taskState{}}
 
-	s.tasks[task.Name] = task
-	s.entries[task.Name] = entryID
-	if task.Mutex {
-		s.running[task.Name] = &sync.Mutex{}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stopped {
+		return ErrSchedulerStopped
 	}
-
-	logger.Info().
-		Str("task", task.Name).
-		Str("schedule", task.Schedule).
-		Msg("任务已注册")
-
+	if _, exists := s.tasks[normalized.Name]; exists {
+		return fmt.Errorf("task %q already exists", normalized.Name)
+	}
+	entryID, err := s.cron.AddFunc(normalized.Schedule, func() {
+		_ = s.executeTask(record)
+	})
+	if err != nil {
+		return fmt.Errorf("add cron task %q: %w", normalized.Name, err)
+	}
+	s.tasks[normalized.Name] = record
+	s.entries[normalized.Name] = entryID
+	s.running[normalized.Name] = record.state
+	logger.Info().Str("task", normalized.Name).Str("schedule", normalized.Schedule).Msg("任务已注册")
 	return nil
 }
 
-// RegisterFunc 使用函数注册任务
-func (s *Scheduler) RegisterFunc(name, schedule string, fn JobFunc) error {
-	return s.Register(&Task{
-		Name:     name,
-		Schedule: schedule,
-		Job:      fn,
-	})
+func normalizeTask(task *Task) (Task, error) {
+	if task == nil {
+		return Task{}, fmt.Errorf("scheduler task is required")
+	}
+	normalized := Task{
+		Name:     strings.TrimSpace(task.Name),
+		Schedule: strings.TrimSpace(task.Schedule),
+		Job:      task.Job,
+		Mutex:    task.Mutex,
+		Timeout:  task.Timeout,
+	}
+	if normalized.Name == "" {
+		return Task{}, fmt.Errorf("scheduler task name is required")
+	}
+	if normalized.Schedule == "" {
+		return Task{}, fmt.Errorf("scheduler task schedule is required")
+	}
+	if isNilJob(normalized.Job) {
+		return Task{}, fmt.Errorf("scheduler task job is required")
+	}
+	if normalized.Timeout < 0 {
+		return Task{}, fmt.Errorf("scheduler task timeout must not be negative")
+	}
+	return normalized, nil
 }
 
-// executeTask 执行任务
-func (s *Scheduler) executeTask(task *Task) {
-	// 互斥锁检查
-	if task.Mutex {
-		mutex, exists := s.running[task.Name]
-		if exists {
-			if !mutex.TryLock() {
-				logger.Warn().
-					Str("task", task.Name).
-					Msg("任务正在运行，跳过本次执行")
-				return
-			}
-			defer mutex.Unlock()
-		}
+func isNilJob(job Job) bool {
+	if job == nil {
+		return true
 	}
+	value := reflect.ValueOf(job)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
+}
+
+func (s *Scheduler) RegisterFunc(name, schedule string, fn JobFunc) error {
+	return s.Register(&Task{Name: name, Schedule: schedule, Job: fn})
+}
+
+func (s *Scheduler) executeTask(record *scheduledTask) error {
+	if record.task.Mutex && !record.state.locked.CompareAndSwap(false, true) {
+		logger.Warn().Str("task", record.task.Name).Msg("任务正在运行，跳过本次执行")
+		return ErrTaskRunning
+	}
+	if record.task.Mutex {
+		defer record.state.locked.Store(false)
+	}
+
+	s.mu.Lock()
+	if s.stopped {
+		s.mu.Unlock()
+		return ErrSchedulerStopped
+	}
+	s.wg.Add(1)
+	record.state.active.Add(1)
+	s.mu.Unlock()
+	defer s.wg.Done()
+	defer record.state.active.Add(-1)
+
+	ctx := s.rootCtx
+	cancel := func() {}
+	if record.task.Timeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, record.task.Timeout)
+	}
+	defer cancel()
 
 	start := time.Now()
-	logger.Info().
-		Str("task", task.Name).
-		Msg("任务开始执行")
-
-	ctx := context.Background()
-	if err := task.Job.Run(ctx); err != nil {
-		logger.Error().
-			Err(err).
-			Str("task", task.Name).
-			Dur("duration", time.Since(start)).
-			Msg("任务执行失败")
-	} else {
-		logger.Info().
-			Str("task", task.Name).
-			Dur("duration", time.Since(start)).
-			Msg("任务执行完成")
+	logger.Info().Str("task", record.task.Name).Msg("任务开始执行")
+	err := record.task.Job.Run(ctx)
+	event := logger.Info()
+	message := "任务执行完成"
+	if err != nil {
+		event = logger.Error().Err(err)
+		message = "任务执行失败"
 	}
+	event.Str("task", record.task.Name).Dur("duration", time.Since(start)).Msg(message)
+	return err
 }
 
-// Start 启动调度器
-func (s *Scheduler) Start() {
+func (s *Scheduler) Start() error {
+	if s == nil {
+		return fmt.Errorf("scheduler is nil")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stopped {
+		return ErrSchedulerStopped
+	}
+	if s.started {
+		return nil
+	}
 	s.cron.Start()
+	s.started = true
 	logger.Info().Msg("调度器已启动")
-}
-
-// Stop 停止调度器
-func (s *Scheduler) Stop() {
-	ctx := s.cron.Stop()
-	<-ctx.Done()
-	logger.Info().Msg("调度器已停止")
-}
-
-// Run 立即运行一次任务（阻塞）
-func (s *Scheduler) Run(name string) error {
-	s.mutex.RLock()
-	task, exists := s.tasks[name]
-	s.mutex.RUnlock()
-
-	if !exists {
-		return fmt.Errorf("task %s not found", name)
-	}
-
-	s.executeTask(task)
 	return nil
 }
 
-// Tasks 获取所有任务名称
-func (s *Scheduler) Tasks() []string {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
+func (s *Scheduler) Stop() error {
+	if s == nil {
+		return nil
+	}
+	s.stopOnce.Do(func() {
+		s.mu.Lock()
+		s.stopped = true
+		s.cancel()
+		s.mu.Unlock()
+		cronDone := s.cron.Stop()
+		go func() {
+			<-cronDone.Done()
+			s.wg.Wait()
+			logger.Info().Msg("调度器已停止")
+			close(s.stoppedCh)
+		}()
+	})
 
+	timer := time.NewTimer(s.stopTimeout)
+	defer timer.Stop()
+	select {
+	case <-s.stoppedCh:
+		return nil
+	case <-timer.C:
+		return fmt.Errorf("%w after %s", ErrStopTimeout, s.stopTimeout)
+	}
+}
+
+func (s *Scheduler) Run(name string) error {
+	if s == nil {
+		return fmt.Errorf("scheduler is nil")
+	}
+	name = strings.TrimSpace(name)
+	s.mu.RLock()
+	if s.stopped {
+		s.mu.RUnlock()
+		return ErrSchedulerStopped
+	}
+	record, exists := s.tasks[name]
+	s.mu.RUnlock()
+	if !exists {
+		return fmt.Errorf("task %q not found", name)
+	}
+	return s.executeTask(record)
+}
+
+func (s *Scheduler) Tasks() []string {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
 	names := make([]string, 0, len(s.tasks))
 	for name := range s.tasks {
 		names = append(names, name)
 	}
+	s.mu.RUnlock()
+	sort.Strings(names)
 	return names
 }
 
-// Remove 移除任务（注意：cron库不支持动态移除，需要重建）
 func (s *Scheduler) Remove(name string) error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	if _, exists := s.tasks[name]; !exists {
-		return fmt.Errorf("task %s not found", name)
+	if s == nil {
+		return fmt.Errorf("scheduler is nil")
 	}
-
-	delete(s.tasks, name)
+	name = strings.TrimSpace(name)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stopped {
+		return ErrSchedulerStopped
+	}
+	if _, exists := s.tasks[name]; !exists {
+		return fmt.Errorf("task %q not found", name)
+	}
 	if entryID, exists := s.entries[name]; exists {
 		s.cron.Remove(entryID)
 	}
+	delete(s.tasks, name)
 	delete(s.entries, name)
 	delete(s.running, name)
-
 	logger.Info().Str("task", name).Msg("任务已移除")
 	return nil
 }
 
-// IsRunning 检查任务是否正在执行
 func (s *Scheduler) IsRunning(name string) bool {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-
-	mutex, exists := s.running[name]
-	if !exists {
+	if s == nil {
 		return false
 	}
-
-	// 尝试获取锁，如果失败说明正在运行
-	if mutex.TryLock() {
-		mutex.Unlock()
-		return false
-	}
-	return true
+	s.mu.RLock()
+	state := s.running[strings.TrimSpace(name)]
+	s.mu.RUnlock()
+	return state != nil && state.active.Load() > 0
 }
 
-// ==================== 便捷方法 ====================
-
-// EverySecond 每秒执行
 func (s *Scheduler) EverySecond(name string, job Job) error {
 	return s.Register(&Task{Name: name, Schedule: "* * * * * *", Job: job})
 }
 
-// EveryMinute 每分钟执行
 func (s *Scheduler) EveryMinute(name string, job Job) error {
 	return s.Register(&Task{Name: name, Schedule: "0 * * * * *", Job: job})
 }
 
-// EveryFiveMinutes 每5分钟执行
 func (s *Scheduler) EveryFiveMinutes(name string, job Job) error {
 	return s.Register(&Task{Name: name, Schedule: "0 */5 * * * *", Job: job})
 }
 
-// EveryTenMinutes 每10分钟执行
 func (s *Scheduler) EveryTenMinutes(name string, job Job) error {
 	return s.Register(&Task{Name: name, Schedule: "0 */10 * * * *", Job: job})
 }
 
-// EveryThirtyMinutes 每30分钟执行
 func (s *Scheduler) EveryThirtyMinutes(name string, job Job) error {
 	return s.Register(&Task{Name: name, Schedule: "0 */30 * * * *", Job: job})
 }
 
-// Hourly 每小时执行
 func (s *Scheduler) Hourly(name string, job Job) error {
 	return s.Register(&Task{Name: name, Schedule: "0 0 * * * *", Job: job})
 }
 
-// Daily 每天执行（午夜）
 func (s *Scheduler) Daily(name string, job Job) error {
 	return s.Register(&Task{Name: name, Schedule: "0 0 0 * * *", Job: job})
 }
 
-// DailyAt 指定时间每天执行
 func (s *Scheduler) DailyAt(name string, hour, minute int, job Job) error {
-	schedule := fmt.Sprintf("0 %d %d * * *", minute, hour)
-	return s.Register(&Task{Name: name, Schedule: schedule, Job: job})
+	return s.Register(&Task{Name: name, Schedule: fmt.Sprintf("0 %d %d * * *", minute, hour), Job: job})
 }
 
-// Weekly 每周执行（周日午夜）
 func (s *Scheduler) Weekly(name string, job Job) error {
 	return s.Register(&Task{Name: name, Schedule: "0 0 0 * * 0", Job: job})
 }
 
-// Monthly 每月执行（1号午夜）
 func (s *Scheduler) Monthly(name string, job Job) error {
 	return s.Register(&Task{Name: name, Schedule: "0 0 0 1 * *", Job: job})
 }
 
-// ==================== 全局实例 ====================
+var (
+	defaultSchedulerMu sync.RWMutex
+	defaultScheduler   *Scheduler
+)
 
-var defaultScheduler *Scheduler
-
-// Init 初始化全局调度器
 func Init(scheduler *Scheduler) {
+	defaultSchedulerMu.Lock()
 	defaultScheduler = scheduler
+	defaultSchedulerMu.Unlock()
 }
 
-// Register 全局注册
+func currentScheduler() *Scheduler {
+	defaultSchedulerMu.RLock()
+	scheduler := defaultScheduler
+	defaultSchedulerMu.RUnlock()
+	return scheduler
+}
+
 func Register(task *Task) error {
-	if defaultScheduler == nil {
+	scheduler := currentScheduler()
+	if scheduler == nil {
 		return fmt.Errorf("scheduler not initialized")
 	}
-	return defaultScheduler.Register(task)
+	return scheduler.Register(task)
 }
 
-// RegisterFunc 全局函数注册
 func RegisterFunc(name, schedule string, fn JobFunc) error {
-	if defaultScheduler == nil {
+	scheduler := currentScheduler()
+	if scheduler == nil {
 		return fmt.Errorf("scheduler not initialized")
 	}
-	return defaultScheduler.RegisterFunc(name, schedule, fn)
+	return scheduler.RegisterFunc(name, schedule, fn)
 }
 
-// Start 全局启动
-func Start() {
-	if defaultScheduler != nil {
-		defaultScheduler.Start()
+func Start() error {
+	scheduler := currentScheduler()
+	if scheduler == nil {
+		return fmt.Errorf("scheduler not initialized")
 	}
+	return scheduler.Start()
 }
 
-// Stop 全局停止
-func Stop() {
-	if defaultScheduler != nil {
-		defaultScheduler.Stop()
+func Stop() error {
+	scheduler := currentScheduler()
+	if scheduler == nil {
+		return nil
 	}
+	return scheduler.Stop()
 }
 
-// Run 全局立即运行
 func Run(name string) error {
-	if defaultScheduler == nil {
+	scheduler := currentScheduler()
+	if scheduler == nil {
 		return fmt.Errorf("scheduler not initialized")
 	}
-	return defaultScheduler.Run(name)
+	return scheduler.Run(name)
 }
 
-// ==================== Cron 表达式帮助 ====================
-
-// CronExpression 预定义的Cron表达式
 var CronExpression = struct {
 	EverySecond        string
 	EveryMinute        string

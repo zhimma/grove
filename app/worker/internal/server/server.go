@@ -26,8 +26,17 @@ func NewServer(cfg *config.Config) (*WorkerApp, func(), error) {
 }
 
 func (a *WorkerApp) Start() error {
+	if a.provider.Scheduler != nil {
+		if err := a.provider.Scheduler.Start(); err != nil {
+			return err
+		}
+	}
 	if a.provider.JobServer == nil {
-		logger.Warn().Msg("任务服务未启用")
+		if a.provider.Scheduler == nil {
+			logger.Warn().Msg("Worker 组件未启用")
+		} else {
+			logger.Info().Msg("工作进程已启动")
+		}
 		return nil
 	}
 

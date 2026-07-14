@@ -76,7 +76,10 @@ err := p.Scheduler.EveryMinute("sync_stats", scheduler.JobFunc(func(ctx context.
 
 - 任务名必须唯一。
 - `Mutex` 可防止同一个进程内的任务重叠执行。
+- `Timeout` 为单次执行派生 deadline，Stop 会取消所有任务的 root context。
 - `Remove(name)` 会真正移除 cron entry，移除后不会再被调度。
+- Scheduler 只在 `worker` 进程且 `scheduler.enabled=true` 时创建和启动。
+- `Start()`、`Stop()` 和手动 `Run()` 都返回 error，调用方不得忽略关闭超时。
 - 多实例部署下的全局互斥需要 Redis/DB 锁，本组件不隐式实现。
 
 ## Storage

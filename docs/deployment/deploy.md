@@ -203,7 +203,7 @@ docker run --rm -p 8081:8081 grove-console
 ## 运行约束
 
 - `console`、`api`、`worker` 可以独立部署
-- `scheduler` 适合单实例运行；多实例场景应明确是否允许重复执行
+- `scheduler` 只由 worker 进程承载，适合单实例运行；多 worker 场景应只启用一个实例，或明确允许重复执行
 - `pkg/job` 依赖 Redis；未启用 Redis 时不应启动 worker
 - 日志统一由 `pkg/logger` 输出，生产环境建议落盘并接入集中日志系统
 

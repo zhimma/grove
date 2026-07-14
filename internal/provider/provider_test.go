@@ -166,6 +166,39 @@ func TestProviderCloseClosesCacheManager(t *testing.T) {
 	}
 }
 
+func TestWithSchedulerHonorsConfig(t *testing.T) {
+	p := &Provider{Config: &config.Config{Server: config.ServerConfig{ShutdownTimeout: 1}}}
+	if err := WithScheduler()(p); err != nil || p.Scheduler != nil {
+		t.Fatalf("disabled scheduler: scheduler=%v err=%v", p.Scheduler, err)
+	}
+
+	p.Config.Scheduler.Enabled = true
+	p.Config.Scheduler.Timezone = "UTC"
+	if err := WithScheduler()(p); err != nil || p.Scheduler == nil {
+		t.Fatalf("enabled scheduler: scheduler=%v err=%v", p.Scheduler, err)
+	}
+	if err := p.Scheduler.Stop(); err != nil {
+		t.Fatalf("stop scheduler: %v", err)
+	}
+}
+
+func TestWorkerOptionsIncludeEnabledScheduler(t *testing.T) {
+	cfg := &config.Config{
+		App:       config.AppConfig{Name: "grove", Env: "test"},
+		Log:       config.LogConfig{Level: "error", Path: t.TempDir()},
+		Server:    config.ServerConfig{ShutdownTimeout: 1},
+		Scheduler: config.SchedulerConfig{Enabled: true, Timezone: "UTC"},
+	}
+	p, err := New(cfg, "worker", WorkerOptions()...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = p.Close() })
+	if p.Scheduler == nil {
+		t.Fatal("worker options did not initialize enabled scheduler")
+	}
+}
+
 func optionSetContainsAtLeast(options []Option, count int) bool {
 	return len(options) >= count && slices.ContainsFunc(options, func(opt Option) bool {
 		return opt != nil

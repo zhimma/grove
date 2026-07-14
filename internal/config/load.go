@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -101,6 +102,10 @@ func defaultConfig() Config {
 				"critical": 3,
 				"low":      1,
 			},
+		},
+		Scheduler: SchedulerConfig{
+			Enabled:  false,
+			Timezone: "Local",
 		},
 		Casbin: CasbinConfig{
 			Enforcers: map[string]CasbinEnforcerConfig{},
@@ -303,6 +308,12 @@ func applyEnvironmentOverrides(cfg *Config) {
 	if value := os.Getenv("WORKER_ENABLED"); value != "" {
 		cfg.Job.Enabled = parseBool(value)
 	}
+	if value := os.Getenv("SCHEDULER_ENABLED"); value != "" {
+		cfg.Scheduler.Enabled = parseBool(value)
+	}
+	if value := os.Getenv("SCHEDULER_TIMEZONE"); value != "" {
+		cfg.Scheduler.Timezone = value
+	}
 	if value := os.Getenv("DEMO_ENABLED"); value != "" {
 		cfg.Demo.Enabled = parseBool(value)
 	}
@@ -388,6 +399,9 @@ func (c *Config) normalize(service string, debugConfigured bool) {
 	}
 	if strings.TrimSpace(c.JWT.Issuer) == "" {
 		c.JWT.Issuer = c.App.Name
+	}
+	if strings.TrimSpace(c.Scheduler.Timezone) == "" {
+		c.Scheduler.Timezone = "Local"
 	}
 	if strings.TrimSpace(c.API.Prefix) == "" {
 		c.API.Prefix = "/api/v1"
@@ -496,6 +510,15 @@ func (c Config) Validate(service string) error {
 	}
 	if c.Job.Enabled && !c.Redis.Enabled {
 		return fmt.Errorf("job requires redis to be enabled")
+	}
+	timezone := strings.TrimSpace(c.Scheduler.Timezone)
+	if timezone == "" {
+		timezone = "Local"
+	}
+	if timezone != "Local" {
+		if _, err := time.LoadLocation(timezone); err != nil {
+			return fmt.Errorf("scheduler timezone %q is invalid: %w", timezone, err)
+		}
 	}
 	if c.CORS.AllowCredentials && containsString(c.CORS.AllowedOrigins, "*") {
 		return fmt.Errorf("cors allow_credentials cannot be used with wildcard origin")

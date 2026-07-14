@@ -57,6 +57,11 @@ job:
     critical: ${JOB_QUEUE_CRITICAL:3}
     low: ${JOB_QUEUE_LOW:1}
 
+scheduler:
+  # Scheduler 只由 worker 进程承载；除非业务自行做跨实例协调，否则只启用一个实例。
+  enabled: ${SCHEDULER_ENABLED:false}
+  timezone: ${SCHEDULER_TIMEZONE:Local}
+
 casbin:
   enforcers:
     api:

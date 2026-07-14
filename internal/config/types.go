@@ -15,6 +15,7 @@ type Config struct {
 	Redis       RedisConfig     `yaml:"redis"`
 	JWT         JWTConfig       `yaml:"jwt"`
 	Job         JobConfig       `yaml:"job"`
+	Scheduler   SchedulerConfig `yaml:"scheduler"`
 	Casbin      CasbinConfig    `yaml:"casbin"`
 	Storage     StorageConfig   `yaml:"storage"`
 	Docs        DocsConfig      `yaml:"docs"`
@@ -82,6 +83,11 @@ type JobConfig struct {
 	Enabled     bool           `yaml:"enabled"`
 	Concurrency int            `yaml:"concurrency"`
 	Queues      map[string]int `yaml:"queues"`
+}
+
+type SchedulerConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	Timezone string `yaml:"timezone"`
 }
 
 type CasbinConfig struct {

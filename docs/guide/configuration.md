@@ -77,6 +77,13 @@ if err != nil {
 
 Redis 连接配置。启用缓存、队列或 worker 时需要。
 
+### `scheduler`
+
+- `enabled`：是否在 Worker 进程启用计划任务调度器，默认 `false`
+- `timezone`：IANA 时区名，例如 `Asia/Shanghai`，默认 `Local`
+
+可用 `SCHEDULER_ENABLED`、`SCHEDULER_TIMEZONE` 覆盖。API 和 Console 不会自动承载 Scheduler。
+
 ### `jwt`
 
 - `secret`：签名密钥

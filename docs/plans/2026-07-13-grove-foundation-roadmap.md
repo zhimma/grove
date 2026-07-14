@@ -88,7 +88,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 
 完成条件：全新环境可以按文档初始化；重复 seed 不改变管理员密码；生成模块可直接编译；数据库删除语义明确。
 
-**Checkpoint 2026-07-14:** Task 1–7 已完成；`go test ./...`、`go vet ./...`、`make build` 通过。`go test -race ./...` 暴露 `pkg/scheduler.TestScheduler_Mutex` 共享计数器竞争，归入 Task 15。前端依赖未安装，按用户要求未执行下载，typecheck/build 待本地依赖可用后补跑。
+**Checkpoint 2026-07-14:** Task 1–7 已完成；`go test ./...`、`go vet ./...`、`make build` 通过。`go test -race ./...` 当时暴露的 `pkg/scheduler.TestScheduler_Mutex` 竞争已在 Task 15 修复并完成全仓 race 回归。前端依赖未安装，按用户要求未执行下载，typecheck/build 待本地依赖可用后补跑。
 
 ### Milestone 2：认证、授权与输入安全
 
@@ -104,7 +104,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 
 - [x] Task 13：重构 Cache 契约和生命周期。
 - [x] Task 14：重构 HTTP Client 为请求级不可变状态。
-- [ ] Task 15：修复 Scheduler 并发、配置和取消语义。
+- [x] Task 15：修复 Scheduler 并发、配置和取消语义。
 - [ ] Task 16：修复 Event 异步投递语义。
 - [ ] Task 17：统一 Provider 生命周期和按服务配置校验。
 
@@ -877,7 +877,7 @@ go test ./pkg/storage ./app/console/internal/router -v
 
 **Verification:**
 
-- `go test ./...`、`go vet ./...`、`make build`、`git diff --check`：PASS。
+- `go test ./...`、`go test -race ./...`、`go vet ./...`、`make build`、`git diff --check`：PASS。
 - `go test -race ./pkg/secretbox ./pkg/migrate ./app/console/internal/service ./app/console/internal/router ./app/console/internal/middleware`：PASS。
 - Console `vue-tsc --noEmit --skipLibCheck` 与前端变更文件 Prettier：PASS，使用现有离线 module cache，未下载依赖。
 - 本机 PostgreSQL 唯一临时库：011 up/down、`is_secret` 列生命周期、存在敏感配置时拒绝 down 且迁移保持 `dirty=false`、清理敏感记录后可正常 down，全部 PASS；临时库已删除。
@@ -1044,7 +1044,7 @@ type Store interface {
 
 ### Task 15：修复 Scheduler 并发、配置和取消语义
 
-**Status:** `[-] In Progress`
+**Status:** `[x] Completed`
 
 **Owner:** Codex
 
@@ -1052,7 +1052,19 @@ type Store interface {
 
 **Started at:** 2026-07-14
 
+**Completed at:** 2026-07-14
+
 **Design:** `docs/plans/2026-07-14-scheduler-concurrency-design.md`
+
+**Verification:**
+
+- `go test ./...`、`go test -race ./...`、`go vet ./...`、`make build`、`git diff --check`：PASS。
+- `go test -race ./pkg/scheduler -count=20`：PASS；原 `TestScheduler_Mutex` 共享计数器 race 已消除。
+- `go test -race ./internal/config ./internal/provider ./app/worker/internal/server`：PASS。
+- 测试覆盖 nil/空字段/typed nil job/非法 cron/负 timeout、Task 配置复制、排序、Remove、Mutex、IsRunning、Job error 和 task timeout。
+- Stop cancel、Stop timeout、重复 Stop、停止后拒绝 Start/Register/Run，以及停止完成前 Logger 不被并发重建均有回归验证。
+- `scheduler.enabled/timezone` 默认值、YAML/env override、非法 timezone、Provider enabled 开关和 Worker 无 JobServer 时仍启动 Scheduler 均有测试。
+- Scheduler 只加入 WorkerOptions；API 和 Console 不自动启用，未访问 PostgreSQL、Redis 或真实外部网络。
 
 **Files:**
 
@@ -1061,6 +1073,8 @@ type Store interface {
 - Modify: `internal/config/types.go`
 - Modify: `internal/config/load.go`
 - Modify: `internal/provider/provider.go`
+- Modify: `app/worker/internal/server/server.go`
+- Modify: `config.example.yaml`
 - Modify: scheduler docs
 
 **Required behavior:**
@@ -1075,7 +1089,7 @@ type Store interface {
 - 明确哪些入口启用 Scheduler；不得存在文档有配置但运行时永远为 nil。
 - 修复 race 测试，使用 atomic 或 channel 同步。
 
-**Observed failure 2026-07-14:** `go test -race ./...` 在 `pkg/scheduler/scheduler_test.go:77` 读取计数器时，与测试任务函数第 58 行写入发生竞争；生产调度器并发语义仍需按本任务完整复核，不能只压掉测试告警。
+**Observed failure 2026-07-14:** `go test -race ./...` 在 `pkg/scheduler.TestScheduler_Mutex` 暴露共享计数器竞争；本任务已同时修复测试同步和生产 Scheduler 并发、取消及关闭语义，全仓 race 回归通过。
 
 **Verification:**
 

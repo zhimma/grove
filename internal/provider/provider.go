@@ -92,6 +92,7 @@ func WorkerOptions() []Option {
 	return []Option{
 		WithRedis(),
 		WithJobServer(),
+		WithScheduler(),
 	}
 }
 
@@ -412,8 +413,12 @@ func WithEvent() Option {
 
 func WithScheduler() Option {
 	return func(p *Provider) error {
+		if !p.Config.Scheduler.Enabled {
+			return nil
+		}
 		sched, err := scheduler.New(scheduler.Config{
-			Location: "Local",
+			Location:    p.Config.Scheduler.Timezone,
+			StopTimeout: time.Duration(p.Config.Server.ShutdownTimeout) * time.Second,
 		})
 		if err != nil {
 			return fmt.Errorf("init scheduler: %w", err)
@@ -429,7 +434,9 @@ func (p *Provider) Close() error {
 	}
 	var errs []error
 	if p.Scheduler != nil {
-		p.Scheduler.Stop()
+		if err := p.Scheduler.Stop(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	if p.JobServer != nil {
 		p.JobServer.Shutdown()

@@ -261,6 +261,9 @@ func TestLoadConfigExampleDefaultsDemoOff(t *testing.T) {
 	if cfg.Demo.Enabled {
 		t.Fatal("demo must be disabled by default")
 	}
+	if cfg.Scheduler.Enabled || cfg.Scheduler.Timezone != "Local" {
+		t.Fatalf("unexpected scheduler defaults: %#v", cfg.Scheduler)
+	}
 }
 
 func TestLoadWithOptionsReadsDemoEnabledOverride(t *testing.T) {
@@ -375,5 +378,30 @@ func TestLoadWithOptionsReadsConfigEncryptionKeyOverride(t *testing.T) {
 	}
 	if cfg.Security.ConfigEncryptionKey != "0123456789abcdef0123456789abcdef" {
 		t.Fatal("expected config encryption key override")
+	}
+}
+
+func TestLoadWithOptionsReadsSchedulerOverrides(t *testing.T) {
+	t.Setenv("SCHEDULER_ENABLED", "true")
+	t.Setenv("SCHEDULER_TIMEZONE", "Asia/Shanghai")
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte("app:\n  env: test\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "worker"})
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.Scheduler.Enabled || cfg.Scheduler.Timezone != "Asia/Shanghai" {
+		t.Fatalf("unexpected scheduler config: %#v", cfg.Scheduler)
+	}
+}
+
+func TestValidateRejectsInvalidSchedulerTimezone(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.Scheduler.Enabled = true
+	cfg.Scheduler.Timezone = "not/a-timezone"
+	if err := cfg.Validate("worker"); err == nil {
+		t.Fatal("expected invalid scheduler timezone error")
 	}
 }
