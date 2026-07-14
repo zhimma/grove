@@ -1139,7 +1139,15 @@ go test ./pkg/scheduler -race -count=20
 
 ### Task 17：统一 Provider 生命周期和按服务配置校验
 
-**Status:** `[ ] Planned`
+**Status:** `[-] In Progress`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Design:** `docs/plans/2026-07-14-provider-lifecycle-config-design.md`
 
 **Files:**
 
