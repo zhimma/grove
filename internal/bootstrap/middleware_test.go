@@ -17,8 +17,38 @@ func TestGlobalAllowsNilConfig(t *testing.T) {
 	loader := NewMiddlewareLoader(nil, "api")
 
 	middlewares := loader.Global()
-	if len(middlewares) != 4 {
-		t.Fatalf("expected 4 default middlewares, got %d", len(middlewares))
+	if len(middlewares) != 5 {
+		t.Fatalf("expected 5 default middlewares, got %d", len(middlewares))
+	}
+}
+
+func TestGlobalMiddlewareSetsSecurityHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	engine := gin.New()
+	loader := NewMiddlewareLoader(&config.Config{
+		Security: config.SecurityConfig{HSTSEnabled: true},
+	}, "api")
+	engine.Use(loader.Global()...)
+	engine.GET("/health", func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	engine.ServeHTTP(recorder, req)
+
+	want := map[string]string{
+		"X-Content-Type-Options":    "nosniff",
+		"X-Frame-Options":           "DENY",
+		"Referrer-Policy":           "strict-origin-when-cross-origin",
+		"Permissions-Policy":        "camera=(), microphone=(), geolocation=()",
+		"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+	}
+	for name, value := range want {
+		if got := recorder.Header().Get(name); got != value {
+			t.Errorf("expected %s %q, got %q", name, value, got)
+		}
 	}
 }
 

@@ -1,10 +1,13 @@
 package handler
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
 	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/ratelimit"
 	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
@@ -89,8 +92,18 @@ type AuthorizationOverviewResponse struct {
 }
 
 func RegisterAuthRoutes(public, authed *gin.RouterGroup, p *provider.Provider) {
+	var loginGuard ratelimit.LoginGuard
+	if p.Config != nil && p.Config.Security.Login.Enabled {
+		loginCfg := p.Config.Security.Login
+		loginGuard = ratelimit.NewLoginGuard(ratelimit.LoginConfig{
+			AttemptsPerMinute: loginCfg.AttemptsPerMinute,
+			Burst:             loginCfg.Burst,
+			FailureLimit:      loginCfg.FailureLimit,
+			LockDuration:      time.Duration(loginCfg.LockSeconds) * time.Second,
+		}, p.RedisClient)
+	}
 	h := &AuthHandler{
-		authSvc: consoleservice.NewAuthService(p.DB, p.GetEnforcer("console"), p.TokenManager),
+		authSvc: consoleservice.NewAuthService(p.DB, p.GetEnforcer("console"), p.TokenManager, loginGuard),
 	}
 
 	publicAuth := route.Wrap(public.Group("/auth"))

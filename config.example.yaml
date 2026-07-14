@@ -138,3 +138,14 @@ api:
 demo:
   # Demo endpoints are intended for local development and tests. Production always ignores this switch.
   enabled: ${DEMO_ENABLED:false}
+
+security:
+  # Empty means no reverse proxy is trusted. Add only explicit proxy IPs or CIDRs.
+  trusted_proxies: []
+  hsts_enabled: ${HSTS_ENABLED:false}
+  login:
+    enabled: ${LOGIN_PROTECTION_ENABLED:true}
+    attempts_per_minute: ${LOGIN_ATTEMPTS_PER_MINUTE:10}
+    burst: ${LOGIN_BURST:5}
+    failure_limit: ${LOGIN_FAILURE_LIMIT:5}
+    lock_seconds: ${LOGIN_LOCK_SECONDS:900}

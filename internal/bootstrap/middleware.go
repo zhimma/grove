@@ -21,11 +21,14 @@ func NewMiddlewareLoader(cfg *config.Config, serviceName string) *MiddlewareLoad
 
 func (l *MiddlewareLoader) Global() []gin.HandlerFunc {
 	debug := true
+	hsts := false
 	if l.cfg != nil {
 		debug = l.cfg.App.Debug
+		hsts = l.cfg.Security.HSTSEnabled
 	}
 	middlewares := []gin.HandlerFunc{
 		appmiddleware.RequestID(),
+		appmiddleware.SecurityHeaders(hsts),
 		appmiddleware.RequestMeta(l.serviceName, debug),
 		appmiddleware.AccessLog(),
 		appmiddleware.Recovery(),

@@ -95,6 +95,8 @@ app:
   env: production
 jwt:
   secret: 12345678901234567890123456789012
+cors:
+  allowed_origins: [https://console.example.com]
 `), 0o600)
 	if err != nil {
 		t.Fatalf("write production config: %v", err)
@@ -149,6 +151,8 @@ app:
   env: production
 jwt:
   secret: 12345678901234567890123456789012
+cors:
+  allowed_origins: [https://console.example.com]
 `), 0o600)
 	if err != nil {
 		t.Fatalf("write config: %v", err)
@@ -172,6 +176,8 @@ app:
   debug: true
 jwt:
   secret: 12345678901234567890123456789012
+cors:
+  allowed_origins: [https://console.example.com]
 `), 0o600)
 	if err != nil {
 		t.Fatalf("write config: %v", err)
@@ -271,5 +277,50 @@ func TestLoadWithOptionsReadsDemoEnabledOverride(t *testing.T) {
 	}
 	if !cfg.Demo.Enabled {
 		t.Fatal("expected DEMO_ENABLED to enable demo routes")
+	}
+}
+
+func TestValidateProductionRejectsWildcardCORSAndBroadTrustedProxies(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.App.Env = "production"
+	cfg.JWT.Secret = "0123456789abcdef0123456789abcdef"
+	cfg.CORS.AllowedOrigins = []string{"*"}
+	if err := cfg.Validate("api"); err == nil {
+		t.Fatal("production wildcard CORS must be rejected")
+	}
+
+	cfg.CORS.AllowedOrigins = []string{"https://console.example.com"}
+	cfg.Security.TrustedProxies = []string{"0.0.0.0/0"}
+	if err := cfg.Validate("api"); err == nil {
+		t.Fatal("broad trusted proxy range must be rejected")
+	}
+
+	cfg.Security.TrustedProxies = []string{"10.0.0.0/8", "127.0.0.1"}
+	if err := cfg.Validate("api"); err != nil {
+		t.Fatalf("explicit trusted proxies should pass: %v", err)
+	}
+}
+
+func TestLoadWithOptionsReadsLoginProtectionOverrides(t *testing.T) {
+	t.Setenv("LOGIN_PROTECTION_ENABLED", "false")
+	t.Setenv("LOGIN_ATTEMPTS_PER_MINUTE", "24")
+	t.Setenv("LOGIN_BURST", "7")
+	t.Setenv("LOGIN_FAILURE_LIMIT", "6")
+	t.Setenv("LOGIN_LOCK_SECONDS", "120")
+
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte("app:\n  env: test\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "console"})
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	login := cfg.Security.Login
+	if login.Enabled {
+		t.Fatal("expected LOGIN_PROTECTION_ENABLED=false")
+	}
+	if login.AttemptsPerMinute != 24 || login.Burst != 7 || login.FailureLimit != 6 || login.LockSeconds != 120 {
+		t.Fatalf("unexpected login protection overrides: %#v", login)
 	}
 }

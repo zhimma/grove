@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -26,11 +28,15 @@ func NewCoreServer(cfg *config.Config, serviceName, port string, opts ...provide
 		return nil, nil, err
 	}
 
-	if cfg.App.Env == "production" {
+	if strings.EqualFold(strings.TrimSpace(cfg.App.Env), "production") {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	router := gin.New()
+	if err := router.SetTrustedProxies(cfg.Security.TrustedProxies); err != nil {
+		_ = p.Close()
+		return nil, nil, fmt.Errorf("configure trusted proxies: %w", err)
+	}
 	loader := bootstrap.NewMiddlewareLoader(cfg, serviceName)
 	router.Use(loader.Global()...)
 	registerHealthCheck(router, serviceName)

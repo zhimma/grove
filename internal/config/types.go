@@ -21,6 +21,7 @@ type Config struct {
 	CORS        CORSConfig      `yaml:"cors"`
 	API         APIConfig       `yaml:"api"`
 	Demo        DemoConfig      `yaml:"demo"`
+	Security    SecurityConfig  `yaml:"security"`
 }
 
 type AppConfig struct {
@@ -150,4 +151,18 @@ type APIConfig struct {
 
 type DemoConfig struct {
 	Enabled bool `yaml:"enabled"`
+}
+
+type SecurityConfig struct {
+	TrustedProxies []string              `yaml:"trusted_proxies"`
+	HSTSEnabled    bool                  `yaml:"hsts_enabled"`
+	Login          LoginProtectionConfig `yaml:"login"`
+}
+
+type LoginProtectionConfig struct {
+	Enabled           bool `yaml:"enabled"`
+	AttemptsPerMinute int  `yaml:"attempts_per_minute"`
+	Burst             int  `yaml:"burst"`
+	FailureLimit      int  `yaml:"failure_limit"`
+	LockSeconds       int  `yaml:"lock_seconds"`
 }

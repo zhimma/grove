@@ -83,7 +83,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 - [x] Task 3：拆分安全 bootstrap seed 与 demo seed。
 - [x] Task 4：替换迁移引擎并使用真实 PostgreSQL 验证生命周期。
 - [x] Task 5：修复 `make:module` 生成代码和原子性。
-- [ ] Task 6：明确软删除语义并增加数据库约束。
+- [x] Task 6：明确软删除语义并增加数据库约束。
 - [x] Task 7：隔离 API 演示接口和虚拟数据。
 
 完成条件：全新环境可以按文档初始化；重复 seed 不改变管理员密码；生成模块可直接编译；数据库删除语义明确。
@@ -93,7 +93,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 ### Milestone 2：认证、授权与输入安全
 
 - [x] Task 8：实现可持久化 Console Session 和 refresh token 轮换。
-- [ ] Task 9：增加登录限流、失败锁定与可信代理配置。
+- [x] Task 9：增加登录限流、失败锁定与可信代理配置。
 - [ ] Task 10：增加请求体和文件上传限制。
 - [ ] Task 11：修复系统配置敏感值和审计泄漏。
 - [ ] Task 12：修复 GORM 与 Casbin 的一致性边界。
@@ -754,7 +754,7 @@ git commit -m "feat: add persistent console sessions"
 
 ### Task 9：增加登录限流、失败锁定与可信代理配置
 
-**Status:** `[-] In Progress`
+**Status:** `[x] Completed`
 
 **Owner:** Codex
 
@@ -762,18 +762,30 @@ git commit -m "feat: add persistent console sessions"
 
 **Started at:** 2026-07-14
 
+**Completed at:** 2026-07-14
+
 **Design:** `docs/plans/2026-07-14-login-protection-design.md`
+
+**Verification:**
+
+- `go test -race ./internal/middleware ./internal/bootstrap ./pkg/server ./pkg/ratelimit ./app/console/internal/service`：PASS。
+- `go test ./...`、`go vet ./...`、`make build`、`git diff --check`：PASS。
+- 本机临时 Redis：两个独立 `RedisLoginGuard` 实例共享请求限流、失败计数和锁定状态，测试 PASS；临时进程和数据目录已删除。
+- 本机 PostgreSQL 一次性测试库：8 路并发 refresh 恰好 1 次成功，集成回归 PASS；测试库已删除。
+- production CORS、可信代理、非法 Request ID、安全响应头、登录错误语义、失败锁定、成功重置和账号/IP 隔离均有自动化测试。
 
 **Files:**
 
-- Create: `internal/middleware/ratelimit.go`
-- Create: `pkg/ratelimit/limiter.go`
+- Create: `internal/middleware/security_headers.go`
+- Create: `pkg/ratelimit/login.go`
+- Create: `pkg/ratelimit/login_redis.go`
 - Modify: `internal/config/types.go`
 - Modify: `internal/config/load.go`
 - Modify: `pkg/server/core.go`
-- Modify: `app/console/internal/router/router.go`
+- Modify: `internal/bootstrap/middleware.go`
+- Modify: `app/console/internal/handler/auth.go`
 - Modify: `app/console/internal/service/auth.go`
-- Test: middleware and auth tests
+- Test: config、middleware、server、ratelimit 和 auth tests
 
 **Required behavior:**
 
@@ -787,7 +799,7 @@ git commit -m "feat: add persistent console sessions"
 - production CORS 不允许默认 `*`。
 - 增加 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy` 等基础安全响应头；HSTS 仅在明确 HTTPS 部署时启用。
 
-**Verification:**
+**Required verification command:**
 
 ```bash
 go test ./internal/middleware ./pkg/ratelimit ./app/console/internal/service -race -v

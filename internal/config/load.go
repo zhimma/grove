@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -135,6 +136,16 @@ func defaultConfig() Config {
 			Prefix:         "/api/v1",
 			DefaultPerPage: 20,
 			MaxPerPage:     100,
+		},
+		Security: SecurityConfig{
+			TrustedProxies: []string{},
+			Login: LoginProtectionConfig{
+				Enabled:           true,
+				AttemptsPerMinute: 10,
+				Burst:             5,
+				FailureLimit:      5,
+				LockSeconds:       900,
+			},
 		},
 	}
 }
@@ -288,6 +299,24 @@ func applyEnvironmentOverrides(cfg *Config) {
 	if value := os.Getenv("DEMO_ENABLED"); value != "" {
 		cfg.Demo.Enabled = parseBool(value)
 	}
+	if value := os.Getenv("HSTS_ENABLED"); value != "" {
+		cfg.Security.HSTSEnabled = parseBool(value)
+	}
+	if value := os.Getenv("LOGIN_PROTECTION_ENABLED"); value != "" {
+		cfg.Security.Login.Enabled = parseBool(value)
+	}
+	if value := os.Getenv("LOGIN_ATTEMPTS_PER_MINUTE"); value != "" {
+		cfg.Security.Login.AttemptsPerMinute = parseInt(value, cfg.Security.Login.AttemptsPerMinute)
+	}
+	if value := os.Getenv("LOGIN_BURST"); value != "" {
+		cfg.Security.Login.Burst = parseInt(value, cfg.Security.Login.Burst)
+	}
+	if value := os.Getenv("LOGIN_FAILURE_LIMIT"); value != "" {
+		cfg.Security.Login.FailureLimit = parseInt(value, cfg.Security.Login.FailureLimit)
+	}
+	if value := os.Getenv("LOGIN_LOCK_SECONDS"); value != "" {
+		cfg.Security.Login.LockSeconds = parseInt(value, cfg.Security.Login.LockSeconds)
+	}
 }
 
 func parseBool(value string) bool {
@@ -405,6 +434,21 @@ func (c *Config) normalize(service string, debugConfigured bool) {
 	if len(c.Docs.Schemes) == 0 {
 		c.Docs.Schemes = []string{"http"}
 	}
+	if c.Security.TrustedProxies == nil {
+		c.Security.TrustedProxies = []string{}
+	}
+	if c.Security.Login.AttemptsPerMinute <= 0 {
+		c.Security.Login.AttemptsPerMinute = 10
+	}
+	if c.Security.Login.Burst <= 0 {
+		c.Security.Login.Burst = 5
+	}
+	if c.Security.Login.FailureLimit <= 0 {
+		c.Security.Login.FailureLimit = 5
+	}
+	if c.Security.Login.LockSeconds <= 0 {
+		c.Security.Login.LockSeconds = 900
+	}
 }
 
 func (c Config) Validate(service string) error {
@@ -419,12 +463,29 @@ func (c Config) Validate(service string) error {
 		if secret == "" || secret == "change-me" || len(secret) < 32 {
 			return fmt.Errorf("jwt secret must be set to a strong value in production")
 		}
+		if containsString(c.CORS.AllowedOrigins, "*") {
+			return fmt.Errorf("production cors allowed_origins cannot contain wildcard")
+		}
 	}
 	if c.Job.Enabled && !c.Redis.Enabled {
 		return fmt.Errorf("job requires redis to be enabled")
 	}
 	if c.CORS.AllowCredentials && containsString(c.CORS.AllowedOrigins, "*") {
 		return fmt.Errorf("cors allow_credentials cannot be used with wildcard origin")
+	}
+	for _, proxy := range c.Security.TrustedProxies {
+		proxy = strings.TrimSpace(proxy)
+		if proxy == "" {
+			return fmt.Errorf("trusted proxy cannot be empty")
+		}
+		if proxy == "*" || proxy == "0.0.0.0/0" || proxy == "::/0" {
+			return fmt.Errorf("trusted proxy %q is too broad", proxy)
+		}
+		if net.ParseIP(proxy) == nil {
+			if _, _, err := net.ParseCIDR(proxy); err != nil {
+				return fmt.Errorf("trusted proxy %q is invalid", proxy)
+			}
+		}
 	}
 	if strings.TrimSpace(c.Storage.Default) == "" {
 		return fmt.Errorf("storage default disk is required")
