@@ -694,7 +694,15 @@ git commit -m "fix: isolate demo api behavior"
 
 ### Task 8：实现持久化 Console Session 和 refresh token 轮换
 
-**Status:** `[ ] Planned`
+**Status:** `[-] In Progress`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Design:** `docs/plans/2026-07-14-console-session-design.md`
 
 **Depends on:** Task 4
 
