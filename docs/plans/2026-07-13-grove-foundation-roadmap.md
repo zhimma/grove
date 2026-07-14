@@ -754,7 +754,15 @@ git commit -m "feat: add persistent console sessions"
 
 ### Task 9：增加登录限流、失败锁定与可信代理配置
 
-**Status:** `[ ] Planned`
+**Status:** `[-] In Progress`
+
+**Owner:** Codex
+
+**Branch/PR:** `codex/grove-foundation-roadmap`
+
+**Started at:** 2026-07-14
+
+**Design:** `docs/plans/2026-07-14-login-protection-design.md`
 
 **Files:**
 
