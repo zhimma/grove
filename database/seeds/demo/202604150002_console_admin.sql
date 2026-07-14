@@ -5,7 +5,7 @@ VALUES (
     'admin',
     'System Administrator',
     'System administrator',
-    '["ConsoleDashboard","ConsoleOverview","ConsoleConfigs","ConsoleSystemConfigs","ConsoleSystem","ConsoleAdmins","ConsoleRoles"]'::jsonb,
+    '["ConsoleDashboard","ConsoleOverview","ConsoleConfigs","ConsoleSystemConfigs","ConsoleSystem","ConsoleAdmins","ConsoleRoles","ConsoleSessions"]'::jsonb,
     false,
     1,
     10
@@ -99,6 +99,8 @@ VALUES
     ('p', 'console-role-admin', 'PUT /console/v1/admins/:id/status'),
     ('p', 'console-role-admin', 'PUT /console/v1/admins/:id/reset-password'),
     ('p', 'console-role-admin', 'DELETE /console/v1/admins/:id'),
+    ('p', 'console-role-admin', 'GET /console/v1/sessions'),
+    ('p', 'console-role-admin', 'DELETE /console/v1/sessions/:id'),
     ('p', 'console-role-admin', 'GET /console/v1/system-configs'),
     ('p', 'console-role-admin', 'GET /console/v1/system-configs/groups/:group'),
     ('p', 'console-role-admin', 'POST /console/v1/system-configs'),

@@ -49,6 +49,15 @@ const routes: RouteRecordRaw[] = [
         component: () => import('#/views/system/role/index.vue'),
         meta: { title: '角色权限' },
       },
+      {
+        name: 'ConsoleSessions',
+        path: '/system/sessions',
+        component: () => import('#/views/console/system/sessions.vue'),
+        meta: {
+          title: '在线会话',
+          permissions: ['系统管理.会话列表'],
+        },
+      },
     ],
   },
 ];

@@ -92,7 +92,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 
 ### Milestone 2：认证、授权与输入安全
 
-- [ ] Task 8：实现可持久化 Console Session 和 refresh token 轮换。
+- [x] Task 8：实现可持久化 Console Session 和 refresh token 轮换。
 - [ ] Task 9：增加登录限流、失败锁定与可信代理配置。
 - [ ] Task 10：增加请求体和文件上传限制。
 - [ ] Task 11：修复系统配置敏感值和审计泄漏。
@@ -694,7 +694,7 @@ git commit -m "fix: isolate demo api behavior"
 
 ### Task 8：实现持久化 Console Session 和 refresh token 轮换
 
-**Status:** `[-] In Progress`
+**Status:** `[x] Completed`
 
 **Owner:** Codex
 
@@ -702,7 +702,19 @@ git commit -m "fix: isolate demo api behavior"
 
 **Started at:** 2026-07-14
 
+**Completed at:** 2026-07-14
+
 **Design:** `docs/plans/2026-07-14-console-session-design.md`
+
+**Verification:**
+
+- `go test ./...`：PASS。
+- `go test -race ./pkg/auth ./app/console/internal/service ./app/console/internal/middleware ./app/console/internal/router`：PASS。
+- `go vet ./...`、`make build`、`git diff --check`：PASS。
+- 本机 PostgreSQL 17.7：010 up/down、约束与索引、bootstrap、全量 down 全部 PASS。
+- 本机 PostgreSQL 17.7：8 个并发请求复用同一个 refresh token，恰好 1 个成功，其余返回 `invalid_refresh_token`。
+- 前端 `vue-tsc --noEmit --skipLibCheck`：PASS。
+- 前端 production build 已进入 Rollup，因离线安装被终止后其它 Vben workspace 包未生成 stub 而阻塞；新增页面没有类型错误，未继续联网恢复整个工作区。
 
 **Depends on:** Task 4
 

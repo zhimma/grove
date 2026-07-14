@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -37,7 +38,7 @@ func TestIssueAndParseConsoleClaims(t *testing.T) {
 		t.Fatalf("new manager: %v", err)
 	}
 
-	tokenPair, err := manager.GenerateAdminTokenPair("console-admin-demo", "console")
+	tokenPair, err := manager.GenerateAdminTokenPair("console-admin-demo", "console-session-demo", "console")
 	if err != nil {
 		t.Fatalf("issue token: %v", err)
 	}
@@ -46,11 +47,41 @@ func TestIssueAndParseConsoleClaims(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse token: %v", err)
 	}
-	if claims.AdminID != "console-admin-demo" || claims.UserType != "console" {
+	if claims.AdminID != "console-admin-demo" || claims.SessionID != "console-session-demo" || claims.UserType != "console" {
 		t.Fatalf("unexpected console claims: %+v", claims)
 	}
 	if claims.UserID != "" || claims.Email != "" || claims.RoleID != "" || claims.IsSuper {
 		t.Fatalf("unexpected console claims: %+v", claims)
+	}
+}
+
+func TestConsoleRefreshTokenIsOpaqueAndHashable(t *testing.T) {
+	manager, err := NewManager("test-secret", "test-issuer", time.Hour, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+
+	first, err := manager.GenerateAdminTokenPair("console-admin-demo", "console-session-demo", "console")
+	if err != nil {
+		t.Fatalf("generate first token pair: %v", err)
+	}
+	second, err := manager.GenerateAdminTokenPair("console-admin-demo", "console-session-demo", "console")
+	if err != nil {
+		t.Fatalf("generate second token pair: %v", err)
+	}
+
+	if first.RefreshToken == "" || strings.Count(first.RefreshToken, ".") == 2 {
+		t.Fatalf("refresh token must be opaque, got %q", first.RefreshToken)
+	}
+	if first.RefreshToken == second.RefreshToken {
+		t.Fatal("refresh tokens must be random")
+	}
+	hash := HashToken(first.RefreshToken)
+	if len(hash) != 64 || hash == first.RefreshToken {
+		t.Fatalf("unexpected refresh token hash %q", hash)
+	}
+	if manager.RefreshExpiry() != 24*time.Hour {
+		t.Fatalf("unexpected refresh expiry %s", manager.RefreshExpiry())
 	}
 }
 

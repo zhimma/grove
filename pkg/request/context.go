@@ -46,6 +46,7 @@ type Identity struct {
 	SubjectType string
 	UserID      string
 	AdminID     string
+	SessionID   string
 	Username    string
 	Email       string
 	RoleID      string
@@ -153,6 +154,10 @@ func GetUserID(c *gin.Context) string {
 
 func GetAdminID(c *gin.Context) string {
 	return GetIdentity(c).AdminID
+}
+
+func GetSessionID(c *gin.Context) string {
+	return GetIdentity(c).SessionID
 }
 
 func IsSuper(c *gin.Context) bool {

@@ -7,9 +7,9 @@ import (
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
 	"github.com/zhimma/grove/pkg/auth"
-	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/permission"
+	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"
 	pkgroute "github.com/zhimma/grove/pkg/route"
@@ -17,6 +17,7 @@ import (
 
 type adminAuthResult struct {
 	AdminID     string
+	SessionID   string
 	Username    string
 	RoleID      string
 	TokenString string
@@ -30,13 +31,14 @@ func writeAdminIdentity(c *gin.Context, result adminAuthResult) {
 		SubjectType: "console",
 		UserID:      result.AdminID,
 		AdminID:     result.AdminID,
+		SessionID:   result.SessionID,
 		Username:    result.Username,
 		RoleID:      result.RoleID,
 		IsSuper:     result.IsSuper,
 	})
 }
 
-func authenticateAdmin(c *gin.Context, tokenManager *auth.Manager, resolver consoleservice.AdminAuthStateResolver) (*adminAuthResult, bool) {
+func authenticateAdmin(c *gin.Context, tokenManager *auth.Manager, sessions *consoleservice.SessionService, resolver consoleservice.AdminAuthStateResolver) (*adminAuthResult, bool) {
 	header := strings.TrimSpace(c.GetHeader("Authorization"))
 	if header == "" {
 		response.Fail(c, errx.Unauthorized().WithMessage("缺少访问令牌"))
@@ -60,8 +62,18 @@ func authenticateAdmin(c *gin.Context, tokenManager *auth.Manager, resolver cons
 		c.Abort()
 		return nil, false
 	}
-	if claims.AdminID == "" {
+	if claims.AdminID == "" || claims.SessionID == "" {
 		response.Fail(c, errx.Unauthorized().WithMessage("控制台令牌无效"))
+		c.Abort()
+		return nil, false
+	}
+	if sessions == nil {
+		response.Fail(c, errx.ServiceUnavailable().WithMessage("会话服务未配置"))
+		c.Abort()
+		return nil, false
+	}
+	if _, err := sessions.Validate(c.Request.Context(), claims.AdminID, claims.SessionID); err != nil {
+		response.Fail(c, err)
 		c.Abort()
 		return nil, false
 	}
@@ -75,6 +87,7 @@ func authenticateAdmin(c *gin.Context, tokenManager *auth.Manager, resolver cons
 
 	return &adminAuthResult{
 		AdminID:     state.AdminID,
+		SessionID:   claims.SessionID,
 		Username:    state.Username,
 		RoleID:      state.RoleID,
 		TokenString: tokenString,
@@ -82,9 +95,9 @@ func authenticateAdmin(c *gin.Context, tokenManager *auth.Manager, resolver cons
 	}, true
 }
 
-func AdminAuthn(tokenManager *auth.Manager, resolver consoleservice.AdminAuthStateResolver) gin.HandlerFunc {
+func AdminAuthn(tokenManager *auth.Manager, sessions *consoleservice.SessionService, resolver consoleservice.AdminAuthStateResolver) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		result, ok := authenticateAdmin(c, tokenManager, resolver)
+		result, ok := authenticateAdmin(c, tokenManager, sessions, resolver)
 		if !ok {
 			return
 		}

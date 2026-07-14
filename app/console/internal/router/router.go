@@ -24,18 +24,19 @@ func (r *Router) InstallToEngine(engine *gin.Engine) {
 	_ = r.cfg
 	v1 := engine.Group("/console/v1")
 	authStateResolver := consoleservice.NewAdminAuthStateResolver(r.p.DB)
+	sessions := consoleservice.NewSessionService(r.p.DB, r.p.TokenManager)
 	runtimeCatalog := consoleservice.NewRuntimePermissionCatalog()
 
 	public := v1.Group("")
 	authed := v1.Group("")
-	authed.Use(consolemiddleware.AdminAuthn(r.p.TokenManager, authStateResolver))
+	authed.Use(consolemiddleware.AdminAuthn(r.p.TokenManager, sessions, authStateResolver))
 	protected := v1.Group("")
 	var auditDB *gorm.DB
 	if r.p != nil && r.p.DB != nil {
 		auditDB = r.p.DB.Default()
 	}
 	protected.Use(
-		consolemiddleware.AdminAuthn(r.p.TokenManager, authStateResolver),
+		consolemiddleware.AdminAuthn(r.p.TokenManager, sessions, authStateResolver),
 		consolemiddleware.AuditOperation(auditDB),
 		consolemiddleware.AdminPermission(r.p.GetEnforcer("console"), r.cfg.App.Env),
 	)
@@ -45,6 +46,7 @@ func (r *Router) InstallToEngine(engine *gin.Engine) {
 	handler.RegisterRoleRoutes(protected, r.p, runtimeCatalog)
 	handler.RegisterPermissionRoutes(protected, runtimeCatalog)
 	handler.RegisterAdminRoutes(protected, r.p)
+	handler.RegisterSessionRoutes(protected, r.p)
 	handler.RegisterSystemConfigRoutes(protected, r.p)
 	handler.RegisterStorageRoutes(protected, r.p)
 	handler.RegisterLogRoutes(protected, r.p)

@@ -92,6 +92,16 @@ func ConsoleMenuCatalog() []StaticMenuCatalogItem {
 			Sort:      32,
 			Visible:   true,
 		},
+		{
+			MenuKey:   "ConsoleSessions",
+			ParentKey: "ConsoleSystem",
+			Name:      "ConsoleSessions",
+			Title:     "在线会话",
+			Path:      "/system/sessions",
+			Scope:     permission.ScopeGlobal,
+			Sort:      33,
+			Visible:   true,
+		},
 	}
 }
 

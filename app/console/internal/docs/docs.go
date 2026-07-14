@@ -53,6 +53,18 @@ func spec(cfg *config.Config) map[string]any {
 			{Path: "/permissions/apis", Operations: []docsui.Operation{{Method: "GET", Summary: "Runtime API permission options", Response200: "api permission tree", BearerAuth: true}}},
 			{Path: "/dashboard/summary", Operations: []docsui.Operation{{Method: "GET", Summary: "Dashboard summary", Response200: "summary", BearerAuth: true}}},
 			{
+				Path: "/sessions",
+				Operations: []docsui.Operation{
+					{Method: "GET", Summary: "Console session list", Response200: "session list", BearerAuth: true},
+				},
+			},
+			{
+				Path: "/sessions/{id}",
+				Operations: []docsui.Operation{
+					{Method: "DELETE", Summary: "Revoke console session", Response200: "session revoked", BearerAuth: true},
+				},
+			},
+			{
 				Path: "/roles",
 				Operations: []docsui.Operation{
 					{Method: "GET", Summary: "Role list", Response200: "role list", BearerAuth: true},

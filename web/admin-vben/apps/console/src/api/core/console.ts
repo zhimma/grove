@@ -50,6 +50,21 @@ export interface SystemConfigRecord {
   updated_at: string;
 }
 
+export interface ConsoleSession {
+  id: string;
+  admin_id: string;
+  admin?: { account: string; display_name: string; id: string };
+  device_name: string;
+  client_ip: string;
+  user_agent: string;
+  last_active_at: string;
+  expires_at: string;
+  revoked_at?: string;
+  revoke_reason?: string;
+  status: 'active' | 'expired' | 'revoked';
+  current: boolean;
+}
+
 export function getDashboardOverview() {
   return requestClient.get<DashboardOverview>('/console/v1/dashboard/summary');
 }
@@ -81,6 +96,17 @@ export function resetAdminPassword(id: string, password: string) {
 
 export function deleteAdmin(id: string) {
   return requestClient.delete(`/console/v1/admins/${id}`);
+}
+
+export function getSessionList(params: PageParams & Record<string, any>) {
+  return requestClient.get<ConsoleListResult<ConsoleSession>>(
+    '/console/v1/sessions',
+    { params },
+  );
+}
+
+export function revokeSession(id: string) {
+  return requestClient.delete(`/console/v1/sessions/${id}`);
 }
 
 export function getSystemConfigList(params: PageParams & Record<string, any>) {

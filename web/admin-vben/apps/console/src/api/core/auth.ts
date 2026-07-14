@@ -1,4 +1,4 @@
-import { baseRequestClient, requestClient } from '#/api/request';
+import { requestClient } from '#/api/request';
 
 export namespace AuthApi {
   /** 登录接口参数 */
@@ -41,6 +41,8 @@ export async function loginApi(data: AuthApi.LoginParams) {
   const payload = {
     identifier,
     account: identifier,
+    device_name:
+      typeof navigator === 'undefined' ? '' : navigator.userAgent.slice(0, 120),
     password: data.password,
   };
   return requestClient.post<AuthApi.LoginResult>(
@@ -65,7 +67,7 @@ export async function refreshTokenApi(refreshToken?: null | string) {
  * 退出登录
  */
 export async function logoutApi(refreshToken?: null | string) {
-  return baseRequestClient.post('/console/v1/auth/logout', {
+  return requestClient.post('/console/v1/auth/logout', {
     refresh_token: refreshToken,
   });
 }

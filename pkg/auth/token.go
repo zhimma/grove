@@ -1,11 +1,12 @@
 package auth
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -13,13 +14,13 @@ import (
 )
 
 const (
-	TokenTypeAccess  = "access"
-	TokenTypeRefresh = "refresh"
+	TokenTypeAccess = "access"
 )
 
 type Claims struct {
 	UserID    string `json:"uid,omitempty"`
 	AdminID   string `json:"admin_id,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
 	UserType  string `json:"user_type,omitempty"`
 	Email     string `json:"email,omitempty"`
 	RoleID    string `json:"role_id,omitempty"`
@@ -29,12 +30,13 @@ type Claims struct {
 }
 
 type ClaimsInput struct {
-	UserID   string
-	AdminID  string
-	UserType string
-	Email    string
-	RoleID   string
-	IsSuper  bool
+	UserID    string
+	AdminID   string
+	SessionID string
+	UserType  string
+	Email     string
+	RoleID    string
+	IsSuper   bool
 }
 
 type TokenPair struct {
@@ -44,17 +46,11 @@ type TokenPair struct {
 	TokenType    string `json:"token_type"`
 }
 
-type blacklistEntry struct {
-	expiresAt time.Time
-}
-
 type Manager struct {
 	secret        []byte
 	issuer        string
 	accessExpiry  time.Duration
 	refreshExpiry time.Duration
-	mu            sync.Mutex
-	blacklist     map[string]blacklistEntry
 }
 
 func NewManager(secret, issuer string, accessExpiry time.Duration, refreshExpiry ...time.Duration) (*Manager, error) {
@@ -78,7 +74,6 @@ func NewManager(secret, issuer string, accessExpiry time.Duration, refreshExpiry
 		issuer:        issuer,
 		accessExpiry:  accessExpiry,
 		refreshExpiry: resolvedRefreshExpiry,
-		blacklist:     map[string]blacklistEntry{},
 	}, nil
 }
 
@@ -98,7 +93,7 @@ func (m *Manager) GenerateTokenPairWithClaims(input ClaimsInput) (*TokenPair, er
 	if err != nil {
 		return nil, err
 	}
-	refreshToken, err := m.issueToken(input, TokenTypeRefresh, m.refreshExpiry)
+	refreshToken, err := newOpaqueToken()
 	if err != nil {
 		return nil, err
 	}
@@ -111,11 +106,22 @@ func (m *Manager) GenerateTokenPairWithClaims(input ClaimsInput) (*TokenPair, er
 	}, nil
 }
 
-func (m *Manager) GenerateAdminTokenPair(adminID, userType string) (*TokenPair, error) {
+func (m *Manager) GenerateAdminTokenPair(adminID, sessionID, userType string) (*TokenPair, error) {
+	if strings.TrimSpace(sessionID) == "" {
+		return nil, errors.New("session id is required")
+	}
 	return m.GenerateTokenPairWithClaims(ClaimsInput{
-		AdminID:  adminID,
-		UserType: userType,
+		AdminID:   adminID,
+		SessionID: sessionID,
+		UserType:  userType,
 	})
+}
+
+func (m *Manager) RefreshExpiry() time.Duration {
+	if m == nil {
+		return 0
+	}
+	return m.refreshExpiry
 }
 
 func (m *Manager) ParseAccessToken(tokenString string) (*Claims, error) {
@@ -124,17 +130,6 @@ func (m *Manager) ParseAccessToken(tokenString string) (*Claims, error) {
 		return nil, err
 	}
 	if claims.TokenType != TokenTypeAccess {
-		return nil, errors.New("invalid token type")
-	}
-	return claims, nil
-}
-
-func (m *Manager) ParseRefreshToken(tokenString string) (*Claims, error) {
-	claims, err := m.ValidateToken(tokenString)
-	if err != nil {
-		return nil, err
-	}
-	if claims.TokenType != TokenTypeRefresh {
 		return nil, errors.New("invalid token type")
 	}
 	return claims, nil
@@ -154,35 +149,7 @@ func (m *Manager) ValidateToken(tokenString string) (*Claims, error) {
 	if !ok || !parsed.Valid {
 		return nil, errors.New("invalid token")
 	}
-	if m.isRevoked(tokenString) {
-		return nil, errors.New("token revoked")
-	}
 	return claims, nil
-}
-
-func (m *Manager) Revoke(tokenString string) error {
-	parsed, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
-		}
-		return m.secret, nil
-	})
-	if err != nil {
-		return err
-	}
-	claims, ok := parsed.Claims.(*Claims)
-	if !ok || claims.ExpiresAt == nil {
-		return errors.New("invalid token")
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.gcBlacklistLocked()
-	m.blacklist[tokenHash(tokenString)] = blacklistEntry{
-		expiresAt: claims.ExpiresAt.Time,
-	}
-	return nil
 }
 
 func (m *Manager) issueToken(input ClaimsInput, tokenType string, expiry time.Duration) (string, error) {
@@ -195,6 +162,7 @@ func (m *Manager) issueToken(input ClaimsInput, tokenType string, expiry time.Du
 	claims := Claims{
 		UserID:    strings.TrimSpace(input.UserID),
 		AdminID:   strings.TrimSpace(input.AdminID),
+		SessionID: strings.TrimSpace(input.SessionID),
 		UserType:  strings.TrimSpace(input.UserType),
 		Email:     strings.TrimSpace(input.Email),
 		RoleID:    strings.TrimSpace(input.RoleID),
@@ -213,25 +181,15 @@ func (m *Manager) issueToken(input ClaimsInput, tokenType string, expiry time.Du
 	return token.SignedString(m.secret)
 }
 
-func (m *Manager) isRevoked(tokenString string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.gcBlacklistLocked()
-	_, ok := m.blacklist[tokenHash(tokenString)]
-	return ok
-}
-
-func (m *Manager) gcBlacklistLocked() {
-	now := time.Now()
-	for key, entry := range m.blacklist {
-		if !entry.expiresAt.After(now) {
-			delete(m.blacklist, key)
-		}
-	}
-}
-
-func tokenHash(tokenString string) string {
+func HashToken(tokenString string) string {
 	sum := sha256.Sum256([]byte(tokenString))
 	return hex.EncodeToString(sum[:])
+}
+
+func newOpaqueToken() (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
 }

@@ -15,17 +15,20 @@ import (
 	"github.com/zhimma/grove/pkg/logger"
 	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/request"
+	"github.com/zhimma/grove/pkg/transaction"
 )
 
 type AuthService struct {
 	dbRepo       database.Repo
 	enforcer     *rbac.Enforcer
 	tokenManager *auth.Manager
+	sessions     *SessionService
 }
 
 type LoginInput struct {
-	Account  string
-	Password string
+	Account    string
+	Password   string
+	DeviceName string
 }
 
 type LoginOutput struct {
@@ -44,6 +47,7 @@ type RefreshTokenOutput struct {
 type LogoutInput struct {
 	AccessToken  string
 	RefreshToken string
+	SessionID    string
 }
 
 type ChangePasswordInput struct {
@@ -77,6 +81,7 @@ func NewAuthService(dbRepo database.Repo, enforcer *rbac.Enforcer, tm *auth.Mana
 		dbRepo:       dbRepo,
 		enforcer:     enforcer,
 		tokenManager: tm,
+		sessions:     NewSessionService(dbRepo, tm),
 	}
 }
 
@@ -118,24 +123,36 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (LoginOutput,
 		return LoginOutput{}, errx.Unauthorized().WithMessage("账号或密码错误").WithCode("invalid_credentials")
 	}
 
-	tokenPair, err := s.tokenManager.GenerateAdminTokenPair(admin.ID, "console")
-	if err != nil {
-		return LoginOutput{}, errx.Internal().WithCause(err)
-	}
-
 	now := time.Now()
-	if err := s.dbRepo.Default().WithContext(ctx).
-		Model(&model.ConsoleAdmin{}).
-		Where("id = ?", admin.ID).
-		Updates(map[string]any{
-			"last_login_at": now,
-			"last_login_ip": truncateLoginIP(request.GetRequestMetaFromContext(ctx).ClientIP),
-			"login_count":   gorm.Expr("login_count + 1"),
-		}).Error; err != nil {
-		return LoginOutput{}, errx.Internal().WithCause(err)
+	meta := request.GetRequestMetaFromContext(ctx)
+	var tokenPair *auth.TokenPair
+	if err := s.dbRepo.Default().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txCtx := transaction.WithDB(ctx, tx)
+		_, pair, createErr := s.sessions.Create(txCtx, CreateSessionInput{
+			AdminID:    admin.ID,
+			DeviceName: input.DeviceName,
+			ClientIP:   meta.ClientIP,
+			UserAgent:  meta.UserAgent,
+		})
+		if createErr != nil {
+			return createErr
+		}
+		tokenPair = pair
+		if updateErr := tx.Model(&model.ConsoleAdmin{}).
+			Where("id = ?", admin.ID).
+			Updates(map[string]any{
+				"last_login_at": now,
+				"last_login_ip": truncateLoginIP(meta.ClientIP),
+				"login_count":   gorm.Expr("login_count + 1"),
+			}).Error; updateErr != nil {
+			return errx.Internal().WithCause(updateErr)
+		}
+		return nil
+	}); err != nil {
+		return LoginOutput{}, err
 	}
 	admin.LastLoginAt = &now
-	admin.LastLoginIP = truncateLoginIP(request.GetRequestMetaFromContext(ctx).ClientIP)
+	admin.LastLoginIP = truncateLoginIP(meta.ClientIP)
 	admin.LoginCount++
 	s.writeLoginLog(ctx, admin.ID, admin.Account, true, "")
 
@@ -147,56 +164,29 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (LoginOutput,
 }
 
 func (s *AuthService) RefreshToken(ctx context.Context, input RefreshTokenInput) (RefreshTokenOutput, error) {
-	if s.tokenManager == nil {
-		return RefreshTokenOutput{}, errx.ServiceUnavailable().WithMessage("令牌管理器未配置")
-	}
-
 	refreshToken := strings.TrimSpace(input.RefreshToken)
 	if refreshToken == "" {
 		return RefreshTokenOutput{}, errx.InvalidParams().WithHTTPStatus(422).WithMessage("刷新令牌不能为空")
 	}
 
-	claims, err := s.tokenManager.ParseRefreshToken(refreshToken)
-	if err != nil {
-		return RefreshTokenOutput{}, errx.Unauthorized().WithMessage("刷新令牌无效").WithCode("invalid_refresh_token").WithCause(err)
-	}
-	if claims.UserType != "console" || claims.AdminID == "" {
-		return RefreshTokenOutput{}, errx.Unauthorized().WithMessage("刷新令牌无效").WithCode("invalid_refresh_token")
-	}
-
-	state, err := NewAdminAuthStateResolver(s.dbRepo).ResolveAdminAuthState(ctx, claims.AdminID)
+	tokenPair, err := s.sessions.Rotate(ctx, refreshToken)
 	if err != nil {
 		return RefreshTokenOutput{}, err
-	}
-
-	tokenPair, err := s.tokenManager.GenerateAdminTokenPair(state.AdminID, "console")
-	if err != nil {
-		return RefreshTokenOutput{}, errx.Internal().WithCause(err)
-	}
-
-	if err := s.tokenManager.Revoke(refreshToken); err != nil {
-		return RefreshTokenOutput{}, errx.Internal().WithCause(err)
 	}
 
 	return RefreshTokenOutput{Token: tokenPair}, nil
 }
 
-func (s *AuthService) Logout(_ context.Context, input LogoutInput) error {
-	if s.tokenManager == nil {
-		return errx.ServiceUnavailable().WithMessage("令牌管理器未配置")
-	}
-
-	if token := strings.TrimSpace(input.AccessToken); token != "" {
-		if err := s.tokenManager.Revoke(token); err != nil {
-			return errx.Internal().WithCause(err)
+func (s *AuthService) Logout(ctx context.Context, input LogoutInput) error {
+	sessionID := strings.TrimSpace(input.SessionID)
+	if sessionID == "" && s.tokenManager != nil && strings.TrimSpace(input.AccessToken) != "" {
+		claims, err := s.tokenManager.ParseAccessToken(strings.TrimSpace(input.AccessToken))
+		if err != nil {
+			return errx.Unauthorized().WithMessage("访问令牌无效").WithCause(err)
 		}
+		sessionID = claims.SessionID
 	}
-	if token := strings.TrimSpace(input.RefreshToken); token != "" {
-		if err := s.tokenManager.Revoke(token); err != nil {
-			return errx.Internal().WithCause(err)
-		}
-	}
-	return nil
+	return s.sessions.Revoke(ctx, sessionID, "logout")
 }
 
 func (s *AuthService) writeLoginLog(ctx context.Context, adminID, account string, success bool, failureReason string) {
@@ -262,35 +252,34 @@ func (s *AuthService) GetCurrentAdmin(ctx context.Context, adminID string) (*mod
 }
 
 func (s *AuthService) ChangePassword(ctx context.Context, input ChangePasswordInput) error {
-	var admin model.ConsoleAdmin
-	if err := s.dbRepo.Default().WithContext(ctx).
-		Where("id = ?", input.AdminID).
-		First(&admin).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return errx.NotFound().WithMessage("管理员不存在")
+	if s.dbRepo == nil || s.dbRepo.Default() == nil {
+		return errx.ServiceUnavailable().WithMessage("默认数据库未配置")
+	}
+	return s.dbRepo.Default().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var admin model.ConsoleAdmin
+		if err := tx.Where("id = ?", input.AdminID).First(&admin).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return errx.NotFound().WithMessage("管理员不存在")
+			}
+			return errx.Internal().WithCause(err)
 		}
-		return errx.Internal().WithCause(err)
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte(input.OldPassword)); err != nil {
-		return errx.Unauthorized().WithMessage("原密码不正确").WithCode("invalid_credentials")
-	}
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.NewPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return errx.Internal().WithCause(err)
-	}
-
-	if err := s.dbRepo.Default().WithContext(ctx).
-		Model(&model.ConsoleAdmin{}).
-		Where("id = ?", input.AdminID).
-		Updates(map[string]any{
-			"password":             string(hashedPassword),
-			"must_change_password": false,
-		}).Error; err != nil {
-		return errx.Internal().WithCause(err)
-	}
-
-	return nil
+		if err := bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte(input.OldPassword)); err != nil {
+			return errx.Unauthorized().WithMessage("原密码不正确").WithCode("invalid_credentials")
+		}
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.NewPassword), bcrypt.DefaultCost)
+		if err != nil {
+			return errx.Internal().WithCause(err)
+		}
+		if err := tx.Model(&model.ConsoleAdmin{}).
+			Where("id = ?", input.AdminID).
+			Updates(map[string]any{
+				"password":             string(hashedPassword),
+				"must_change_password": false,
+			}).Error; err != nil {
+			return errx.Internal().WithCause(err)
+		}
+		return s.sessions.RevokeAdmin(transaction.WithDB(ctx, tx), input.AdminID, "password_changed")
+	})
 }
 
 func (s *AuthService) UpdateCurrentAdmin(ctx context.Context, input UpdateCurrentAdminInput) (*model.ConsoleAdmin, error) {

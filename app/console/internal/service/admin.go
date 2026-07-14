@@ -404,16 +404,17 @@ func (s *AdminService) ResetPassword(ctx context.Context, in ResetAdminPasswordI
 	if err != nil {
 		return errx.Internal().WithCause(err)
 	}
-	if err := s.dbRepo.Default().WithContext(ctx).
-		Model(&model.ConsoleAdmin{}).
-		Where("id = ?", in.AdminID).
-		Updates(map[string]any{
-			"password":             string(hashedPassword),
-			"must_change_password": true,
-		}).Error; err != nil {
-		return errx.Internal().WithCause(err)
-	}
-	return nil
+	return s.dbRepo.Default().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&model.ConsoleAdmin{}).
+			Where("id = ?", in.AdminID).
+			Updates(map[string]any{
+				"password":             string(hashedPassword),
+				"must_change_password": true,
+			}).Error; err != nil {
+			return errx.Internal().WithCause(err)
+		}
+		return NewSessionService(s.dbRepo, nil).RevokeAdmin(transaction.WithDB(ctx, tx), in.AdminID, "password_reset")
+	})
 }
 
 func (s *AdminService) loadAdmin(ctx context.Context, adminID string) (*model.ConsoleAdmin, error) {

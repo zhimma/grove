@@ -32,22 +32,22 @@ export interface TokenInfo {
 
 // 获取个人资料
 export function getProfile() {
-  return requestClient.get<Profile>('/console/v1/profile');
+  return requestClient.get<Profile>('/console/v1/auth/me');
 }
 
 // 更新个人资料
 export function updateProfile(data: UpdateProfileParams) {
-  return requestClient.put<Profile>('/console/v1/profile', data);
+  return requestClient.put<Profile>('/console/v1/auth/me', data);
 }
 
 // 修改密码
 export function changePassword(data: ChangePasswordParams) {
-  return requestClient.put('/console/v1/profile/password', data);
+  return requestClient.put('/console/v1/auth/password', data);
 }
 
 // 刷新Token
 export function refreshToken(refreshToken: string) {
-  return requestClient.post<TokenInfo>('/console/v1/profile/refresh-token', {
+  return requestClient.post<TokenInfo>('/console/v1/auth/refresh', {
     refresh_token: refreshToken,
   });
 }

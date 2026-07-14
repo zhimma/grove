@@ -14,10 +14,10 @@ func TestBuildConsoleMenuTree(t *testing.T) {
 	if len(tree) < 3 || tree[2].MenuKey != "ConsoleSystem" {
 		t.Fatalf("expected ConsoleSystem root node, got %#v", tree)
 	}
-	if len(tree[2].Children) != 2 {
-		t.Fatalf("expected ConsoleSystem to have 2 children, got %#v", tree[2].Children)
+	if len(tree[2].Children) != 3 {
+		t.Fatalf("expected ConsoleSystem to have 3 children, got %#v", tree[2].Children)
 	}
-	if tree[2].Children[0].MenuKey != "ConsoleAdmins" || tree[2].Children[1].MenuKey != "ConsoleRoles" {
+	if tree[2].Children[0].MenuKey != "ConsoleAdmins" || tree[2].Children[1].MenuKey != "ConsoleRoles" || tree[2].Children[2].MenuKey != "ConsoleSessions" {
 		t.Fatalf("unexpected ConsoleSystem children: %#v", tree[2].Children)
 	}
 }

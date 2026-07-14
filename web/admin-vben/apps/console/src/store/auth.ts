@@ -90,8 +90,8 @@ export const useAuthStore = defineStore('auth', () => {
     };
   }
 
-  async function logout(redirect: boolean = true) {
-    if (accessStore.accessToken) {
+  async function logout(redirect: boolean = true, notifyServer: boolean = true) {
+    if (notifyServer && accessStore.accessToken) {
       try {
         await logoutApi(accessStore.refreshToken);
       } catch {

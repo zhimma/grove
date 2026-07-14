@@ -20,8 +20,8 @@ import (
 	appmiddleware "github.com/zhimma/grove/internal/middleware"
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/internal/provider"
-	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/rbac"
 )
 
 func TestConsoleRouterManagementFlow(t *testing.T) {
@@ -87,8 +87,38 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 	loginData, _ := loginResp["data"].(map[string]any)
 	loginToken, _ := loginData["token"].(map[string]any)
 	token, _ := loginToken["access_token"].(string)
+	refreshToken, _ := loginToken["refresh_token"].(string)
 	if token == "" {
 		t.Fatalf("missing access token: %#v", loginResp)
+	}
+	if refreshToken == "" {
+		t.Fatalf("missing refresh token: %#v", loginResp)
+	}
+	var persistedSession model.ConsoleSession
+	if err := db.First(&persistedSession, "admin_id = ?", "console-admin-demo").Error; err != nil {
+		t.Fatalf("load login session: %v", err)
+	}
+	if persistedSession.RefreshTokenHash == refreshToken {
+		t.Fatal("refresh token plaintext must not be persisted")
+	}
+
+	refreshResp := performJSON(t, engine, http.MethodPost, "/console/v1/auth/refresh", map[string]any{
+		"refresh_token": refreshToken,
+	}, "")
+	refreshedToken := refreshResp["data"].(map[string]any)["token"].(map[string]any)
+	token = refreshedToken["access_token"].(string)
+	newRefreshToken := refreshedToken["refresh_token"].(string)
+	performJSONWithStatus(t, engine, http.MethodPost, "/console/v1/auth/refresh", map[string]any{
+		"refresh_token": refreshToken,
+	}, "", http.StatusUnauthorized)
+	refreshToken = newRefreshToken
+
+	sessionsResp := performJSON(t, engine, http.MethodGet, "/console/v1/sessions?status=active", nil, token)
+	if got := int(sessionsResp["code"].(float64)); got != 0 {
+		t.Fatalf("list sessions failed: %#v", sessionsResp)
+	}
+	if len(sessionsResp["data"].(map[string]any)["list"].([]any)) == 0 {
+		t.Fatalf("expected active session: %#v", sessionsResp)
 	}
 
 	rolesResp := performJSON(t, engine, http.MethodGet, "/console/v1/roles", nil, token)
@@ -162,7 +192,10 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 		t.Fatalf("missing admin id: %#v", createAdminResp)
 	}
 
-	operatorTokenPair, err := p.TokenManager.GenerateAdminTokenPair(adminID, "console")
+	operatorSession, operatorTokenPair, err := consoleservice.NewSessionService(p.DB, p.TokenManager).Create(context.Background(), consoleservice.CreateSessionInput{
+		AdminID:    adminID,
+		DeviceName: "router-test",
+	})
 	if err != nil {
 		t.Fatalf("issue operator token: %v", err)
 	}
@@ -172,6 +205,11 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 	if got := int(operatorSummaryResp["code"].(float64)); got != 0 {
 		t.Fatalf("operator summary failed: %#v", operatorSummaryResp)
 	}
+	forceLogoutResp := performJSON(t, engine, http.MethodDelete, "/console/v1/sessions/"+operatorSession.ID, nil, token)
+	if got := int(forceLogoutResp["code"].(float64)); got != 0 {
+		t.Fatalf("force logout failed: %#v", forceLogoutResp)
+	}
+	performJSONWithStatus(t, engine, http.MethodGet, "/console/v1/dashboard/summary", nil, operatorToken, http.StatusUnauthorized)
 
 	updateStatusResp := performJSON(t, engine, http.MethodPut, "/console/v1/admins/"+adminID+"/status", map[string]any{
 		"status": 0,
@@ -243,6 +281,14 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 	if len(loginLogsResp["data"].(map[string]any)["list"].([]any)) == 0 {
 		t.Fatalf("expected login logs to be recorded: %#v", loginLogsResp)
 	}
+
+	logoutResp := performJSON(t, engine, http.MethodPost, "/console/v1/auth/logout", map[string]any{
+		"refresh_token": refreshToken,
+	}, token)
+	if got := int(logoutResp["code"].(float64)); got != 0 {
+		t.Fatalf("logout failed: %#v", logoutResp)
+	}
+	performJSONWithStatus(t, engine, http.MethodGet, "/console/v1/dashboard/summary", nil, token, http.StatusUnauthorized)
 }
 
 func openConsoleTestDB(t *testing.T) *gorm.DB {
@@ -258,6 +304,7 @@ func openConsoleTestDB(t *testing.T) *gorm.DB {
 		&model.SystemConfig{},
 		&model.ConsoleOperationLog{},
 		&model.ConsoleLoginLog{},
+		&model.ConsoleSession{},
 	); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
@@ -303,7 +350,7 @@ func seedConsoleTestData(t *testing.T, db *gorm.DB, enforcer *rbac.Enforcer) {
 		Code:        "admin",
 		DisplayName: "System Administrator",
 		Description: "seed role",
-		MenuKeys:    datatype.NewStringArray([]string{"ConsoleDashboard", "ConsoleOverview", "ConsoleConfigs", "ConsoleSystemConfigs", "ConsoleSystem", "ConsoleAdmins", "ConsoleRoles"}),
+		MenuKeys:    datatype.NewStringArray([]string{"ConsoleDashboard", "ConsoleOverview", "ConsoleConfigs", "ConsoleSystemConfigs", "ConsoleSystem", "ConsoleAdmins", "ConsoleRoles", "ConsoleSessions"}),
 		Status:      model.ConsoleRoleStatusActive,
 		Sort:        10,
 	}
@@ -358,6 +405,8 @@ func seedConsoleTestData(t *testing.T, db *gorm.DB, enforcer *rbac.Enforcer) {
 		{role.ID, "GET /console/v1/roles/:id/menus"},
 		{role.ID, "POST /console/v1/roles/:id/menus"},
 		{role.ID, "GET /console/v1/admins"},
+		{role.ID, "GET /console/v1/sessions"},
+		{role.ID, "DELETE /console/v1/sessions/:id"},
 		{role.ID, "GET /console/v1/admins/:id"},
 		{role.ID, "POST /console/v1/admins"},
 		{role.ID, "PUT /console/v1/admins/:id"},

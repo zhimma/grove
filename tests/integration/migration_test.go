@@ -85,6 +85,7 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 		"system_configs",
 		"console_operation_logs",
 		"console_login_logs",
+		"console_sessions",
 		"idx_system_configs_group_key",
 		"idx_users_email_active",
 		"idx_console_roles_code_active",
@@ -93,6 +94,8 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 		"idx_console_admins_phone_active",
 		"idx_casbin_rules_unique",
 		"idx_console_casbin_rules_unique",
+		"idx_console_sessions_refresh_token_hash",
+		"idx_console_sessions_admin_active",
 		"grove_migrations",
 	} {
 		assertRelationExists(t, db, relation, true)
@@ -105,6 +108,8 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 		"chk_console_admins_status",
 		"chk_console_roles_status",
 		"chk_system_configs_value_type",
+		"fk_console_sessions_admin",
+		"chk_console_sessions_expiry",
 	} {
 		assertConstraintExists(t, db, constraint)
 	}
@@ -132,7 +137,7 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 	}
 
 	status := runGrove(t, ctx, repoRoot, configPath, commandEnv, "migrate", "status")
-	if !strings.Contains(status, "已执行") || !strings.Contains(status, "202604150009_define_integrity_semantics") {
+	if !strings.Contains(status, "已执行") || !strings.Contains(status, "202604150010_create_console_sessions") {
 		t.Fatalf("unexpected migration status: %s", status)
 	}
 
@@ -191,6 +196,7 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 		"system_configs",
 		"console_operation_logs",
 		"console_login_logs",
+		"console_sessions",
 	} {
 		assertRelationExists(t, db, relation, false)
 	}

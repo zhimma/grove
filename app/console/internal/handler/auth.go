@@ -16,8 +16,9 @@ type AuthHandler struct {
 }
 
 type LoginRequest struct {
-	Account  string `json:"account" binding:"required" label:"账号"`
-	Password string `json:"password" binding:"required" label:"密码"`
+	Account    string `json:"account" binding:"required" label:"账号"`
+	Password   string `json:"password" binding:"required" label:"密码"`
+	DeviceName string `json:"device_name" label:"设备名称"`
 }
 
 type RefreshTokenRequest struct {
@@ -116,8 +117,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	out, err := h.authSvc.Login(c.Request.Context(), consoleservice.LoginInput{
-		Account:  req.Account,
-		Password: req.Password,
+		Account:    req.Account,
+		Password:   req.Password,
+		DeviceName: req.DeviceName,
 	})
 	if err != nil {
 		response.Fail(c, err)
@@ -196,6 +198,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	if err := h.authSvc.Logout(c.Request.Context(), consoleservice.LogoutInput{
 		AccessToken:  request.GetAuthToken(c),
 		RefreshToken: req.RefreshToken,
+		SessionID:    request.GetSessionID(c),
 	}); err != nil {
 		response.Fail(c, err)
 		return

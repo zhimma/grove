@@ -2,12 +2,14 @@
 import { ref, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import { getProfile, updateProfile, changePassword } from '#/api/profile';
+import { useAuthStore } from '#/store';
 import type { Profile, UpdateProfileParams, ChangePasswordParams } from '#/api/profile';
 import ProfileForm from './components/ProfileForm.vue';
 import PasswordForm from './components/PasswordForm.vue';
 
 // 状态
 const loading = ref(false);
+const authStore = useAuthStore();
 const profile = ref<Profile | null>(null);
 
 // 表单弹窗
@@ -43,6 +45,7 @@ async function handleChangePassword(data: ChangePasswordParams) {
     await changePassword(data);
     message.success('密码修改成功，请重新登录');
     passwordFormVisible.value = false;
+    await authStore.logout(true, false);
   } catch (error) {
     // 错误已在拦截器处理
   }

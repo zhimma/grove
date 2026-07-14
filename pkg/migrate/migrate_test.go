@@ -99,6 +99,24 @@ func TestIntegrityMigrationDefinesDeletionAndConstraintContracts(t *testing.T) {
 	}
 }
 
+func TestConsoleSessionsMigrationDefinesPersistentRefreshContract(t *testing.T) {
+	path := filepath.Join("..", "..", "database", "migrations", "202604150010_create_console_sessions.up.sql")
+	content := mustReadMigration(t, path)
+	for _, fragment := range []string{
+		"CREATE TABLE IF NOT EXISTS console_sessions",
+		"refresh_token_hash CHAR(64) NOT NULL",
+		"CONSTRAINT fk_console_sessions_admin",
+		"ON DELETE CASCADE",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_console_sessions_refresh_token_hash",
+		"CREATE INDEX IF NOT EXISTS idx_console_sessions_admin_active",
+		"WHERE revoked_at IS NULL",
+	} {
+		if !strings.Contains(content, fragment) {
+			t.Errorf("console sessions migration missing %q", fragment)
+		}
+	}
+}
+
 func TestRunSQLDirWithReplacements(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/seed.db"), &gorm.Config{})
 	if err != nil {
