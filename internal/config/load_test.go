@@ -362,3 +362,18 @@ func TestLoadWithOptionsReadsMaxBodyBytesOverride(t *testing.T) {
 		t.Fatalf("expected max body override, got %d", cfg.Server.MaxBodyBytes)
 	}
 }
+
+func TestLoadWithOptionsReadsConfigEncryptionKeyOverride(t *testing.T) {
+	t.Setenv("CONFIG_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte("app:\n  env: test\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "console"})
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Security.ConfigEncryptionKey != "0123456789abcdef0123456789abcdef" {
+		t.Fatal("expected config encryption key override")
+	}
+}

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { SystemConfigRecord } from '#/api/core/console';
+
 import {
   createSystemConfig,
   deleteSystemConfig,
@@ -18,7 +20,16 @@ const columns = [
     key: 'value',
     width: 220,
     ellipsis: true,
-    customRender: ({ text, record }: { record: any; text: string }) => {
+    customRender: ({
+      text,
+      record,
+    }: {
+      record: SystemConfigRecord;
+      text: string;
+    }) => {
+      if (record.is_secret) {
+        return text ? '已设置' : '未设置';
+      }
       if (record.value_type === 'bool') {
         return text === 'true' ? '是' : '否';
       }
@@ -36,6 +47,13 @@ const columns = [
     },
   },
   { title: '类型', dataIndex: 'value_type', key: 'value_type', width: 100 },
+  {
+    title: '敏感',
+    dataIndex: 'is_secret',
+    key: 'is_secret',
+    width: 70,
+    customRender: ({ text }: { text: boolean }) => (text ? '是' : '否'),
+  },
   {
     title: '可编辑',
     dataIndex: 'is_editable',

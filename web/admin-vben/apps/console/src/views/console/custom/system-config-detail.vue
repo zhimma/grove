@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 
 import {
+  Alert,
   Button,
   Card,
   Form,
@@ -24,6 +25,8 @@ interface SystemConfig {
   default_value?: string;
   is_editable: boolean;
   is_system: boolean;
+  is_secret: boolean;
+  keep_secret?: boolean;
   sort_order: number;
 }
 
@@ -36,6 +39,7 @@ const emit = defineEmits<{
 }>();
 
 const activeTab = ref('edit');
+const keepSecret = ref(false);
 
 // value_type 选项
 const valueTypeOptions = [
@@ -188,8 +192,46 @@ defineExpose({
     ) {
       throw new Error('JSON 格式错误');
     }
-    return { ...localModel.value };
+    const payload = { ...localModel.value };
+    if (payload.is_secret && payload.id) {
+      payload.keep_secret = keepSecret.value;
+      if (keepSecret.value) {
+        payload.value = '';
+      }
+    }
+    return payload;
   },
+});
+
+watch(
+  () => [localModel.value.id, localModel.value.is_secret] as const,
+  ([id, isSecret]) => {
+    keepSecret.value = Boolean(id && isSecret);
+    if (!id) {
+      localModel.value.config_group ??= '';
+      localModel.value.config_key ??= '';
+      localModel.value.name ??= '';
+      localModel.value.value_type ||= 'string';
+      localModel.value.value ??= '';
+      localModel.value.default_value ??= '';
+      localModel.value.is_editable ??= true;
+      localModel.value.is_system ??= false;
+      localModel.value.is_secret ??= false;
+      localModel.value.sort_order ??= 0;
+    }
+  },
+  { immediate: true },
+);
+
+watch(keepSecret, (keep) => {
+  if (
+    !keep &&
+    localModel.value.id &&
+    localModel.value.is_secret &&
+    localModel.value.value === '********'
+  ) {
+    localModel.value.value = '';
+  }
 });
 
 // 当 value_type 改变时，提供默认值
@@ -282,20 +324,58 @@ watch(
       />
     </Form.Item>
 
+    <Form.Item label="敏感配置" name="is_secret">
+      <Switch
+        v-model:checked="localModel.is_secret"
+        :disabled="!!localModel.id"
+        checked-children="是"
+        un-checked-children="否"
+      />
+      <Alert
+        v-if="localModel.is_secret"
+        class="mt-2"
+        type="warning"
+        show-icon
+        message="敏感值会加密保存；数据库、Redis、JWT 和存储长期密钥必须使用环境变量或 secret manager，禁止写入这里。"
+      />
+    </Form.Item>
+
     <Form.Item
       label="配置值"
       name="value"
       :rules="[
-        { required: true, message: '请输入配置值' },
+        {
+          required: !(localModel.is_secret && localModel.id && keepSecret),
+          message: '请输入配置值',
+        },
         ...(localModel.value_type === 'json' ||
         localModel.value_type === 'array'
           ? [{ validator: createJSONValidator(), trigger: 'blur' as const }]
           : []),
       ]"
     >
+      <div v-if="localModel.is_secret" class="space-y-2">
+        <div v-if="localModel.id" class="flex items-center gap-3">
+          <Switch
+            v-model:checked="keepSecret"
+            checked-children="保持原值"
+            un-checked-children="设置新值"
+          />
+          <span class="text-sm text-gray-500">
+            {{ keepSecret ? '本次保存不会修改敏感值' : '请输入新的敏感值' }}
+          </span>
+        </div>
+        <Input.Password
+          v-model:value="localModel.value"
+          :disabled="!!localModel.id && keepSecret"
+          :placeholder="keepSecret ? '保持原值' : '请输入敏感配置值'"
+          autocomplete="new-password"
+        />
+      </div>
+
       <!-- 布尔值 -->
       <div
-        v-if="localModel.value_type === 'bool'"
+        v-else-if="localModel.value_type === 'bool'"
         class="flex items-center gap-3"
       >
         <Switch
@@ -361,7 +441,14 @@ watch(
     </Form.Item>
 
     <Form.Item label="默认值" name="default_value">
-      <template v-if="localModel.value_type !== 'bool'">
+      <Input.Password
+        v-if="localModel.is_secret"
+        v-model:value="localModel.default_value"
+        :disabled="!!localModel.id"
+        placeholder="敏感默认值（可选）"
+        autocomplete="new-password"
+      />
+      <template v-else-if="localModel.value_type !== 'bool'">
         <Input.TextArea
           v-model:value="localModel.default_value"
           :rows="2"

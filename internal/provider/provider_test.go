@@ -112,6 +112,23 @@ func TestNewFallsBackToAppNameWhenServiceNameEmpty(t *testing.T) {
 	}
 }
 
+func TestWithConfigSecretsIsOptionalAndValidatesConfiguredKey(t *testing.T) {
+	p := &Provider{Config: &config.Config{}}
+	if err := WithConfigSecrets()(p); err != nil || p.ConfigSecrets != nil {
+		t.Fatalf("empty key should leave secret box disabled: box=%v err=%v", p.ConfigSecrets, err)
+	}
+
+	p.Config.Security.ConfigEncryptionKey = "short"
+	if err := WithConfigSecrets()(p); err == nil {
+		t.Fatal("weak configured key must fail provider initialization")
+	}
+
+	p.Config.Security.ConfigEncryptionKey = "0123456789abcdef0123456789abcdef"
+	if err := WithConfigSecrets()(p); err != nil || p.ConfigSecrets == nil {
+		t.Fatalf("strong key should initialize secret box: box=%v err=%v", p.ConfigSecrets, err)
+	}
+}
+
 func optionSetContainsAtLeast(options []Option, count int) bool {
 	return len(options) >= count && slices.ContainsFunc(options, func(opt Option) bool {
 		return opt != nil

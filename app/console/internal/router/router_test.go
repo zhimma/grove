@@ -42,6 +42,9 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 			Issuer:            "grove",
 			AccessExpiryHours: 24,
 		},
+		Security: config.SecurityConfig{
+			ConfigEncryptionKey: "0123456789abcdef0123456789abcdef",
+		},
 		Docs: config.DocsConfig{
 			Enabled: false,
 		},
@@ -71,7 +74,7 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 	enforcer := openConsoleTestEnforcer(t, db)
 	seedConsoleTestData(t, db, enforcer)
 
-	p, err := provider.New(cfg, "console", provider.WithAuth(), provider.WithStorage())
+	p, err := provider.New(cfg, "console", provider.WithAuth(), provider.WithConfigSecrets(), provider.WithStorage())
 	if err != nil {
 		t.Fatalf("new provider: %v", err)
 	}
@@ -246,6 +249,61 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 	systemConfigsResp := performJSON(t, engine, http.MethodGet, "/console/v1/system-configs?list_all=true", nil, token)
 	if got := int(systemConfigsResp["code"].(float64)); got != 0 {
 		t.Fatalf("list system configs failed: %#v", systemConfigsResp)
+	}
+
+	createSecretResp := performJSON(t, engine, http.MethodPost, "/console/v1/system-configs?value=query-secret", map[string]any{
+		"config_group":  "integration",
+		"config_key":    "webhook_token",
+		"name":          "Webhook Token",
+		"value_type":    "string",
+		"value":         "router-secret-current",
+		"default_value": "router-secret-default",
+		"is_editable":   true,
+		"is_secret":     true,
+	}, token)
+	secretData := createSecretResp["data"].(map[string]any)
+	secretID := secretData["id"].(string)
+	if secretData["value"] != consoleservice.SecretMask || secretData["default_value"] != consoleservice.SecretMask || secretData["is_secret"] != true {
+		t.Fatalf("secret config response leaked value: %#v", createSecretResp)
+	}
+	var persistedSecret model.SystemConfig
+	if err := db.First(&persistedSecret, "id = ?", secretID).Error; err != nil {
+		t.Fatalf("load persisted secret config: %v", err)
+	}
+	if !strings.HasPrefix(persistedSecret.Value, "v1:") || strings.Contains(persistedSecret.Value, "router-secret") {
+		t.Fatalf("secret config was not encrypted: %#v", persistedSecret)
+	}
+	originalSecretCiphertext := persistedSecret.Value
+
+	keepSecretResp := performJSON(t, engine, http.MethodPut, "/console/v1/system-configs/"+secretID, map[string]any{
+		"value":       "must-not-replace-secret",
+		"keep_secret": true,
+	}, token)
+	if keepSecretResp["data"].(map[string]any)["value"] != consoleservice.SecretMask {
+		t.Fatalf("kept secret response must remain masked: %#v", keepSecretResp)
+	}
+	if err := db.First(&persistedSecret, "id = ?", secretID).Error; err != nil {
+		t.Fatalf("reload persisted secret: %v", err)
+	}
+	if persistedSecret.Value != originalSecretCiphertext {
+		t.Fatal("keep_secret changed persisted ciphertext")
+	}
+
+	var secretAudit model.ConsoleOperationLog
+	if err := db.Where("target_type = ? AND target_id = ?", "system_config", secretID).
+		Order("created_at DESC").First(&secretAudit).Error; err != nil {
+		t.Fatalf("load secret config audit: %v", err)
+	}
+	for _, forbidden := range []string{"router-secret", "must-not-replace-secret", consoleservice.SecretMask, originalSecretCiphertext, `"value"`, `"default_value"`} {
+		if strings.Contains(secretAudit.DetailJSON, forbidden) {
+			t.Fatalf("secret audit leaked %q: %s", forbidden, secretAudit.DetailJSON)
+		}
+	}
+	if !strings.Contains(secretAudit.DetailJSON, `"config_key":"webhook_token"`) || !strings.Contains(secretAudit.DetailJSON, `"changed":true`) {
+		t.Fatalf("secret audit lacks safe change metadata: %s", secretAudit.DetailJSON)
+	}
+	if secretAudit.RequestQuery != "" {
+		t.Fatalf("system config audit must not retain query data: %q", secretAudit.RequestQuery)
 	}
 
 	storageConfigsResp := performJSON(t, engine, http.MethodGet, "/console/v1/storage/all-configs", nil, token)

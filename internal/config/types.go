@@ -164,9 +164,10 @@ type DemoConfig struct {
 }
 
 type SecurityConfig struct {
-	TrustedProxies []string              `yaml:"trusted_proxies"`
-	HSTSEnabled    bool                  `yaml:"hsts_enabled"`
-	Login          LoginProtectionConfig `yaml:"login"`
+	TrustedProxies      []string              `yaml:"trusted_proxies"`
+	HSTSEnabled         bool                  `yaml:"hsts_enabled"`
+	ConfigEncryptionKey string                `yaml:"config_encryption_key"`
+	Login               LoginProtectionConfig `yaml:"login"`
 }
 
 type LoginProtectionConfig struct {

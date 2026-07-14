@@ -156,6 +156,9 @@ security:
   # Empty means no reverse proxy is trusted. Add only explicit proxy IPs or CIDRs.
   trusted_proxies: []
   hsts_enabled: ${HSTS_ENABLED:false}
+  # Independent application key for encrypting business config secrets.
+  # Use at least 32 random bytes or base64:<32-byte-base64>. Never store this key in system_configs.
+  config_encryption_key: ${CONFIG_ENCRYPTION_KEY:}
   login:
     enabled: ${LOGIN_PROTECTION_ENABLED:true}
     attempts_per_minute: ${LOGIN_ATTEMPTS_PER_MINUTE:10}

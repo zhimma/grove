@@ -19,24 +19,26 @@ import (
 	"github.com/zhimma/grove/pkg/logger"
 	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/scheduler"
+	"github.com/zhimma/grove/pkg/secretbox"
 	"github.com/zhimma/grove/pkg/storage"
 	"github.com/zhimma/grove/pkg/transaction"
 )
 
 type Provider struct {
-	Config       *config.Config
-	DB           database.Repo
-	RedisClient  *redis.Client
-	TokenManager *auth.Manager
-	JobClient    *job.Client
-	JobServer    *job.Server
-	Enforcers    map[string]*rbac.Enforcer
-	Storage      *storage.Manager
-	TxManager    transaction.Manager
-	Cache        *cache.Manager
-	HTTPClient   *httpclient.Client
-	Event        *event.Dispatcher
-	Scheduler    *scheduler.Scheduler
+	Config        *config.Config
+	DB            database.Repo
+	RedisClient   *redis.Client
+	TokenManager  *auth.Manager
+	JobClient     *job.Client
+	JobServer     *job.Server
+	Enforcers     map[string]*rbac.Enforcer
+	Storage       *storage.Manager
+	TxManager     transaction.Manager
+	Cache         *cache.Manager
+	HTTPClient    *httpclient.Client
+	Event         *event.Dispatcher
+	Scheduler     *scheduler.Scheduler
+	ConfigSecrets *secretbox.Box
 }
 
 type Option func(*Provider) error
@@ -61,12 +63,28 @@ func ConsoleOptions() []Option {
 		WithDatabase(),
 		WithRedis(),
 		WithAuth(),
+		WithConfigSecrets(),
 		WithCasbin(),
 		WithStorage(),
 		WithTransaction(),
 		WithCache(),
 		WithHTTPClient(),
 		WithEvent(),
+	}
+}
+
+func WithConfigSecrets() Option {
+	return func(p *Provider) error {
+		key := strings.TrimSpace(p.Config.Security.ConfigEncryptionKey)
+		if key == "" {
+			return nil
+		}
+		box, err := secretbox.New(key)
+		if err != nil {
+			return fmt.Errorf("init config encryption: %w", err)
+		}
+		p.ConfigSecrets = box
+		return nil
 	}
 }
 

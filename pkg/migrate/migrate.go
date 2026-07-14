@@ -89,10 +89,30 @@ func (m *Manager) Down() (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("migration version %d has no matching file", current)
 	}
+	if err := validateDownMigration(m.db, name); err != nil {
+		return "", err
+	}
 	if err := engine.Steps(-1); err != nil && !errors.Is(err, golangmigrate.ErrNoChange) {
 		return "", err
 	}
 	return name, nil
+}
+
+func validateDownMigration(db *gorm.DB, name string) error {
+	if name != "202604150011_add_system_config_secrets" {
+		return nil
+	}
+	if db == nil {
+		return fmt.Errorf("migration database is required")
+	}
+	var hasSecrets bool
+	if err := db.Raw(`SELECT EXISTS (SELECT 1 FROM system_configs WHERE is_secret = TRUE)`).Scan(&hasSecrets).Error; err != nil {
+		return fmt.Errorf("check encrypted system configs before down migration: %w", err)
+	}
+	if hasSecrets {
+		return fmt.Errorf("cannot remove is_secret while encrypted system configs exist")
+	}
+	return nil
 }
 
 func (m *Manager) Status() ([]Status, error) {

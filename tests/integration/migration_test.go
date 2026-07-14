@@ -103,6 +103,7 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 	assertRelationExists(t, db, "schema_migrations", false)
 	assertColumnExists(t, db, "console_operation_logs", "deleted_at", false)
 	assertColumnExists(t, db, "console_login_logs", "deleted_at", false)
+	assertColumnExists(t, db, "system_configs", "is_secret", true)
 	for _, constraint := range []string{
 		"fk_console_admins_role",
 		"chk_console_admins_status",
@@ -137,7 +138,7 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 	}
 
 	status := runGrove(t, ctx, repoRoot, configPath, commandEnv, "migrate", "status")
-	if !strings.Contains(status, "已执行") || !strings.Contains(status, "202604150010_create_console_sessions") {
+	if !strings.Contains(status, "已执行") || !strings.Contains(status, "202604150011_add_system_config_secrets") {
 		t.Fatalf("unexpected migration status: %s", status)
 	}
 

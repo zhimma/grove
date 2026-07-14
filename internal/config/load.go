@@ -309,6 +309,9 @@ func applyEnvironmentOverrides(cfg *Config) {
 	if value := os.Getenv("HSTS_ENABLED"); value != "" {
 		cfg.Security.HSTSEnabled = parseBool(value)
 	}
+	if value := os.Getenv("CONFIG_ENCRYPTION_KEY"); value != "" {
+		cfg.Security.ConfigEncryptionKey = value
+	}
 	if value := os.Getenv("LOGIN_PROTECTION_ENABLED"); value != "" {
 		cfg.Security.Login.Enabled = parseBool(value)
 	}

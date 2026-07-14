@@ -16,6 +16,7 @@ type SystemConfig struct {
 	DefaultValue string `gorm:"type:text;not null;default:''" json:"default_value"`
 	IsEditable   bool   `gorm:"not null;default:true" json:"is_editable"`
 	IsSystem     bool   `gorm:"not null;default:false" json:"is_system"`
+	IsSecret     bool   `gorm:"not null;default:false" json:"is_secret"`
 	SortOrder    int    `gorm:"not null;default:0" json:"sort_order"`
 }
 

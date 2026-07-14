@@ -117,6 +117,55 @@ func TestConsoleSessionsMigrationDefinesPersistentRefreshContract(t *testing.T) 
 	}
 }
 
+func TestSystemConfigSecretMigrationMatchesModelContract(t *testing.T) {
+	upPath := filepath.Join("..", "..", "database", "migrations", "202604150011_add_system_config_secrets.up.sql")
+	up := mustReadMigration(t, upPath)
+	if !strings.Contains(up, "ADD COLUMN IF NOT EXISTS is_secret BOOLEAN NOT NULL DEFAULT FALSE") {
+		t.Fatal("system config secret migration must add is_secret")
+	}
+
+	downPath := filepath.Join("..", "..", "database", "migrations", "202604150011_add_system_config_secrets.down.sql")
+	down := mustReadMigration(t, downPath)
+	if strings.Contains(down, "RAISE EXCEPTION") {
+		t.Fatal("system config secret down migration must not fail after the migration engine marks the version dirty")
+	}
+	for _, fragment := range []string{"DROP COLUMN IF EXISTS is_secret"} {
+		if !strings.Contains(down, fragment) {
+			t.Fatalf("system config secret down migration missing %q", fragment)
+		}
+	}
+}
+
+func TestValidateDownMigrationRejectsEncryptedSystemConfigsBeforeExecution(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/migration-guard.db"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE system_configs (is_secret BOOLEAN NOT NULL DEFAULT FALSE)`).Error; err != nil {
+		t.Fatalf("create system_configs: %v", err)
+	}
+
+	const migration = "202604150011_add_system_config_secrets"
+	if err := validateDownMigration(db, migration); err != nil {
+		t.Fatalf("empty system configs must allow down migration: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO system_configs (is_secret) VALUES (TRUE)`).Error; err != nil {
+		t.Fatalf("insert secret config: %v", err)
+	}
+	if err := validateDownMigration(db, migration); err == nil || !strings.Contains(err.Error(), "cannot remove is_secret") {
+		t.Fatalf("encrypted system configs must block down migration, got %v", err)
+	}
+	if err := db.Exec(`DELETE FROM system_configs`).Error; err != nil {
+		t.Fatalf("delete secret config: %v", err)
+	}
+	if err := validateDownMigration(db, migration); err != nil {
+		t.Fatalf("cleared system configs must allow down migration: %v", err)
+	}
+	if err := validateDownMigration(db, "202604150010_create_console_sessions"); err != nil {
+		t.Fatalf("unrelated migration must not be blocked: %v", err)
+	}
+}
+
 func TestRunSQLDirWithReplacements(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/seed.db"), &gorm.Config{})
 	if err != nil {

@@ -45,8 +45,11 @@ export interface SystemConfigRecord {
   description?: string;
   value_type: string;
   value: string;
+  default_value?: string;
   is_editable: boolean;
   is_system?: boolean;
+  is_secret: boolean;
+  sort_order?: number;
   updated_at: string;
 }
 

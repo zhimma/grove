@@ -10,10 +10,14 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/secretbox"
 )
 
+const SecretMask = "********"
+
 type SystemConfigService struct {
-	dbRepo database.Repo
+	dbRepo    database.Repo
+	secretBox *secretbox.Box
 }
 
 type ListSystemConfigsInput struct {
@@ -45,20 +49,25 @@ type CreateSystemConfigInput struct {
 	DefaultValue string
 	IsEditable   bool
 	IsSystem     bool
+	IsSecret     bool
 	SortOrder    int
 }
 
 type UpdateSystemConfigByIDInput struct {
-	ID    string
-	Value string
+	ID         string
+	Value      string
+	KeepSecret bool
 }
 
 type GetGroupConfigsInput struct {
 	Group string
 }
 
-func NewSystemConfigService(dbRepo database.Repo) *SystemConfigService {
-	return &SystemConfigService{dbRepo: dbRepo}
+func NewSystemConfigService(dbRepo database.Repo, secretBox *secretbox.Box) *SystemConfigService {
+	return &SystemConfigService{
+		dbRepo:    dbRepo,
+		secretBox: secretBox,
+	}
 }
 
 func (s *SystemConfigService) ListConfigs(ctx context.Context, in ListSystemConfigsInput) (*ListSystemConfigsOutput, error) {
@@ -121,6 +130,9 @@ func (s *SystemConfigService) ListConfigs(ctx context.Context, in ListSystemConf
 	if err := query.Find(&list).Error; err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}
+	for i := range list {
+		maskSystemConfig(&list[i])
+	}
 	return &ListSystemConfigsOutput{
 		List: list,
 		Meta: NewListMeta(total, page, pageSize),
@@ -140,6 +152,9 @@ func (s *SystemConfigService) GetGroupConfigs(ctx context.Context, in GetGroupCo
 		Find(&items).Error; err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}
+	for i := range items {
+		maskSystemConfig(&items[i])
+	}
 	return items, nil
 }
 
@@ -149,16 +164,23 @@ func (s *SystemConfigService) CreateConfig(ctx context.Context, in CreateSystemC
 		return nil, dbErr
 	}
 
+	value := in.Value
+	defaultValue := in.DefaultValue
+	if !in.IsSecret {
+		value = strings.TrimSpace(value)
+		defaultValue = strings.TrimSpace(defaultValue)
+	}
 	record := model.SystemConfig{
 		ConfigGroup:  strings.TrimSpace(in.ConfigGroup),
 		ConfigKey:    strings.TrimSpace(in.ConfigKey),
 		Name:         strings.TrimSpace(in.Name),
 		Description:  strings.TrimSpace(in.Description),
 		ValueType:    normalizeConfigValueType(in.ValueType),
-		Value:        strings.TrimSpace(in.Value),
-		DefaultValue: strings.TrimSpace(in.DefaultValue),
+		Value:        value,
+		DefaultValue: defaultValue,
 		IsEditable:   in.IsEditable,
 		IsSystem:     in.IsSystem,
+		IsSecret:     in.IsSecret,
 		SortOrder:    in.SortOrder,
 	}
 	if record.ConfigGroup == "" || record.ConfigKey == "" {
@@ -166,6 +188,12 @@ func (s *SystemConfigService) CreateConfig(ctx context.Context, in CreateSystemC
 	}
 	if record.Name == "" {
 		record.Name = record.ConfigKey
+	}
+	if record.IsSecret && isInfrastructureSecret(record.ConfigGroup, record.ConfigKey) {
+		return nil, errx.InvalidParams().
+			WithHTTPStatus(422).
+			WithCode("infrastructure_secret_not_allowed").
+			WithMessage("基础设施密钥必须由环境变量或外部 secret manager 管理")
 	}
 	if err := validateSystemConfigValue(record.ValueType, record.Value); err != nil {
 		return nil, err
@@ -183,10 +211,16 @@ func (s *SystemConfigService) CreateConfig(ctx context.Context, in CreateSystemC
 	if count > 0 {
 		return nil, errx.Conflict().WithCode("system_config_exists").WithMessage("系统配置已存在")
 	}
+	if record.IsSecret {
+		if err := s.encryptSecretRecord(&record); err != nil {
+			return nil, err
+		}
+	}
 
 	if err := db.Create(&record).Error; err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}
+	maskSystemConfig(&record)
 	return &record, nil
 }
 
@@ -198,7 +232,14 @@ func (s *SystemConfigService) UpdateConfigByID(ctx context.Context, in UpdateSys
 	if !record.IsEditable {
 		return nil, errx.Forbidden().WithMessage("系统配置为只读，不允许修改")
 	}
-	value := strings.TrimSpace(in.Value)
+	if record.IsSecret && (in.KeepSecret || in.Value == SecretMask) {
+		maskSystemConfig(record)
+		return record, nil
+	}
+	value := in.Value
+	if !record.IsSecret {
+		value = strings.TrimSpace(value)
+	}
 	if err := validateSystemConfigValue(record.ValueType, value); err != nil {
 		return nil, err
 	}
@@ -206,13 +247,47 @@ func (s *SystemConfigService) UpdateConfigByID(ctx context.Context, in UpdateSys
 	if dbErr != nil {
 		return nil, dbErr
 	}
+	persistedValue := value
+	if record.IsSecret {
+		persistedValue, err = s.encryptSecretValue(value)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if err := db.Model(&model.SystemConfig{}).
 		Where("id = ?", record.ID).
-		Update("value", value).Error; err != nil {
+		Update("value", persistedValue).Error; err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}
-	record.Value = value
+	record.Value = persistedValue
+	maskSystemConfig(record)
 	return record, nil
+}
+
+func (s *SystemConfigService) ResolveEffectiveValue(ctx context.Context, group, key string) (string, error) {
+	db, err := s.defaultDB(ctx)
+	if err != nil {
+		return "", err
+	}
+	var record model.SystemConfig
+	if err := db.Where("config_group = ? AND config_key = ?", strings.TrimSpace(group), strings.TrimSpace(key)).First(&record).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return "", errx.NotFound().WithMessage("系统配置不存在")
+		}
+		return "", errx.Internal().WithCause(err)
+	}
+	value := record.EffectiveValue()
+	if !record.IsSecret || value == "" {
+		return value, nil
+	}
+	if s.secretBox == nil {
+		return "", configEncryptionUnavailable()
+	}
+	plaintext, err := s.secretBox.Decrypt(value)
+	if err != nil {
+		return "", errx.Internal().WithCode("config_decryption_failed").WithCause(err)
+	}
+	return plaintext, nil
 }
 
 func (s *SystemConfigService) DeleteConfig(ctx context.Context, id string) error {
@@ -292,4 +367,68 @@ func validateSystemConfigValue(valueType, value string) error {
 		}
 	}
 	return nil
+}
+
+func (s *SystemConfigService) encryptSecretRecord(record *model.SystemConfig) error {
+	if record == nil {
+		return nil
+	}
+	value, err := s.encryptSecretValue(record.Value)
+	if err != nil {
+		return err
+	}
+	defaultValue, err := s.encryptSecretValue(record.DefaultValue)
+	if err != nil {
+		return err
+	}
+	record.Value = value
+	record.DefaultValue = defaultValue
+	return nil
+}
+
+func (s *SystemConfigService) encryptSecretValue(value string) (string, error) {
+	if s.secretBox == nil {
+		return "", configEncryptionUnavailable()
+	}
+	if value == "" {
+		return "", nil
+	}
+	ciphertext, err := s.secretBox.Encrypt(value)
+	if err != nil {
+		return "", errx.Internal().WithCode("config_encryption_failed").WithCause(err)
+	}
+	return ciphertext, nil
+}
+
+func configEncryptionUnavailable() error {
+	return errx.ServiceUnavailable().
+		WithCode("config_encryption_unavailable").
+		WithMessage("系统配置加密密钥未配置")
+}
+
+func maskSystemConfig(record *model.SystemConfig) {
+	if record == nil || !record.IsSecret {
+		return
+	}
+	if record.Value != "" {
+		record.Value = SecretMask
+	}
+	if record.DefaultValue != "" {
+		record.DefaultValue = SecretMask
+	}
+}
+
+func isInfrastructureSecret(group, key string) bool {
+	group = strings.ToLower(strings.TrimSpace(group))
+	key = strings.ToLower(strings.TrimSpace(key))
+	switch group {
+	case "database", "databases", "infrastructure", "jwt", "redis", "security", "storage":
+		return true
+	}
+	switch key {
+	case "config_encryption_key", "database_password", "db_password", "jwt_secret", "redis_password", "s3_access_key", "s3_secret_key", "storage_access_key", "storage_secret_key":
+		return true
+	default:
+		return false
+	}
 }

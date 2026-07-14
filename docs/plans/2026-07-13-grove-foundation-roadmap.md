@@ -95,7 +95,7 @@ pnpm --dir web/admin-vben install --frozen-lockfile
 - [x] Task 8：实现可持久化 Console Session 和 refresh token 轮换。
 - [x] Task 9：增加登录限流、失败锁定与可信代理配置。
 - [x] Task 10：增加请求体和文件上传限制。
-- [ ] Task 11：修复系统配置敏感值和审计泄漏。
+- [x] Task 11：修复系统配置敏感值和审计泄漏。
 - [ ] Task 12：修复 GORM 与 Casbin 的一致性边界。
 
 完成条件：多实例下退出和 refresh 语义一致；登录入口可防暴力尝试；上传不能绕过服务端限制；敏感配置不出现在 API 和审计日志中。
@@ -863,7 +863,7 @@ go test ./pkg/storage ./app/console/internal/router -v
 
 ### Task 11：修复系统配置敏感值和审计泄漏
 
-**Status:** `[-] In Progress`
+**Status:** `[x] Completed`
 
 **Owner:** Codex
 
@@ -871,7 +871,17 @@ go test ./pkg/storage ./app/console/internal/router -v
 
 **Started at:** 2026-07-14
 
+**Completed at:** 2026-07-14
+
 **Design:** `docs/plans/2026-07-14-system-config-secrets-design.md`
+
+**Verification:**
+
+- `go test ./...`、`go vet ./...`、`make build`、`git diff --check`：PASS。
+- `go test -race ./pkg/secretbox ./pkg/migrate ./app/console/internal/service ./app/console/internal/router ./app/console/internal/middleware`：PASS。
+- Console `vue-tsc --noEmit --skipLibCheck` 与前端变更文件 Prettier：PASS，使用现有离线 module cache，未下载依赖。
+- 本机 PostgreSQL 唯一临时库：011 up/down、`is_secret` 列生命周期、存在敏感配置时拒绝 down 且迁移保持 `dirty=false`、清理敏感记录后可正常 down，全部 PASS；临时库已删除。
+- service/router 测试覆盖 AES-256-GCM 随机 nonce、密文防篡改、API 掩码、`keep_secret`、默认值解密、基础设施 secret 拒绝和审计脱敏。
 
 **Files:**
 

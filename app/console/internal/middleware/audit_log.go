@@ -55,7 +55,7 @@ func AuditOperation(db *gorm.DB) gin.HandlerFunc {
 			DurationMS:   time.Since(startedAt).Milliseconds(),
 			ClientIP:     meta.ClientIP,
 			UserAgent:    truncateString(meta.UserAgent, 500),
-			RequestQuery: truncateString(c.Request.URL.RawQuery, 2000),
+			RequestQuery: auditRequestQuery(route, c.Request.URL.RawQuery),
 		}
 		if auditMeta := request.GetAuditMeta(c); strings.TrimSpace(auditMeta.TargetType) != "" || strings.TrimSpace(auditMeta.TargetID) != "" || len(auditMeta.Detail) > 0 {
 			record.TargetType = strings.TrimSpace(auditMeta.TargetType)
@@ -72,6 +72,13 @@ func AuditOperation(db *gorm.DB) gin.HandlerFunc {
 				Msg("控制台操作日志写入失败")
 		}
 	}
+}
+
+func auditRequestQuery(route, rawQuery string) string {
+	if detectLogModule(route) == "system-configs" {
+		return ""
+	}
+	return truncateString(rawQuery, 2000)
 }
 
 func shouldAuditOperation(c *gin.Context) bool {

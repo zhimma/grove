@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
+	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/internal/provider"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
@@ -44,6 +45,7 @@ type SystemConfigItem struct {
 	DefaultValue string `json:"default_value"`
 	IsEditable   bool   `json:"is_editable"`
 	IsSystem     bool   `json:"is_system"`
+	IsSecret     bool   `json:"is_secret"`
 	SortOrder    int    `json:"sort_order"`
 	CreatedAt    string `json:"created_at"`
 	UpdatedAt    string `json:"updated_at"`
@@ -59,11 +61,13 @@ type CreateSystemConfigRequest struct {
 	DefaultValue string `json:"default_value" label:"默认值"`
 	IsEditable   bool   `json:"is_editable" label:"是否可编辑"`
 	IsSystem     bool   `json:"is_system" label:"是否系统配置"`
+	IsSecret     bool   `json:"is_secret" label:"是否敏感配置"`
 	SortOrder    int    `json:"sort_order" label:"排序"`
 }
 
 type UpdateSystemConfigRequest struct {
-	Value string `json:"value" label:"配置值"`
+	Value      string `json:"value" label:"配置值"`
+	KeepSecret bool   `json:"keep_secret" label:"保持敏感值"`
 }
 
 type SystemConfigPathRequest struct {
@@ -76,7 +80,7 @@ type SystemConfigGroupPathRequest struct {
 
 func RegisterSystemConfigRoutes(protected *gin.RouterGroup, p *provider.Provider) {
 	h := &SystemConfigHandler{
-		service: consoleservice.NewSystemConfigService(p.DB),
+		service: consoleservice.NewSystemConfigService(p.DB, p.ConfigSecrets),
 	}
 
 	group := route.Wrap(protected.Group("/system-configs"))
@@ -113,21 +117,7 @@ func (h *SystemConfigHandler) List(c *gin.Context) {
 
 	items := make([]SystemConfigItem, 0, len(result.List))
 	for _, item := range result.List {
-		items = append(items, SystemConfigItem{
-			ID:           item.ID,
-			ConfigGroup:  item.ConfigGroup,
-			ConfigKey:    item.ConfigKey,
-			Name:         item.Name,
-			Description:  item.Description,
-			ValueType:    item.ValueType,
-			Value:        item.Value,
-			DefaultValue: item.DefaultValue,
-			IsEditable:   item.IsEditable,
-			IsSystem:     item.IsSystem,
-			SortOrder:    item.SortOrder,
-			CreatedAt:    item.CreatedAt.Format("2006-01-02 15:04:05"),
-			UpdatedAt:    item.UpdatedAt.Format("2006-01-02 15:04:05"),
-		})
+		items = append(items, newSystemConfigItem(item))
 	}
 	response.Success(c, ListSystemConfigsResponse{
 		List: items,
@@ -151,21 +141,7 @@ func (h *SystemConfigHandler) ListGroup(c *gin.Context) {
 
 	items := make([]SystemConfigItem, 0, len(result))
 	for _, item := range result {
-		items = append(items, SystemConfigItem{
-			ID:           item.ID,
-			ConfigGroup:  item.ConfigGroup,
-			ConfigKey:    item.ConfigKey,
-			Name:         item.Name,
-			Description:  item.Description,
-			ValueType:    item.ValueType,
-			Value:        item.Value,
-			DefaultValue: item.DefaultValue,
-			IsEditable:   item.IsEditable,
-			IsSystem:     item.IsSystem,
-			SortOrder:    item.SortOrder,
-			CreatedAt:    item.CreatedAt.Format("2006-01-02 15:04:05"),
-			UpdatedAt:    item.UpdatedAt.Format("2006-01-02 15:04:05"),
-		})
+		items = append(items, newSystemConfigItem(item))
 	}
 	response.Success(c, items)
 }
@@ -186,6 +162,7 @@ func (h *SystemConfigHandler) Create(c *gin.Context) {
 		DefaultValue: req.DefaultValue,
 		IsEditable:   req.IsEditable,
 		IsSystem:     req.IsSystem,
+		IsSecret:     req.IsSecret,
 		SortOrder:    req.SortOrder,
 	})
 	if err != nil {
@@ -193,26 +170,11 @@ func (h *SystemConfigHandler) Create(c *gin.Context) {
 		return
 	}
 	setAuditMeta(c, "system_config", result.ID, map[string]any{
-		"config_group": result.ConfigGroup,
-		"config_key":   result.ConfigKey,
-		"value_type":   result.ValueType,
-		"value":        result.Value,
+		"config_key": result.ConfigKey,
+		"changed":    true,
+		"is_secret":  result.IsSecret,
 	})
-	response.Success(c, SystemConfigItem{
-		ID:           result.ID,
-		ConfigGroup:  result.ConfigGroup,
-		ConfigKey:    result.ConfigKey,
-		Name:         result.Name,
-		Description:  result.Description,
-		ValueType:    result.ValueType,
-		Value:        result.Value,
-		DefaultValue: result.DefaultValue,
-		IsEditable:   result.IsEditable,
-		IsSystem:     result.IsSystem,
-		SortOrder:    result.SortOrder,
-		CreatedAt:    result.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:    result.UpdatedAt.Format("2006-01-02 15:04:05"),
-	})
+	response.Success(c, newSystemConfigItem(*result))
 }
 
 func (h *SystemConfigHandler) Update(c *gin.Context) {
@@ -227,33 +189,39 @@ func (h *SystemConfigHandler) Update(c *gin.Context) {
 		return
 	}
 	result, err := h.service.UpdateConfigByID(c.Request.Context(), consoleservice.UpdateSystemConfigByIDInput{
-		ID:    pathReq.ID,
-		Value: req.Value,
+		ID:         pathReq.ID,
+		Value:      req.Value,
+		KeepSecret: req.KeepSecret,
 	})
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
 	setAuditMeta(c, "system_config", result.ID, map[string]any{
-		"config_group": result.ConfigGroup,
-		"config_key":   result.ConfigKey,
-		"value":        result.Value,
+		"config_key": result.ConfigKey,
+		"changed":    true,
+		"is_secret":  result.IsSecret,
 	})
-	response.Success(c, SystemConfigItem{
-		ID:           result.ID,
-		ConfigGroup:  result.ConfigGroup,
-		ConfigKey:    result.ConfigKey,
-		Name:         result.Name,
-		Description:  result.Description,
-		ValueType:    result.ValueType,
-		Value:        result.Value,
-		DefaultValue: result.DefaultValue,
-		IsEditable:   result.IsEditable,
-		IsSystem:     result.IsSystem,
-		SortOrder:    result.SortOrder,
-		CreatedAt:    result.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:    result.UpdatedAt.Format("2006-01-02 15:04:05"),
-	})
+	response.Success(c, newSystemConfigItem(*result))
+}
+
+func newSystemConfigItem(item model.SystemConfig) SystemConfigItem {
+	return SystemConfigItem{
+		ID:           item.ID,
+		ConfigGroup:  item.ConfigGroup,
+		ConfigKey:    item.ConfigKey,
+		Name:         item.Name,
+		Description:  item.Description,
+		ValueType:    item.ValueType,
+		Value:        item.Value,
+		DefaultValue: item.DefaultValue,
+		IsEditable:   item.IsEditable,
+		IsSystem:     item.IsSystem,
+		IsSecret:     item.IsSecret,
+		SortOrder:    item.SortOrder,
+		CreatedAt:    item.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:    item.UpdatedAt.Format("2006-01-02 15:04:05"),
+	}
 }
 
 func (h *SystemConfigHandler) Delete(c *gin.Context) {
