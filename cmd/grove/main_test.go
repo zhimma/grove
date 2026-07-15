@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/zhimma/grove/internal/config"
 )
 
 func TestAboutCommandPrintsFrameworkSummary(t *testing.T) {
@@ -184,7 +186,7 @@ func TestSeedFilesAreSplitBySafetyBoundary(t *testing.T) {
 func TestResolveRootPasswordUsesEnvironment(t *testing.T) {
 	t.Setenv(rootPasswordEnv, "configured-root-password")
 
-	password, generated, err := resolveRootPassword()
+	password, generated, err := resolveRootPassword(nil)
 	if err != nil {
 		t.Fatalf("resolve configured root password: %v", err)
 	}
@@ -196,10 +198,27 @@ func TestResolveRootPasswordUsesEnvironment(t *testing.T) {
 	}
 }
 
+func TestResolveRootPasswordPrefersConfig(t *testing.T) {
+	t.Setenv(rootPasswordEnv, "environment-root-password")
+	cfg := &config.Config{}
+	cfg.Security.InitialRootPassword = "configured-root-password"
+
+	password, generated, err := resolveRootPassword(cfg)
+	if err != nil {
+		t.Fatalf("resolve config root password: %v", err)
+	}
+	if generated {
+		t.Fatal("config root password must not be marked as generated")
+	}
+	if password != "configured-root-password" {
+		t.Fatalf("unexpected config password: %q", password)
+	}
+}
+
 func TestResolveRootPasswordGeneratesRandomValue(t *testing.T) {
 	t.Setenv(rootPasswordEnv, "")
 
-	password, generated, err := resolveRootPassword()
+	password, generated, err := resolveRootPassword(nil)
 	if err != nil {
 		t.Fatalf("generate root password: %v", err)
 	}

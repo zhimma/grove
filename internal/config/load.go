@@ -16,7 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var envPattern = regexp.MustCompile(`\$\{([^:}]+)(?::([^}]*))?\}`)
+var envPattern = regexp.MustCompile(`\$\{([A-Z][A-Z0-9_]*)(?::([^}]*))?\}`)
 
 func Load() (*Config, error) {
 	return LoadWithOptions(LoadOptions{})

@@ -27,9 +27,9 @@ Grove 是一个 console-first 的中大型 Go 单体脚手架，借鉴 Laravel �
 
 ## 配置与运行
 
-- 本地唯一配置文件是 `config.yaml`，模板是 `config.example.yaml`。
-- 后端不自动读取 `.env`；部署平台可以用进程环境变量覆盖 `${VAR:default}` 占位符。
-- 本地默认数据库是 PostgreSQL；也支持 MySQL 8.0.16+。按实际数据库设置 `DB_ENABLED=true`、`DB_DRIVER`、`DB_HOST`、`DB_USER`、`DB_PASSWORD` 和 `DB_NAME`。
+- 本地唯一配置文件是 `config.yaml`，模板是 `config.example.yaml`；默认值直接写在 YAML 文件中。
+- 后端不自动读取 `.env`，配置模板不使用 `${VAR:default}` 占位符；不同环境通过复制或挂载不同的 `config.yaml` 管理。
+- 本地默认数据库是 PostgreSQL；也支持 MySQL 8.0.16+。按实际数据库直接修改 `config.yaml` 中的 `databases.default`。
 - Go 使用仓库要求的 1.25.12；本机如存在旧 wrapper，先设置：
 
   ```bash

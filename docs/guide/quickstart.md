@@ -80,7 +80,9 @@ make migrate.up
 make seed.bootstrap
 ```
 
-`seed.bootstrap` 创建 `root` 管理员和基础角色，不会覆盖已有 root 密码。未通过 `GROVE_ROOT_PASSWORD` 注入时，CLI 会生成一次性随机密码并只输出一次。
+`seed.bootstrap` 创建 `root` 管理员和基础角色，不会覆盖已有 root 密码。初始密码填写在 `config.yaml` 的 `security.initial_root_password`，CLI 会在写入数据库前生成 bcrypt 哈希；留空时才回退到兼容的 `GROVE_ROOT_PASSWORD`，两者都为空才生成一次性随机密码。
+
+数据库中不会保存明文密码。已有 root 账号不会因修改配置或重复执行 bootstrap 而改变密码，请登录后台后通过账号设置修改。
 
 开发/测试环境如需要演示数据：
 

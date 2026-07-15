@@ -18,7 +18,7 @@
 - 前端：使用 pnpm 10.28.2 执行 `test:unit`（41 个文件、316 个测试）、Console `typecheck` 和 `@grove/console build` 均通过。
 - CI：包含 unit、route/OpenAPI contract、race、vet、govulncheck、Testcontainers PostgreSQL integration、backend build、frontend typecheck/unit/build。
 - 配置安全：示例和部署文档不再提供固定 PostgreSQL 密码或 JWT secret；`internal/config` 增加静态凭据回归测试。
-- 配置来源已收敛为单一 `config.yaml`；`.env` 不再由后端自动读取，环境变量只保留为部署覆盖机制。
+- 配置来源已收敛为单一 `config.yaml`；`.env` 不再由后端自动读取，默认值直接写在 YAML 文件中。
 - Makefile 已删除 `run/dev`、`test.go`、`fmt.go`、`verify.go`、独立后端 build 和重复前端 verify 入口，只保留面向开发者的公开命令。
 
 ## 环境边界
@@ -29,8 +29,8 @@
 
 ## 本轮修复
 
-- `config.example.yaml` 将数据库密码和 JWT secret 默认值改为空环境变量。
-- 快速开始、配置、数据库和部署文档改为通过 `DB_PASSWORD`、`JWT_SECRET` 注入敏感值。
+- `config.yaml` 和 `config.example.yaml` 的默认值直接写入 YAML；数据库密码和 JWT secret 保持为空，要求手工填写。
+- 快速开始、配置、数据库和部署文档统一指导开发者直接编辑受保护的 `config.yaml`。
 - 增加 `TestConfigExampleDoesNotContainStaticCredentials`，防止固定凭据回归。
 - 删除 `.env.example`，增加 `.env` 不会被读取的配置回归测试。
 

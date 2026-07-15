@@ -42,6 +42,23 @@ api:
 	}
 }
 
+func TestConfigExampleUsesLiteralDefaults(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "..", "config.example.yaml"))
+	if err != nil {
+		t.Fatalf("read config example: %v", err)
+	}
+	if envPattern.Match(content) {
+		t.Fatal("config.example.yaml must not use uppercase environment placeholders for defaults")
+	}
+}
+
+func TestExpandEnvPreservesLowercaseTemplates(t *testing.T) {
+	got := expandEnv(`console/${user_id}/${APP_NAME:grove}`)
+	if got != "console/${user_id}/grove" {
+		t.Fatalf("lowercase template was changed unexpectedly: %q", got)
+	}
+}
+
 func TestLoadWithOptionsSupportsMySQLDatabaseConfig(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(configPath, []byte(`databases:
@@ -68,6 +85,23 @@ func TestLoadWithOptionsSupportsMySQLDatabaseConfig(t *testing.T) {
 	}
 	if cfg.Databases.Default.Charset != "utf8mb4" || cfg.Databases.Default.Loc != "Local" {
 		t.Fatalf("unexpected mysql defaults: %#v", cfg.Databases.Default)
+	}
+}
+
+func TestLoadWithOptionsReadsInitialRootPassword(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte(`security:
+  initial_root_password: root123456
+`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "api"})
+	if err != nil {
+		t.Fatalf("load root password config: %v", err)
+	}
+	if cfg.Security.InitialRootPassword != "root123456" {
+		t.Fatalf("unexpected initial root password: %q", cfg.Security.InitialRootPassword)
 	}
 }
 

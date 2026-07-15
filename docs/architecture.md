@@ -7,7 +7,7 @@ Grove 是一个 `api / console / worker` 三入口的 Go 单体脚手架：启�
 ## 运行拓扑
 
 ```text
-config.yaml / process env
+config.yaml
         │
         ▼
 app/*/cmd → config.Load → internal/provider.Provider
@@ -75,7 +75,7 @@ CoreServer → middleware → router → handler → service → model / databas
 
 ## 数据与配置边界
 
-- `config.yaml` 是唯一的本地配置文件；环境变量只作为外部覆盖入口。
+- `config.yaml` 是唯一的本地配置文件；默认值直接写在 YAML 中，不依赖环境变量。
 - PostgreSQL 是默认数据库；MySQL 8.0.16+ 通过同一 GORM/Connections 抽象提供支持。迁移、管理员、角色、Session、系统配置和审计数据的持久化真相源仍是配置选定的关系数据库。
 - migration 和 seed 按数据库 driver 分目录，版本号保持一致。
 - Redis 是缓存和队列后端，不替代 Session 数据库真相源。

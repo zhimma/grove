@@ -22,7 +22,7 @@ Worker 只有在启用 Job 或 Scheduler 后才应启动；默认配置不会让
 - `make migrate.up`：执行全部待执行迁移
 - `make migrate.down`：回滚最近一个迁移
 - `make migrate.status`：查看迁移状态
-- `make seed.bootstrap`：创建基础配置和 root 管理员，不覆盖已有 root 密码
+- `make seed.bootstrap`：创建基础配置和 root 管理员；初始密码读取 `config.yaml` 的 `security.initial_root_password`，不覆盖已有 root 密码
 - `make seed.demo`：写入开发/测试演示数据，production 环境拒绝执行
 
 迁移和 seed 会根据 `databases.default.driver` 选择对应方言目录：
@@ -38,6 +38,8 @@ database/seeds/postgres 或 database/seeds/mysql
 make migrate.up
 make seed.bootstrap
 ```
+
+`security.initial_root_password` 只在首次 bootstrap 时使用，数据库保存的是 bcrypt 哈希。留空时兼容读取 `GROVE_ROOT_PASSWORD`，再为空才生成一次性随机密码。
 
 ## 代码与验证
 

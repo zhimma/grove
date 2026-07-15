@@ -1,96 +1,94 @@
 app:
-  name: ${APP_NAME:grove}
-  env: ${APP_ENV:development}
-  # grove seed bootstrap 直接读取 GROVE_ROOT_PASSWORD；该密码不进入应用配置对象。
-  # app.debug defaults to true outside production and false in production when omitted.
-  # Set APP_DEBUG explicitly to override. Supported values: true/false/1/0/yes/no.
-  debug: ${APP_DEBUG:}
+  name: grove
+  env: development
+  # 本地默认值直接写在此文件中；生产环境请复制后按环境修改。
+  debug: true
 
-port: ${APP_PORT:8080}
-console_port: ${CONSOLE_PORT:8081}
-worker_port: ${WORKER_PORT:8082}
+port: 8080
+console_port: 8081
+worker_port: 8082
 
 server:
-  shutdown_timeout: ${SERVER_SHUTDOWN_TIMEOUT:30}
-  read_timeout: ${SERVER_READ_TIMEOUT:30}
-  write_timeout: ${SERVER_WRITE_TIMEOUT:30}
-  max_header_bytes: ${SERVER_MAX_HEADER_BYTES:1048576}
-  max_body_bytes: ${SERVER_MAX_BODY_BYTES:33554432}
+  shutdown_timeout: 30
+  read_timeout: 30
+  write_timeout: 30
+  max_header_bytes: 1048576
+  max_body_bytes: 33554432
 
 log:
-  level: ${LOG_LEVEL:info}
-  path: ${LOG_PATH:./logs}
-  console: ${LOG_CONSOLE:true}
-  service: ${LOG_SERVICE:grove}
+  level: info
+  path: ./logs
+  console: true
+  service: grove
 
 databases:
   default:
-    enabled: ${DB_ENABLED:false}
-    driver: ${DB_DRIVER:postgres}
-    host: ${DB_HOST:127.0.0.1}
-    port: ${DB_PORT:}
-    user: ${DB_USER:postgres}
-    password: ${DB_PASSWORD:}
-    dbname: ${DB_NAME:golang_web}
-    ssl_mode: ${DB_SSLMODE:disable}
-    charset: ${DB_CHARSET:utf8mb4}
-    parse_time: ${DB_PARSE_TIME:true}
-    loc: ${DB_LOC:Local}
-    tls: ${DB_TLS:false}
-    max_connections: ${DB_MAX_CONNECTIONS:20}
-    max_idle_conns: ${DB_MAX_IDLE_CONNS:10}
-    conn_max_lifetime: ${DB_CONN_MAX_LIFETIME:3600}
+    enabled: true
+    driver: mysql
+    host: 127.0.0.1
+    port: 3306
+    user: root
+    password: '123456'
+    dbname: db_grove
+    ssl_mode: disable
+    charset: utf8mb4
+    parse_time: true
+    loc: Local
+    tls: false
+    max_connections: 20
+    max_idle_conns: 10
+    conn_max_lifetime: 3600
   resources: {}
 
 redis:
-  enabled: ${REDIS_ENABLED:false}
-  addr: ${REDIS_ADDR:127.0.0.1:6379}
-  password: ${REDIS_PASSWORD:}
-  db: ${REDIS_DB:0}
+  enabled: true
+  addr: 127.0.0.1:6379
+  password: '123456'
+  db: 0
 
 jwt:
-  secret: ${JWT_SECRET:}
-  issuer: ${JWT_ISSUER:grove}
-  access_expiry_hours: ${JWT_ACCESS_EXPIRY_HOURS:24}
-  refresh_expiry_hours: ${JWT_REFRESH_EXPIRY_HOURS:168}
+  secret: '123456789012345678901234567890123'
+  issuer: grove
+  access_expiry_hours: 24
+  refresh_expiry_hours: 168
 
 job:
-  enabled: ${WORKER_ENABLED:false}
-  concurrency: ${JOB_CONCURRENCY:10}
+  enabled: true
+  concurrency: 10
   queues:
-    default: ${JOB_QUEUE_DEFAULT:5}
-    critical: ${JOB_QUEUE_CRITICAL:3}
-    low: ${JOB_QUEUE_LOW:1}
+    default: 5
+    critical: 3
+    low: 1
 
 scheduler:
   # Scheduler 只由 worker 进程承载；除非业务自行做跨实例协调，否则只启用一个实例。
-  enabled: ${SCHEDULER_ENABLED:false}
-  timezone: ${SCHEDULER_TIMEZONE:Local}
+  enabled: false
+  timezone: Local
 
 observability:
-  enabled: ${OBSERVABILITY_ENABLED:true}
-  metrics_enabled: ${OBSERVABILITY_METRICS_ENABLED:true}
-  metrics_path: ${OBSERVABILITY_METRICS_PATH:/metrics}
-  readiness_timeout: ${OBSERVABILITY_READINESS_TIMEOUT:3}
-  trace_sample_ratio: ${OBSERVABILITY_TRACE_SAMPLE_RATIO:0.1}
-  otlp_trace_endpoint: ${OBSERVABILITY_OTLP_TRACE_ENDPOINT:}
-  otlp_insecure: ${OBSERVABILITY_OTLP_INSECURE:false}
+  enabled: true
+  metrics_enabled: true
+  metrics_path: /metrics
+  readiness_timeout: 3
+  trace_sample_ratio: 0.1
+  otlp_trace_endpoint: ''
+  otlp_insecure: false
 
 casbin:
   enforcers:
     api:
-      enabled: ${CASBIN_API_ENABLED:false}
-      database: ${CASBIN_API_DATABASE:default}
-      mode: ${CASBIN_API_MODE:rbac}
-      table_name: ${CASBIN_API_TABLE:casbin_rules}
+      enabled: false
+      database: default
+      mode: rbac
+      table_name: casbin_rules
     console:
-      enabled: ${CASBIN_CONSOLE_ENABLED:false}
-      database: ${CASBIN_CONSOLE_DATABASE:default}
-      mode: ${CASBIN_CONSOLE_MODE:rbac}
-      table_name: ${CASBIN_CONSOLE_TABLE:console_casbin_rules}
+      enabled: true
+      database: default
+      mode: rbac
+      table_name: console_casbin_rules
 
 storage:
-  default: ${STORAGE_DEFAULT:local}
+  default: local
   default_upload_policy: document
   upload_policies:
     avatar:
@@ -102,86 +100,97 @@ storage:
       directory: documents
       max_bytes: 20971520
       extensions: [.pdf, .txt, .csv, .doc, .docx, .xls, .xlsx]
-      mime_types: [application/pdf, text/plain, text/csv, application/x-ole-storage, application/zip, application/octet-stream]
+      mime_types:
+        [
+          application/pdf,
+          text/plain,
+          text/csv,
+          application/x-ole-storage,
+          application/zip,
+          application/octet-stream,
+        ]
   disks:
     local:
-      driver: ${STORAGE_LOCAL_DRIVER:local}
-      root: ${STORAGE_LOCAL_ROOT:./storage}
-      base_url: ${STORAGE_LOCAL_BASE_URL:/storage}
-      prefix: ${STORAGE_LOCAL_PREFIX:console}
+      driver: local
+      root: ./storage
+      base_url: /storage
+      prefix: console
     s3:
-      driver: ${STORAGE_S3_DRIVER:s3}
-      endpoint: ${STORAGE_S3_ENDPOINT:s3.ap-southeast-1.amazonaws.com}
-      region: ${STORAGE_S3_REGION:ap-southeast-1}
-      bucket: ${STORAGE_S3_BUCKET:demo-bucket}
-      access_key: ${STORAGE_S3_ACCESS_KEY:}
-      secret_key: ${STORAGE_S3_SECRET_KEY:}
-      secure: ${STORAGE_S3_SECURE:true}
-      base_url: ${STORAGE_S3_BASE_URL:}
-      prefix: ${STORAGE_S3_PREFIX:console}
+      driver: s3
+      endpoint: s3.ap-southeast-1.amazonaws.com
+      region: ap-southeast-1
+      bucket: demo-bucket
+      access_key: ''
+      secret_key: ''
+      secure: true
+      base_url: ''
+      prefix: console
       sts:
-        enabled: ${STORAGE_STS_ENABLED:false}
-        endpoint: ${STORAGE_STS_ENDPOINT:}
-        region: ${STORAGE_STS_REGION:ap-southeast-1}
-        role_arn: ${STORAGE_STS_ROLE_ARN:}
-        role_session_name: ${STORAGE_STS_ROLE_SESSION_NAME:grove-console}
-        duration: ${STORAGE_STS_DURATION:3600}
+        enabled: false
+        endpoint: ''
+        region: ap-southeast-1
+        role_arn: ''
+        role_session_name: grove-console
+        duration: 3600
         allow_prefix:
-          - ${STORAGE_STS_ALLOW_PREFIX:console/${user_id}}
+          - 'console/${user_id}'
         allow_actions:
-          - ${STORAGE_STS_ALLOW_ACTION_1:s3:PutObject}
-          - ${STORAGE_STS_ALLOW_ACTION_2:s3:GetObject}
-          - ${STORAGE_STS_ALLOW_ACTION_3:s3:AbortMultipartUpload}
-          - ${STORAGE_STS_ALLOW_ACTION_4:s3:ListBucketMultipartUploads}
-          - ${STORAGE_STS_ALLOW_ACTION_5:s3:ListMultipartUploadParts}
+          - s3:PutObject
+          - s3:GetObject
+          - s3:AbortMultipartUpload
+          - s3:ListBucketMultipartUploads
+          - s3:ListMultipartUploadParts
 
 docs:
-  enabled: ${DOCS_ENABLED:true}
-  title: ${DOCS_TITLE:Grove API}
-  description: ${DOCS_DESCRIPTION:API framework scaffold for interface-driven services}
-  version: ${DOCS_VERSION:1.0.0}
-  base_path: ${DOCS_BASE_PATH:/api/v1}
-  scalar_script_url: ${DOCS_SCALAR_SCRIPT_URL:https://cdn.jsdelivr.net/npm/@scalar/api-reference}
+  enabled: true
+  title: Grove API
+  description: API framework scaffold for interface-driven services
+  version: 1.0.0
+  base_path: /api/v1
+  scalar_script_url: https://cdn.jsdelivr.net/npm/@scalar/api-reference
   schemes:
-    - ${DOCS_SCHEME_1:http}
+    - http
 
 cors:
-  enabled: ${CORS_ENABLED:true}
+  enabled: true
   allowed_origins:
-    - "${CORS_ALLOWED_ORIGIN_1:*}"
+    - '*'
   allowed_methods:
-    - ${CORS_ALLOWED_METHOD_1:GET}
-    - ${CORS_ALLOWED_METHOD_2:POST}
-    - ${CORS_ALLOWED_METHOD_3:PUT}
-    - ${CORS_ALLOWED_METHOD_4:PATCH}
-    - ${CORS_ALLOWED_METHOD_5:DELETE}
-    - ${CORS_ALLOWED_METHOD_6:OPTIONS}
+    - GET
+    - POST
+    - PUT
+    - PATCH
+    - DELETE
+    - OPTIONS
   allowed_headers:
-    - ${CORS_ALLOWED_HEADER_1:Authorization}
-    - ${CORS_ALLOWED_HEADER_2:Content-Type}
-    - ${CORS_ALLOWED_HEADER_3:X-Request-Id}
-  allow_credentials: ${CORS_ALLOW_CREDENTIALS:false}
-  max_age: ${CORS_MAX_AGE:600}
+    - Authorization
+    - Content-Type
+    - X-Request-Id
+  allow_credentials: false
+  max_age: 600
 
 api:
-  prefix: ${API_PREFIX:/api/v1}
-  default_per_page: ${API_DEFAULT_PER_PAGE:20}
-  max_per_page: ${API_MAX_PER_PAGE:100}
+  prefix: /api/v1
+  default_per_page: 20
+  max_per_page: 100
 
 demo:
   # Demo endpoints are intended for local development and tests. Production always ignores this switch.
-  enabled: ${DEMO_ENABLED:false}
+  enabled: false
 
 security:
+  # 仅用于首次 bootstrap 创建 root；数据库中仍保存 bcrypt 哈希。
+  # 请复制配置后填写一个仅供本地或当前环境使用的密码。
+  initial_root_password: ''
   # Empty means no reverse proxy is trusted. Add only explicit proxy IPs or CIDRs.
   trusted_proxies: []
-  hsts_enabled: ${HSTS_ENABLED:false}
+  hsts_enabled: false
   # Independent application key for encrypting business config secrets.
   # Use at least 32 random bytes or base64:<32-byte-base64>. Never store this key in system_configs.
-  config_encryption_key: ${CONFIG_ENCRYPTION_KEY:}
+  config_encryption_key: ''
   login:
-    enabled: ${LOGIN_PROTECTION_ENABLED:true}
-    attempts_per_minute: ${LOGIN_ATTEMPTS_PER_MINUTE:10}
-    burst: ${LOGIN_BURST:5}
-    failure_limit: ${LOGIN_FAILURE_LIMIT:5}
-    lock_seconds: ${LOGIN_LOCK_SECONDS:900}
+    enabled: true
+    attempts_per_minute: 10
+    burst: 5
+    failure_limit: 5
+    lock_seconds: 900

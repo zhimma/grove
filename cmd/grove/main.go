@@ -274,7 +274,7 @@ func runBootstrapSeeds(cmd *cobra.Command, seedBasePath string) error {
 		return err
 	}
 
-	password, generated, err := resolveRootPassword()
+	password, generated, err := resolveRootPassword(cfg)
 	if err != nil {
 		return err
 	}
@@ -357,7 +357,12 @@ func resolveSeedDir(baseDir, driver, kind string) (string, error) {
 	return "", fmt.Errorf("database %s seed directory not found under %s", driver, baseDir)
 }
 
-func resolveRootPassword() (string, bool, error) {
+func resolveRootPassword(cfg *config.Config) (string, bool, error) {
+	if cfg != nil {
+		if password := strings.TrimSpace(cfg.Security.InitialRootPassword); password != "" {
+			return password, false, nil
+		}
+	}
 	if password := strings.TrimSpace(os.Getenv(rootPasswordEnv)); password != "" {
 		return password, false, nil
 	}

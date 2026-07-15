@@ -6,9 +6,7 @@
 
 Grove 只维护一个本地配置文件：`config.yaml`。
 
-`config.example.yaml` 是模板，不参与运行。部署平台可以通过进程环境变量覆盖配置文件中的 `${VAR:default}` 占位符，但 Grove 不会自动读取 `.env` 文件。
-
-配置文件支持 `${VAR:default}` 语法。
+`config.example.yaml` 是模板，不参与运行。复制后直接编辑 `config.yaml`；Grove 不会自动读取 `.env` 文件，配置模板也不使用环境变量占位符。
 
 YAML 使用严格字段校验：未知字段、字段拼写错误和多个 YAML document 都会导致启动失败。
 
@@ -33,12 +31,12 @@ databases:
     host: 127.0.0.1
     port: 5432
     user: postgres
-    password: ${DB_PASSWORD}
+    password: ""
     dbname: grove
     ssl_mode: disable
 
 jwt:
-  secret: ${JWT_SECRET}
+  secret: ""
   issuer: grove
   access_expiry_hours: 24
   refresh_expiry_hours: 168
@@ -59,7 +57,7 @@ if err != nil {
 
 - `name`：应用名称
 - `env`：运行环境
-- `debug`：调试开关；未显式配置时，`production` 默认为 `false`，其他环境默认为 `true`。可用 `APP_DEBUG=true/false/1/0/yes/no` 覆盖。
+- `debug`：调试开关；直接在 `config.yaml` 设置。未显式配置时，`production` 默认为 `false`，其他环境默认为 `true`。
 
 ### `port` / `console_port`
 
@@ -109,7 +107,7 @@ Redis 连接配置。启用缓存、队列或 worker 时需要。
 - `enabled`：是否在 Worker 进程启用计划任务调度器，默认 `false`
 - `timezone`：IANA 时区名，例如 `Asia/Shanghai`，默认 `Local`
 
-可用 `SCHEDULER_ENABLED`、`SCHEDULER_TIMEZONE` 覆盖。API 和 Console 不会自动承载 Scheduler。
+直接在 `config.yaml` 设置 `enabled` 和 `timezone`。API 和 Console 不会自动承载 Scheduler。
 
 ### `jwt`
 
@@ -153,7 +151,21 @@ Redis 连接配置。启用缓存、队列或 worker 时需要。
 - `security.trusted_proxies`：显式信任的代理地址或 CIDR
 - `security.hsts_enabled`：是否启用 HSTS
 - `security.config_encryption_key`：系统配置敏感值加密密钥
+- `security.initial_root_password`：首次 bootstrap 使用的 root 初始密码；仅用于生成 bcrypt 哈希
 - `security.login`：登录限流与锁定参数
+
+### root 初始密码
+
+在 `config.yaml` 中配置：
+
+```yaml
+security:
+  initial_root_password: 'replace-with-your-password'
+```
+
+该字段只用于首次 `make seed.bootstrap`。CLI 会将它转换为 bcrypt 哈希后写入 `console_admins.password`，不会把明文写入数据库；已有 root 管理员也不会被重复 bootstrap 覆盖。
+
+留空时可临时兼容 `GROVE_ROOT_PASSWORD`，两者都未提供时生成一次性随机密码并只输出一次。生产环境应使用强密码，并在首次登录后修改。
 
 ## 使用约定
 
@@ -165,7 +177,7 @@ Redis 连接配置。启用缓存、队列或 worker 时需要。
 - `driver` 只能是 `postgres` 或 `mysql`；MySQL 必须配置 `charset` 和 `loc`。
 - 已启用的 Casbin enforcer 必须引用已启用的数据库。
 - 生产环境必须保持 `app.debug=false`，避免响应体暴露底层错误信息。
-- 本地开发直接编辑未提交的 `config.yaml`；生产环境挂载受保护的配置文件，或由部署平台通过环境变量覆盖敏感字段。
+- 本地开发直接编辑未提交的 `config.yaml`；生产环境挂载受保护的、已填写敏感值的配置文件。
 - 多数据库资源命名应体现业务语义，例如 `orders`、`crm`。
 - 未启用的组件应显式保持 `enabled: false`。
 

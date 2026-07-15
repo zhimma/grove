@@ -190,6 +190,7 @@ type SecurityConfig struct {
 	TrustedProxies      []string              `yaml:"trusted_proxies"`
 	HSTSEnabled         bool                  `yaml:"hsts_enabled"`
 	ConfigEncryptionKey string                `yaml:"config_encryption_key"`
+	InitialRootPassword string                `yaml:"initial_root_password"`
 	Login               LoginProtectionConfig `yaml:"login"`
 }
 

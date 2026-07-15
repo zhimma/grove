@@ -76,7 +76,7 @@ database/
 
 **Steps:**
 
-1. 确认默认数据库仍为 PostgreSQL，环境变量只覆盖配置字段，不引入第二套配置源。
+1. 确认默认数据库仍为 PostgreSQL，数据库 driver 和连接参数直接来自 `config.yaml`。
 2. 列出全部 migration 版本号、up/down 对，记录 seed 的 bootstrap/demo 边界。
 3. 搜索 PostgreSQL 专属 SQL：`::jsonb`、`TIMESTAMPTZ`、`BIGSERIAL`、`ON CONFLICT`、`USING`、partial index。
 4. 搜索 MySQL 专属 SQL：`DATE_SUB`、`ON DUPLICATE KEY`，确认它们没有泄漏到共享业务查询。
@@ -208,7 +208,7 @@ go test ./cmd/grove ./pkg/migrate -run 'TestSeed|TestBootstrap|TestDemo' -v
 go test ./internal/config ./pkg/database ./internal/provider -v
 ```
 
-完成条件：配置文件、环境变量和 DSN 三者对 MySQL 的行为一致，默认 PostgreSQL 回归不变。
+完成条件：配置文件和 DSN 对 MySQL 的行为一致，默认 PostgreSQL 回归不变。
 
 ### Task 6：修复共享模型和业务 SQL 的方言耦合 `[x]`
 

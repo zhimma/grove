@@ -22,7 +22,7 @@ databases:
     host: 127.0.0.1
     port: 3306
     user: grove
-    password: ${DB_PASSWORD}
+    password: ""
     dbname: grove
     charset: utf8mb4
     parse_time: true
@@ -95,7 +95,7 @@ databases:
     host: 127.0.0.1
     port: 5432
     user: postgres
-    password: ${DB_PASSWORD}
+    password: ""
     dbname: grove
     ssl_mode: disable
 
@@ -104,7 +104,7 @@ redis:
   addr: 127.0.0.1:6379
 
 jwt:
-  secret: ${JWT_SECRET}
+  secret: ""
   issuer: grove
 
 casbin:
@@ -130,11 +130,11 @@ observability:
 
 ```bash
 go run ./cmd/grove migrate up
-# 先通过部署平台或 secret manager 注入 GROVE_ROOT_PASSWORD
+# 在受保护的 config.yaml 中填写 security.initial_root_password
 go run ./cmd/grove seed bootstrap
 ```
 
-生产环境上线前必须配置强 JWT secret，并通过 secret manager 注入 root 初始密码或安全保存 CLI 首次生成的一次性密码；首次登录后立即修改。
+生产环境上线前必须在受保护的 `config.yaml` 中填写强 JWT secret 和强 root 初始密码。CLI 只把该密码的 bcrypt 哈希写入数据库；首次登录后立即修改。已有 root 账号不会被重复 bootstrap 覆盖。
 
 ### 4. 启动服务
 
@@ -229,7 +229,7 @@ docker build -t grove-console .
 docker run --rm -p 8081:8081 grove-console
 ```
 
-容器部署时建议通过环境变量覆盖数据库、Redis 和 JWT 配置。
+容器部署时挂载已经填写完成的 `config.yaml`，不要依赖环境变量拼装后端配置。
 
 ## 健康检查与可观测性
 
