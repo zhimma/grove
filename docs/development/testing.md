@@ -7,7 +7,7 @@
 当前仓库主要包含：
 
 - Go 单元测试与集成测试
-- Testcontainers 驱动的真实 PostgreSQL 生命周期测试
+- Testcontainers 驱动的真实 PostgreSQL/MySQL 生命周期测试
 - 路由与服务层测试
 - 前端 unit、类型检查和 production build
 
@@ -45,13 +45,18 @@ cd web/admin-vben
 pnpm test:unit
 ```
 
-### 运行 PostgreSQL 集成测试
+### 运行数据库集成测试
 
 ```bash
 go test -tags=integration ./tests/integration -v
 ```
 
-集成测试会通过 Testcontainers 启动 PostgreSQL，并验证迁移、bootstrap seed、重复执行密码不覆盖、dirty 状态和完整 down 生命周期。本地需要 Docker、OrbStack 或其他兼容容器运行时；本地容器不可用时测试会 Skip，CI 中容器启动失败会直接失败。
+集成测试会通过 Testcontainers 按 `GROVE_INTEGRATION_DB` 启动 PostgreSQL 或 MySQL，并验证迁移、bootstrap seed、重复执行密码不覆盖、dirty 状态、约束和完整 down 生命周期。本地需要 Docker、OrbStack 或其他兼容容器运行时；本地容器不可用时测试会 Skip，CI 中容器启动失败会直接失败。
+
+```bash
+GROVE_INTEGRATION_DB=postgres go test -tags=integration ./tests/integration -v
+GROVE_INTEGRATION_DB=mysql go test -tags=integration ./tests/integration -v
+```
 
 ## 编写约定
 

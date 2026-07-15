@@ -84,8 +84,10 @@ func defaultConfig() Config {
 		Databases: DatabasesConfig{
 			Default: DatabaseConfig{
 				Driver:          "postgres",
-				Port:            "5432",
 				SSLMode:         "disable",
+				Charset:         "utf8mb4",
+				ParseTime:       true,
+				Loc:             "Local",
 				MaxConnections:  20,
 				MaxIdleConns:    10,
 				ConnMaxLifetime: 3600,
@@ -248,6 +250,21 @@ func applyEnvironmentOverrides(cfg *Config) {
 	if value := os.Getenv("DB_SSLMODE"); value != "" {
 		cfg.Databases.Default.SSLMode = value
 	}
+	if value := os.Getenv("DB_DRIVER"); value != "" {
+		cfg.Databases.Default.Driver = value
+	}
+	if value := os.Getenv("DB_CHARSET"); value != "" {
+		cfg.Databases.Default.Charset = value
+	}
+	if value := os.Getenv("DB_PARSE_TIME"); value != "" {
+		cfg.Databases.Default.ParseTime = parseBool(value)
+	}
+	if value := os.Getenv("DB_LOC"); value != "" {
+		cfg.Databases.Default.Loc = value
+	}
+	if value := os.Getenv("DB_TLS"); value != "" {
+		cfg.Databases.Default.TLS = parseBool(value)
+	}
 	if value := os.Getenv("DB_ENABLED"); value != "" {
 		cfg.Databases.Default.Enabled = parseBool(value)
 	}
@@ -367,6 +384,11 @@ func (c *Config) normalize(service string, debugConfigured bool) {
 	if c.Databases.Resources == nil {
 		c.Databases.Resources = map[string]DatabaseConfig{}
 	}
+	normalizeDatabaseConfig(&c.Databases.Default)
+	for name, databaseCfg := range c.Databases.Resources {
+		normalizeDatabaseConfig(&databaseCfg)
+		c.Databases.Resources[name] = databaseCfg
+	}
 	if c.Casbin.Enforcers == nil {
 		c.Casbin.Enforcers = map[string]CasbinEnforcerConfig{}
 	}
@@ -456,6 +478,33 @@ func (c *Config) normalize(service string, debugConfigured bool) {
 	}
 	if c.Observability.ReadinessTimeout <= 0 {
 		c.Observability.ReadinessTimeout = 3
+	}
+}
+
+func normalizeDatabaseConfig(cfg *DatabaseConfig) {
+	if cfg == nil {
+		return
+	}
+	driver := strings.ToLower(strings.TrimSpace(cfg.Driver))
+	if driver == "postgresql" {
+		driver = "postgres"
+	}
+	if driver == "" {
+		driver = "postgres"
+	}
+	cfg.Driver = driver
+	if strings.TrimSpace(cfg.Port) == "" {
+		if driver == "mysql" {
+			cfg.Port = "3306"
+		} else {
+			cfg.Port = "5432"
+		}
+	}
+	if strings.TrimSpace(cfg.Charset) == "" {
+		cfg.Charset = "utf8mb4"
+	}
+	if strings.TrimSpace(cfg.Loc) == "" {
+		cfg.Loc = "Local"
 	}
 }
 
@@ -629,8 +678,12 @@ func validateDatabaseConfig(name string, cfg DatabaseConfig) error {
 	if name == "" {
 		return fmt.Errorf("database resource name cannot be empty")
 	}
-	if !strings.EqualFold(strings.TrimSpace(cfg.Driver), "postgres") {
-		return fmt.Errorf("database %q driver must be postgres", name)
+	driver := strings.ToLower(strings.TrimSpace(cfg.Driver))
+	switch driver {
+	case "postgres", "postgresql":
+	case "mysql":
+	default:
+		return fmt.Errorf("database %q uses unsupported driver %q", name, cfg.Driver)
 	}
 	if strings.TrimSpace(cfg.Host) == "" {
 		return fmt.Errorf("database %q host is required", name)
@@ -643,6 +696,14 @@ func validateDatabaseConfig(name string, cfg DatabaseConfig) error {
 	}
 	if strings.TrimSpace(cfg.DBName) == "" {
 		return fmt.Errorf("database %q dbname is required", name)
+	}
+	if driver == "mysql" {
+		if strings.TrimSpace(cfg.Charset) == "" {
+			return fmt.Errorf("database %q charset is required for mysql", name)
+		}
+		if strings.TrimSpace(cfg.Loc) == "" {
+			return fmt.Errorf("database %q loc is required for mysql", name)
+		}
 	}
 	return nil
 }

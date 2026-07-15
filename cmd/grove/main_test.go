@@ -99,6 +99,39 @@ func TestMigrateCommandSupportsCustomSourcePath(t *testing.T) {
 	assertContains(t, out.String(), "--path")
 }
 
+func TestMigrateCreateUsesConfiguredDialectDirectory(t *testing.T) {
+	root := t.TempDir()
+	base := filepath.Join(root, "migrations")
+	mustMkdir(t, filepath.Join(base, "postgres"))
+	mustMkdir(t, filepath.Join(base, "mysql"))
+	configPath := filepath.Join(root, "config.yaml")
+	mustWrite(t, configPath, `databases:
+  default:
+    driver: mysql
+`)
+
+	previousConfigFile := configFile
+	configFile = configPath
+	t.Cleanup(func() { configFile = previousConfigFile })
+
+	cmd := newMigrateCmd()
+	cmd.SetArgs([]string{"--path", base, "create", "create_articles"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("create mysql migration: %v", err)
+	}
+	files, err := filepath.Glob(filepath.Join(base, "mysql", "*.sql"))
+	if err != nil {
+		t.Fatalf("list created mysql migrations: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected two mysql migration files, got %d", len(files))
+	}
+	postgresFiles, _ := filepath.Glob(filepath.Join(base, "postgres", "*.sql"))
+	if len(postgresFiles) != 0 {
+		t.Fatalf("migration create wrote PostgreSQL files: %v", postgresFiles)
+	}
+}
+
 func TestDemoSeedRefusesProduction(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.yaml")
@@ -125,7 +158,7 @@ jwt:
 
 func TestBootstrapSeedDoesNotOverwriteRootPassword(t *testing.T) {
 	root := filepath.Join("..", "..")
-	seed := mustRead(t, filepath.Join(root, "database", "seeds", "bootstrap", "202604150002_console_root_super_admin.sql"))
+	seed := mustRead(t, filepath.Join(root, "database", "seeds", "postgres", "bootstrap", "202604150002_console_root_super_admin.sql"))
 
 	assertContains(t, seed, "{{GROVE_ROOT_PASSWORD_HASH}}")
 	assertContains(t, seed, "ON CONFLICT DO NOTHING")
@@ -134,14 +167,16 @@ func TestBootstrapSeedDoesNotOverwriteRootPassword(t *testing.T) {
 
 func TestSeedFilesAreSplitBySafetyBoundary(t *testing.T) {
 	root := filepath.Join("..", "..", "database", "seeds")
-	for _, path := range []string{
-		filepath.Join(root, "bootstrap", "202604150001_system_configs.sql"),
-		filepath.Join(root, "bootstrap", "202604150002_console_root_super_admin.sql"),
-		filepath.Join(root, "demo", "202604150001_api_user.sql"),
-		filepath.Join(root, "demo", "202604150002_console_admin.sql"),
-	} {
-		if _, err := os.Stat(path); err != nil {
-			t.Errorf("expected seed file %s: %v", path, err)
+	for _, dialect := range []string{"postgres", "mysql"} {
+		for _, path := range []string{
+			filepath.Join(root, dialect, "bootstrap", "202604150001_system_configs.sql"),
+			filepath.Join(root, dialect, "bootstrap", "202604150002_console_root_super_admin.sql"),
+			filepath.Join(root, dialect, "demo", "202604150001_api_user.sql"),
+			filepath.Join(root, dialect, "demo", "202604150002_console_admin.sql"),
+		} {
+			if _, err := os.Stat(path); err != nil {
+				t.Errorf("expected seed file %s: %v", path, err)
+			}
 		}
 	}
 }

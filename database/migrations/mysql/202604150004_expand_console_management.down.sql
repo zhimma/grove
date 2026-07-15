@@ -1,0 +1,2 @@
+ALTER TABLE console_admins
+    MODIFY COLUMN email VARCHAR(160) NOT NULL;

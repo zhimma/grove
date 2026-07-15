@@ -4,7 +4,7 @@
 
 ## 适用范围
 
-当前数据库能力基于 GORM，支持：
+当前数据库能力基于 GORM，支持 PostgreSQL 和 MySQL 8.0.16+：
 
 - 默认数据库连接
 - 命名数据库资源
@@ -28,6 +28,24 @@ databases:
     password: ${DB_PASSWORD}
     dbname: grove
     ssl_mode: disable
+```
+
+MySQL 配置：
+
+```yaml
+databases:
+  default:
+    enabled: true
+    driver: mysql
+    host: 127.0.0.1
+    port: 3306
+    user: root
+    password: ${DB_PASSWORD}
+    dbname: grove
+    charset: utf8mb4
+    parse_time: true
+    loc: Local
+    tls: false
 ```
 
 ### 在服务层获取连接
@@ -63,12 +81,24 @@ type Article struct {
 go run ./cmd/grove migrate up
 ```
 
+迁移和 seed 按数据库方言分层：
+
+```text
+database/migrations/postgres/
+database/migrations/mysql/
+database/seeds/postgres/
+database/seeds/mysql/
+```
+
+两种数据库使用相同迁移版本号，但 SQL 文件不混用。现有 PostgreSQL 部署继续使用 PostgreSQL 目录；新 MySQL 环境会自动选择 MySQL 目录。
+
 ## 使用约定
 
 - 共享模型放在 `internal/model`。
 - 服务层通过 `p.DB` 获取数据库连接，不在 handler 中直接操作数据库。
 - 需要多数据源时使用 `databases.resources`，不要在业务代码里手工创建连接。
 - 迁移文件使用正反向 SQL，按时间戳命名。
+- 生产环境只通过 migration 和 seed 初始化数据库，不使用 AutoMigrate 替代迁移。
 
 ## 模型边界
 

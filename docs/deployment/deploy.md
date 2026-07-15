@@ -7,9 +7,27 @@
 ### 运行环境
 
 - Go 1.25.12+
-- PostgreSQL 14+
+- PostgreSQL 14+ 或 MySQL 8.0.16+
 - Redis 6+（启用缓存、队列或 worker 时需要）
 - Linux systemd 环境，或容器运行环境
+
+生产环境根据 `databases.default.driver` 自动选择对应的 migration/seed 方言目录；不要让 MySQL 执行 PostgreSQL SQL。
+
+MySQL 配置至少包含：
+
+```yaml
+databases:
+  default:
+    driver: mysql
+    host: 127.0.0.1
+    port: 3306
+    user: grove
+    password: ${DB_PASSWORD}
+    dbname: grove
+    charset: utf8mb4
+    parse_time: true
+    loc: Local
+```
 
 ### 发布前检查
 
@@ -218,7 +236,7 @@ docker run --rm -p 8081:8081 grove-console
 HTTP 服务提供三个健康入口：
 
 - `/health/live`：只表示进程存活，不访问数据库或 Redis。
-- `/health/ready`：检查当前服务启用的 PostgreSQL、Redis 和 queue 后端；任一依赖失败时返回 `503`。
+- `/health/ready`：检查当前服务启用的 PostgreSQL/MySQL、Redis 和 queue 后端；任一依赖失败时返回 `503`。
 - `/health`：兼容旧部署，当前等价于 live；新部署不要继续使用它作为 readiness probe。
 
 检查示例：

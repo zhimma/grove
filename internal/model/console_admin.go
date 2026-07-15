@@ -8,7 +8,7 @@ import (
 
 type ConsoleAdmin struct {
 	Base
-	Account            string       `gorm:"size:120;uniqueIndex:idx_console_admins_account_active,where:deleted_at IS NULL;not null" json:"account"`
+	Account            string       `gorm:"size:120;not null" json:"account"`
 	Username           string       `gorm:"size:120" json:"username"`
 	Email              string       `gorm:"size:160" json:"email"`
 	Phone              string       `gorm:"size:32" json:"phone"`

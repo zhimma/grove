@@ -5,7 +5,7 @@
 ## 1. 准备环境
 
 - Go 1.25.12+
-- PostgreSQL 14+
+- PostgreSQL 14+ 或 MySQL 8.0.16+
 - Node.js 20.19+
 - pnpm 10.28.2（仅启动前端需要）
 - Redis 6+（启用 Cache、Job 或 Worker 时需要）
@@ -57,13 +57,21 @@ casbin:
       table_name: console_casbin_rules
 ```
 
-## 3. 初始化 PostgreSQL
+## 3. 初始化数据库
 
 数据库只需创建一次：
 
 ```bash
 createdb -h 127.0.0.1 -p 5432 -U zhimma -W grove_dev
 ```
+
+如果使用 MySQL，先创建数据库：
+
+```bash
+mysql -h 127.0.0.1 -P 3306 -u root -p -e 'CREATE DATABASE grove_dev CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;'
+```
+
+并在 `config.yaml` 中设置 `databases.default.driver: mysql`、端口 `3306` 和 MySQL 账号。
 
 执行迁移和基础种子：
 

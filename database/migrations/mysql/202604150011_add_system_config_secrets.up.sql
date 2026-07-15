@@ -1,0 +1,2 @@
+ALTER TABLE system_configs
+    ADD COLUMN is_secret BOOLEAN NOT NULL DEFAULT FALSE;

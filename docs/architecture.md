@@ -12,7 +12,7 @@ config.yaml / process env
         ▼
 app/*/cmd → config.Load → internal/provider.Provider
         │                         │
-        │                         ├─ PostgreSQL / Redis
+        │                         ├─ PostgreSQL or MySQL / Redis
         │                         ├─ JWT / Casbin / Storage
         │                         ├─ Cache / Event / Job / Scheduler
         │                         └─ Observability / Readiness
@@ -76,7 +76,8 @@ CoreServer → middleware → router → handler → service → model / databas
 ## 数据与配置边界
 
 - `config.yaml` 是唯一的本地配置文件；环境变量只作为外部覆盖入口。
-- PostgreSQL 是迁移、管理员、角色、Session、系统配置和审计数据的持久化真相源。
+- PostgreSQL 是默认数据库；MySQL 8.0.16+ 通过同一 GORM/Connections 抽象提供支持。迁移、管理员、角色、Session、系统配置和审计数据的持久化真相源仍是配置选定的关系数据库。
+- migration 和 seed 按数据库 driver 分目录，版本号保持一致。
 - Redis 是缓存和队列后端，不替代 Session 数据库真相源。
 - `console_casbin_rules` 保存 API 权限；菜单不进入 Casbin。
 - 敏感系统配置使用加密存储；基础设施密钥必须来自配置文件保护区、环境变量或外部 secret manager。

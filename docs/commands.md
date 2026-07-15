@@ -25,6 +25,13 @@ Worker 只有在启用 Job 或 Scheduler 后才应启动；默认配置不会让
 - `make seed.bootstrap`：创建基础配置和 root 管理员，不覆盖已有 root 密码
 - `make seed.demo`：写入开发/测试演示数据，production 环境拒绝执行
 
+迁移和 seed 会根据 `databases.default.driver` 选择对应方言目录：
+
+```text
+database/migrations/postgres 或 database/migrations/mysql
+database/seeds/postgres 或 database/seeds/mysql
+```
+
 典型顺序：
 
 ```bash

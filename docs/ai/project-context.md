@@ -23,19 +23,20 @@ Grove 是 Go 单体脚手架，不是 Java 企业框架的 Go 翻译版。它借
 - `internal/provider`：启动期依赖装配和生命周期
 - `internal/model`：共享 GORM 模型
 - `pkg/*`：Cache、Event、HTTP Client、Storage、Job、Permission 等通用能力
-- `database/migrations`：正反向 SQL 迁移
-- `database/seeds`：bootstrap/demo seed
+- `database/migrations/{postgres,mysql}`：按数据库方言分层的正反向 SQL 迁移
+- `database/seeds/{postgres,mysql}`：按数据库方言分层的 bootstrap/demo seed
 - `web/admin-vben/apps/console`：Vue/Vite 管理后台
 
 ## 关键真相源
 
-- 数据库：PostgreSQL
+- 数据库：PostgreSQL 默认，MySQL 8.0.16+ 可选
 - Console Session：数据库 `console_sessions`
 - API 权限目录：运行时受保护路由扫描
 - API 权限规则：Console Casbin
 - 菜单目录：前端本地路由
 - 菜单授权结果：角色 `menu_keys`
 - 配置：`config.yaml`；环境变量只作外部覆盖
+- migration/seed：按数据库 driver 选择对应方言子目录，版本号保持一致
 - readiness：Provider 实际成功装配的依赖集合
 
 ## 不要默认做的事

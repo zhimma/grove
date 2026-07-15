@@ -13,6 +13,8 @@ import (
 	"time"
 
 	golangmigrate "github.com/golang-migrate/migrate/v4"
+	migratedatabase "github.com/golang-migrate/migrate/v4/database"
+	migratemysql "github.com/golang-migrate/migrate/v4/database/mysql"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"gorm.io/gorm"
@@ -43,7 +45,11 @@ func NewManager(db *gorm.DB, dir string) *Manager {
 }
 
 func (m *Manager) Up() (int, error) {
-	files, err := listMigrations(m.dir)
+	dir, err := m.migrationDir()
+	if err != nil {
+		return 0, err
+	}
+	files, err := listMigrations(dir)
 	if err != nil {
 		return 0, err
 	}
@@ -68,7 +74,11 @@ func (m *Manager) Up() (int, error) {
 }
 
 func (m *Manager) Down() (string, error) {
-	files, err := listMigrations(m.dir)
+	dir, err := m.migrationDir()
+	if err != nil {
+		return "", err
+	}
+	files, err := listMigrations(dir)
 	if err != nil {
 		return "", err
 	}
@@ -116,7 +126,11 @@ func validateDownMigration(db *gorm.DB, name string) error {
 }
 
 func (m *Manager) Status() ([]Status, error) {
-	files, err := listMigrations(m.dir)
+	dir, err := m.migrationDir()
+	if err != nil {
+		return nil, err
+	}
+	files, err := listMigrations(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -153,28 +167,92 @@ func (m *Manager) openEngine() (*golangmigrate.Migrate, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	driver, err := postgres.WithConnection(context.Background(), conn, &postgres.Config{
-		MigrationsTable: metadataTable,
-	})
+	driverName := normalizeDriver(m.db.Dialector.Name())
+	var migrationDriver migratedatabase.Driver
+	switch driverName {
+	case "postgres":
+		migrationDriver, err = postgres.WithConnection(context.Background(), conn, &postgres.Config{
+			MigrationsTable: metadataTable,
+		})
+	case "mysql":
+		migrationDriver, err = migratemysql.WithConnection(context.Background(), conn, &migratemysql.Config{
+			MigrationsTable: metadataTable,
+		})
+	default:
+		_ = conn.Close()
+		return nil, nil, fmt.Errorf("unsupported migration database driver: %s", m.db.Dialector.Name())
+	}
 	if err != nil {
 		_ = conn.Close()
 		return nil, nil, err
 	}
 
-	absDir, err := filepath.Abs(m.dir)
+	dir, err := m.migrationDir()
 	if err != nil {
-		_ = driver.Close()
+		_ = migrationDriver.Close()
+		return nil, nil, err
+	}
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		_ = migrationDriver.Close()
 		return nil, nil, err
 	}
 	sourceURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(absDir)}).String()
-	engine, err := golangmigrate.NewWithDatabaseInstance(sourceURL, "postgres", driver)
+	engine, err := golangmigrate.NewWithDatabaseInstance(sourceURL, driverName, migrationDriver)
 	if err != nil {
-		_ = driver.Close()
+		_ = migrationDriver.Close()
 		return nil, nil, err
 	}
 	return engine, func() {
 		_, _ = engine.Close()
 	}, nil
+}
+
+func (m *Manager) migrationDir() (string, error) {
+	if m == nil || m.db == nil {
+		return "", fmt.Errorf("migration database is required")
+	}
+	return ResolveDialectDir(m.dir, m.db.Dialector.Name())
+}
+
+// ResolveDialectDir resolves a dialect-specific directory while keeping explicit
+// concrete directories and the legacy PostgreSQL root directory compatible.
+func ResolveDialectDir(baseDir, driver string) (string, error) {
+	return ResolveDialectDirWithSuffix(baseDir, driver, ".up.sql")
+}
+
+// ResolveDialectDirWithSuffix resolves a dialect directory using the given
+// file suffix. It is used by both migrations and SQL seed directories.
+func ResolveDialectDirWithSuffix(baseDir, driver, suffix string) (string, error) {
+	baseDir = strings.TrimSpace(baseDir)
+	if baseDir == "" {
+		return "", fmt.Errorf("migration or seed directory is required")
+	}
+	suffix = strings.TrimSpace(suffix)
+	if suffix == "" {
+		return "", fmt.Errorf("migration or seed file suffix is required")
+	}
+	driver = normalizeDriver(driver)
+	if driver != "postgres" && driver != "mysql" {
+		return "", fmt.Errorf("unsupported database driver: %s", driver)
+	}
+
+	if files, err := listFiles(baseDir, suffix); err == nil && len(files) > 0 {
+		return baseDir, nil
+	}
+	dialectDir := filepath.Join(baseDir, driver)
+	if info, err := os.Stat(dialectDir); err == nil && info.IsDir() {
+		return dialectDir, nil
+	}
+	return "", fmt.Errorf("database %s directory not found under %s", driver, baseDir)
+}
+
+func normalizeDriver(driver string) string {
+	driver = strings.ToLower(strings.TrimSpace(driver))
+	if driver == "postgresql" {
+		return "postgres"
+	}
+	return driver
 }
 
 func migrationVersion(engine *golangmigrate.Migrate) (uint, bool, error) {

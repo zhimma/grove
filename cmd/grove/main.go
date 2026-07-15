@@ -98,7 +98,7 @@ func newDoctorCmd() *cobra.Command {
 			fmt.Fprintf(out, "运行环境: %s\n", cfg.App.Env)
 			fmt.Fprintf(out, "API 端口: %s\n", cfg.Port)
 			fmt.Fprintf(out, "Console 端口: %s\n", cfg.ConsolePort)
-			fmt.Fprintf(out, "默认数据库: %s\n", statusText(cfg.Databases.Default.Enabled))
+			fmt.Fprintf(out, "默认数据库: %s (%s)\n", statusText(cfg.Databases.Default.Enabled), cfg.Databases.Default.Driver)
 			fmt.Fprintf(out, "Redis: %s\n", statusText(cfg.Redis.Enabled))
 			fmt.Fprintf(out, "任务队列: %s\n", statusText(cfg.Job.Enabled))
 			fmt.Fprintf(out, "API 权限控制: %s\n", statusText(cfg.Casbin.Enforcers["api"].Enabled))
@@ -197,7 +197,15 @@ func newMigrateCmd() *cobra.Command {
 		Short: "创建新的迁移文件对",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			upPath, downPath, err := migrate.CreateFiles(migrationPath, args[0])
+			cfg, err := loadCLIConfig()
+			if err != nil {
+				return err
+			}
+			dir, err := migrate.ResolveDialectDir(migrationPath, cfg.Databases.Default.Driver)
+			if err != nil {
+				return err
+			}
+			upPath, downPath, err := migrate.CreateFiles(dir, args[0])
 			if err != nil {
 				return err
 			}
@@ -211,16 +219,18 @@ func newMigrateCmd() *cobra.Command {
 }
 
 func newSeedCmd() *cobra.Command {
+	seedPath := "database/seeds"
 	cmd := &cobra.Command{
 		Use:   "seed",
 		Short: "执行 SQL seed",
 	}
+	cmd.PersistentFlags().StringVar(&seedPath, "path", seedPath, "seed 基础目录")
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "bootstrap",
 		Short: "执行生产安全的基础 seed",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runBootstrapSeeds(cmd)
+			return runBootstrapSeeds(cmd, seedPath)
 		},
 	})
 
@@ -242,7 +252,11 @@ func newSeedCmd() *cobra.Command {
 			}
 			defer cleanup()
 
-			count, err := migrate.RunSQLDir(db, "database/seeds/demo")
+			seedDir, err := resolveSeedDir(seedPath, cfg.Databases.Default.Driver, "demo")
+			if err != nil {
+				return err
+			}
+			count, err := migrate.RunSQLDir(db, seedDir)
 			if err != nil {
 				return err
 			}
@@ -254,7 +268,7 @@ func newSeedCmd() *cobra.Command {
 	return cmd
 }
 
-func runBootstrapSeeds(cmd *cobra.Command) error {
+func runBootstrapSeeds(cmd *cobra.Command, seedBasePath string) error {
 	cfg, err := loadCLIConfig()
 	if err != nil {
 		return err
@@ -279,7 +293,11 @@ func runBootstrapSeeds(cmd *cobra.Command) error {
 	if tx.Error != nil {
 		return tx.Error
 	}
-	count, err := migrate.RunSQLDirWithReplacements(tx, "database/seeds/bootstrap", map[string]string{
+	seedDir, err := resolveSeedDir(seedBasePath, cfg.Databases.Default.Driver, "bootstrap")
+	if err != nil {
+		return err
+	}
+	count, err := migrate.RunSQLDirWithReplacements(tx, seedDir, map[string]string{
 		rootPasswordPlaceholder: string(hash),
 	})
 	if err != nil {
@@ -309,6 +327,34 @@ func runBootstrapSeeds(cmd *cobra.Command) error {
 		fmt.Fprintln(out, password)
 	}
 	return nil
+}
+
+func resolveSeedDir(baseDir, driver, kind string) (string, error) {
+	baseDir = strings.TrimSpace(baseDir)
+	driver = strings.ToLower(strings.TrimSpace(driver))
+	if driver == "postgresql" {
+		driver = "postgres"
+	}
+	kind = strings.TrimSpace(kind)
+	if baseDir == "" || kind == "" {
+		return "", fmt.Errorf("seed 基础目录和类型不能为空")
+	}
+	candidates := []string{
+		filepath.Join(baseDir, driver, kind),
+		filepath.Join(baseDir, kind),
+	}
+	for _, candidate := range candidates {
+		entries, err := os.ReadDir(filepath.Clean(candidate))
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
+				return candidate, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("database %s seed directory not found under %s", driver, baseDir)
 }
 
 func resolveRootPassword() (string, bool, error) {
@@ -431,6 +477,10 @@ func openDefaultDBWithConfig(cfg *config.Config) (*gorm.DB, func(), error) {
 		Password:        cfg.Databases.Default.Password,
 		DBName:          cfg.Databases.Default.DBName,
 		SSLMode:         cfg.Databases.Default.SSLMode,
+		Charset:         cfg.Databases.Default.Charset,
+		ParseTime:       cfg.Databases.Default.ParseTime,
+		Loc:             cfg.Databases.Default.Loc,
+		TLS:             cfg.Databases.Default.TLS,
 		MaxConnections:  cfg.Databases.Default.MaxConnections,
 		MaxIdleConns:    cfg.Databases.Default.MaxIdleConns,
 		ConnMaxLifetime: cfg.Databases.Default.ConnMaxLifetime,

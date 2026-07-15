@@ -42,6 +42,99 @@ api:
 	}
 }
 
+func TestLoadWithOptionsSupportsMySQLDatabaseConfig(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte(`databases:
+  default:
+    enabled: true
+    driver: mysql
+    host: 127.0.0.1
+    user: root
+    password: secret
+    dbname: grove
+`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "api"})
+	if err != nil {
+		t.Fatalf("load mysql config: %v", err)
+	}
+	if cfg.Databases.Default.Driver != "mysql" {
+		t.Fatalf("expected mysql driver, got %q", cfg.Databases.Default.Driver)
+	}
+	if cfg.Databases.Default.Port != "3306" {
+		t.Fatalf("expected mysql default port, got %q", cfg.Databases.Default.Port)
+	}
+	if cfg.Databases.Default.Charset != "utf8mb4" || cfg.Databases.Default.Loc != "Local" {
+		t.Fatalf("unexpected mysql defaults: %#v", cfg.Databases.Default)
+	}
+}
+
+func TestLoadWithOptionsReadsDatabaseDriverOverrides(t *testing.T) {
+	t.Setenv("DB_DRIVER", "mysql")
+	t.Setenv("DB_PORT", "3307")
+	t.Setenv("DB_CHARSET", "utf8mb4")
+	t.Setenv("DB_PARSE_TIME", "true")
+	t.Setenv("DB_LOC", "UTC")
+	t.Setenv("DB_TLS", "true")
+
+	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: filepath.Join(t.TempDir(), "config.yaml"), Service: "api"})
+	if err != nil {
+		t.Fatalf("load database overrides: %v", err)
+	}
+	db := cfg.Databases.Default
+	if db.Driver != "mysql" || db.Port != "3307" || db.Charset != "utf8mb4" || !db.ParseTime || db.Loc != "UTC" || !db.TLS {
+		t.Fatalf("unexpected database overrides: %#v", db)
+	}
+}
+
+func TestLoadWithOptionsHonorsExplicitMySQLParseTimeFalse(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte(`databases:
+  default:
+    enabled: true
+    driver: mysql
+    host: 127.0.0.1
+    user: root
+    dbname: grove
+    parse_time: false
+`), 0o600); err != nil {
+		t.Fatalf("write mysql config: %v", err)
+	}
+
+	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "api"})
+	if err != nil {
+		t.Fatalf("load mysql config: %v", err)
+	}
+	if cfg.Databases.Default.ParseTime {
+		t.Fatal("explicit mysql parse_time=false must be preserved")
+	}
+}
+
+func TestLoadWithOptionsPreservesExplicitMySQLPort(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte(`databases:
+  default:
+    enabled: true
+    driver: mysql
+    host: 127.0.0.1
+    port: "5432"
+    user: root
+    dbname: grove
+`), 0o600); err != nil {
+		t.Fatalf("write mysql config: %v", err)
+	}
+
+	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "api"})
+	if err != nil {
+		t.Fatalf("load mysql config: %v", err)
+	}
+	if cfg.Databases.Default.Port != "5432" {
+		t.Fatalf("explicit mysql port must be preserved, got %q", cfg.Databases.Default.Port)
+	}
+}
+
 func TestLoadWithOptionsRejectsUnknownFields(t *testing.T) {
 	tests := map[string]string{
 		"top level": "unknown_field: true\n",

@@ -20,6 +20,9 @@ import (
 )
 
 func TestFreshDatabaseLifecycle(t *testing.T) {
+	if databaseName := os.Getenv("GROVE_INTEGRATION_DB"); databaseName != "" && databaseName != "postgres" {
+		t.Skip("set GROVE_INTEGRATION_DB=postgres to run PostgreSQL integration")
+	}
 	if os.Getenv("CI") == "" {
 		testcontainers.SkipIfProviderIsNotHealthy(t)
 	}

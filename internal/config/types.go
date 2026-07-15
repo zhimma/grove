@@ -62,6 +62,10 @@ type DatabaseConfig struct {
 	Password        string `yaml:"password"`
 	DBName          string `yaml:"dbname"`
 	SSLMode         string `yaml:"ssl_mode"`
+	Charset         string `yaml:"charset"`
+	ParseTime       bool   `yaml:"parse_time"`
+	Loc             string `yaml:"loc"`
+	TLS             bool   `yaml:"tls"`
 	MaxConnections  int    `yaml:"max_connections"`
 	MaxIdleConns    int    `yaml:"max_idle_conns"`
 	ConnMaxLifetime int    `yaml:"conn_max_lifetime"`

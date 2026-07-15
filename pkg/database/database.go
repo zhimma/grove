@@ -3,10 +3,13 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 	"time"
 
+	mysqlDriver "github.com/go-sql-driver/mysql"
+	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -21,6 +24,10 @@ type Config struct {
 	Password        string
 	DBName          string
 	SSLMode         string
+	Charset         string
+	ParseTime       bool
+	Loc             string
+	TLS             bool
 	MaxConnections  int
 	MaxIdleConns    int
 	ConnMaxLifetime int
@@ -170,24 +177,31 @@ func open(cfg Config) (*gorm.DB, error) {
 		return nil, nil
 	}
 
-	if cfg.Driver == "" {
-		cfg.Driver = "postgres"
+	driver := strings.ToLower(strings.TrimSpace(cfg.Driver))
+	if driver == "" {
+		driver = "postgres"
 	}
-	if cfg.Driver != "postgres" {
+
+	var dialector gorm.Dialector
+	switch driver {
+	case "postgres", "postgresql":
+		dsn := fmt.Sprintf(
+			"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+			cfg.Host,
+			cfg.Port,
+			cfg.User,
+			cfg.Password,
+			cfg.DBName,
+			cfg.SSLMode,
+		)
+		dialector = postgres.Open(dsn)
+	case "mysql":
+		dialector = mysql.Open(buildMySQLDSN(cfg))
+	default:
 		return nil, fmt.Errorf("unsupported database driver: %s", cfg.Driver)
 	}
 
-	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host,
-		cfg.Port,
-		cfg.User,
-		cfg.Password,
-		cfg.DBName,
-		cfg.SSLMode,
-	)
-
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+	db, err := gorm.Open(dialector, &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Warn),
 	})
 	if err != nil {
@@ -210,4 +224,35 @@ func open(cfg Config) (*gorm.DB, error) {
 	}
 
 	return db, nil
+}
+
+func buildMySQLDSN(cfg Config) string {
+	charset := strings.TrimSpace(cfg.Charset)
+	if charset == "" {
+		charset = "utf8mb4"
+	}
+	loc := strings.TrimSpace(cfg.Loc)
+	if loc == "" {
+		loc = "Local"
+	}
+	params := map[string]string{
+		"charset":         charset,
+		"parseTime":       fmt.Sprintf("%t", cfg.ParseTime),
+		"loc":             loc,
+		"multiStatements": "true",
+	}
+	if cfg.TLS {
+		params["tls"] = "true"
+	}
+	mysqlCfg := mysqlDriver.Config{
+		User:                 cfg.User,
+		Passwd:               cfg.Password,
+		Net:                  "tcp",
+		Addr:                 net.JoinHostPort(cfg.Host, cfg.Port),
+		DBName:               cfg.DBName,
+		AllowNativePasswords: true,
+		Params:               params,
+	}
+	// FormatDSN performs the required escaping for credentials and query values.
+	return mysqlCfg.FormatDSN()
 }

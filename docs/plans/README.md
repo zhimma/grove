@@ -14,6 +14,8 @@
 - [Foundation roadmap](2026-07-13-grove-foundation-roadmap.md)
 - [Completion audit](2026-07-15-completion-audit.md)
 - [Documentation restructure plan](2026-07-15-documentation-restructure-plan.md)
+- [Database dialect layering plan](2026-07-15-database-dialect-layering-plan.md)
+- [PostgreSQL/MySQL support implementation](2026-07-15-mysql-support-implementation.md)
 
 ## 设计文档索引
 

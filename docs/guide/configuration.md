@@ -86,7 +86,9 @@ HTTP 服务级限制：
 
 ### `databases.default`
 
-默认数据库连接。当前主驱动为 Postgres。
+默认数据库连接。PostgreSQL 是默认驱动，也支持 MySQL 8.0.16+。
+
+MySQL 使用 `driver: mysql`，并建议配置 `charset: utf8mb4`、`parse_time: true`、`loc: Local`。
 
 ### `databases.resources`
 
@@ -160,6 +162,7 @@ Redis 连接配置。启用缓存、队列或 worker 时需要。
 - production Console 必须启用默认数据库和 `casbin.enforcers.console`。
 - Worker 必须至少启用 Job 或 Scheduler；启用 Job 时必须同时启用 Redis。
 - 已启用的数据库必须配置 `driver`、`host`、`port`、`user` 和 `dbname`。
+- `driver` 只能是 `postgres` 或 `mysql`；MySQL 必须配置 `charset` 和 `loc`。
 - 已启用的 Casbin enforcer 必须引用已启用的数据库。
 - 生产环境必须保持 `app.debug=false`，避免响应体暴露底层错误信息。
 - 本地开发直接编辑未提交的 `config.yaml`；生产环境挂载受保护的配置文件，或由部署平台通过环境变量覆盖敏感字段。

@@ -28,11 +28,15 @@ databases:
     enabled: ${DB_ENABLED:false}
     driver: ${DB_DRIVER:postgres}
     host: ${DB_HOST:127.0.0.1}
-    port: ${DB_PORT:5432}
+    port: ${DB_PORT:}
     user: ${DB_USER:postgres}
     password: ${DB_PASSWORD:}
     dbname: ${DB_NAME:golang_web}
     ssl_mode: ${DB_SSLMODE:disable}
+    charset: ${DB_CHARSET:utf8mb4}
+    parse_time: ${DB_PARSE_TIME:true}
+    loc: ${DB_LOC:Local}
+    tls: ${DB_TLS:false}
     max_connections: ${DB_MAX_CONNECTIONS:20}
     max_idle_conns: ${DB_MAX_IDLE_CONNS:10}
     conn_max_lifetime: ${DB_CONN_MAX_LIFETIME:3600}

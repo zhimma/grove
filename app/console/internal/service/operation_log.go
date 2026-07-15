@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -143,7 +144,8 @@ func (s *OperationLogService) Clear(ctx context.Context, in *OperationLogClearIn
 
 	if in.Days > 0 {
 		// 删除指定天数前的日志
-		query = query.Where("created_at < DATE_SUB(NOW(), INTERVAL ? DAY)", in.Days)
+		cutoff := time.Now().Add(-time.Duration(in.Days) * 24 * time.Hour)
+		query = query.Where("created_at < ?", cutoff)
 	}
 
 	if err := query.Delete(&model.ConsoleOperationLog{}).Error; err != nil {

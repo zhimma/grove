@@ -3,7 +3,7 @@
 ## 启动前检查
 
 1. 准备受保护的 `config.yaml`。
-2. 确认 PostgreSQL 已创建且连接字段正确。
+2. 确认 PostgreSQL 或 MySQL 已创建且连接字段正确。
 3. 执行 `make migrate.up`。
 4. 首次环境执行 `make seed.bootstrap`。
 5. 检查 `/health/live` 和 `/health/ready`。
@@ -37,7 +37,7 @@ govulncheck ./...
 make admin.build
 ```
 
-数据库发布至少验证：迁移 up、dirty 状态拒绝、bootstrap 幂等和可回滚性。发布失败时不要手工删除 `grove_migrations`。
+数据库发布至少验证：迁移 up、dirty 状态拒绝、bootstrap 幂等和可回滚性。PostgreSQL/MySQL 使用相同版本号但不同方言目录；发布失败时不要手工删除 `grove_migrations`。
 
 ## 关闭与故障
 

@@ -11,29 +11,106 @@ import (
 )
 
 func TestEveryUpMigrationHasDownMigration(t *testing.T) {
-	dir := filepath.Join("..", "..", "database", "migrations")
-	upFiles, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
-	if err != nil {
-		t.Fatalf("list up migrations: %v", err)
-	}
-	if len(upFiles) == 0 {
-		t.Fatal("expected at least one up migration")
-	}
+	for _, dialect := range []string{"postgres", "mysql"} {
+		dir := filepath.Join("..", "..", "database", "migrations", dialect)
+		upFiles, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
+		if err != nil {
+			t.Fatalf("list %s migrations: %v", dialect, err)
+		}
+		if len(upFiles) == 0 {
+			t.Fatalf("expected %s migrations", dialect)
+		}
 
-	for _, upFile := range upFiles {
-		downFile := strings.TrimSuffix(upFile, ".up.sql") + ".down.sql"
-		if _, err := os.Stat(downFile); err != nil {
-			if os.IsNotExist(err) {
-				t.Errorf("missing down migration for %s", filepath.Base(upFile))
-				continue
+		for _, upFile := range upFiles {
+			downFile := strings.TrimSuffix(upFile, ".up.sql") + ".down.sql"
+			if _, err := os.Stat(downFile); err != nil {
+				if os.IsNotExist(err) {
+					t.Errorf("missing down migration for %s", filepath.Base(upFile))
+					continue
+				}
+				t.Errorf("stat down migration %s: %v", filepath.Base(downFile), err)
 			}
-			t.Errorf("stat down migration %s: %v", filepath.Base(downFile), err)
+		}
+	}
+}
+
+func TestResolveDialectDirSupportsNestedAndConcretePaths(t *testing.T) {
+	base := filepath.Join("..", "..", "database", "migrations")
+	for _, dialect := range []string{"postgres", "mysql"} {
+		got, err := ResolveDialectDir(base, dialect)
+		if err != nil {
+			t.Fatalf("resolve %s migrations: %v", dialect, err)
+		}
+		if !strings.HasSuffix(filepath.ToSlash(got), "/"+dialect) {
+			t.Fatalf("expected %s dialect directory, got %s", dialect, got)
+		}
+		concrete, err := ResolveDialectDir(got, dialect)
+		if err != nil {
+			t.Fatalf("resolve concrete %s migrations: %v", dialect, err)
+		}
+		if concrete != got {
+			t.Fatalf("concrete directory changed: got %s want %s", concrete, got)
+		}
+	}
+}
+
+func TestDialectMigrationVersionsMatch(t *testing.T) {
+	versions := map[string]map[string]struct{}{}
+	for _, dialect := range []string{"postgres", "mysql"} {
+		dir := filepath.Join("..", "..", "database", "migrations", dialect)
+		files, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
+		if err != nil {
+			t.Fatalf("list %s migrations: %v", dialect, err)
+		}
+		versions[dialect] = map[string]struct{}{}
+		for _, file := range files {
+			name := filepath.Base(file)
+			versions[dialect][strings.TrimSuffix(name, ".up.sql")] = struct{}{}
+		}
+	}
+	if len(versions["postgres"]) != len(versions["mysql"]) {
+		t.Fatalf("migration version counts differ: postgres=%d mysql=%d", len(versions["postgres"]), len(versions["mysql"]))
+	}
+	for version := range versions["postgres"] {
+		if _, ok := versions["mysql"][version]; !ok {
+			t.Fatalf("mysql migration missing %s", version)
+		}
+	}
+}
+
+func TestMySQLMigrationsDoNotContainPostgreSQLOnlySyntax(t *testing.T) {
+	dir := filepath.Join("..", "..", "database", "migrations", "mysql")
+	files, err := filepath.Glob(filepath.Join(dir, "*.sql"))
+	if err != nil {
+		t.Fatalf("list mysql migrations: %v", err)
+	}
+	for _, file := range files {
+		content := strings.ToLower(mustReadMigration(t, file))
+		for _, forbidden := range []string{"timestamptz", "jsonb", "::jsonb", "on conflict", "using casbin_rules"} {
+			if strings.Contains(content, forbidden) {
+				t.Errorf("mysql migration %s contains PostgreSQL syntax %q", filepath.Base(file), forbidden)
+			}
+		}
+	}
+}
+
+func TestDialectSeedVersionsAndSafetyBoundariesExist(t *testing.T) {
+	for _, dialect := range []string{"postgres", "mysql"} {
+		for _, kind := range []string{"bootstrap", "demo"} {
+			dir := filepath.Join("..", "..", "database", "seeds", dialect, kind)
+			files, err := filepath.Glob(filepath.Join(dir, "*.sql"))
+			if err != nil {
+				t.Fatalf("list %s %s seeds: %v", dialect, kind, err)
+			}
+			if len(files) == 0 {
+				t.Fatalf("expected %s %s seed files", dialect, kind)
+			}
 		}
 	}
 }
 
 func TestSystemConfigsMigrationMatchesModelContract(t *testing.T) {
-	path := filepath.Join("..", "..", "database", "migrations", "202604150005_create_system_configs.up.sql")
+	path := filepath.Join("..", "..", "database", "migrations", "postgres", "202604150005_create_system_configs.up.sql")
 	content := mustReadMigration(t, path)
 
 	for _, fragment := range []string{
@@ -59,7 +136,7 @@ func TestSystemConfigsMigrationMatchesModelContract(t *testing.T) {
 }
 
 func TestConsoleManagementDownPreservesBaseColumns(t *testing.T) {
-	path := filepath.Join("..", "..", "database", "migrations", "202604150004_expand_console_management.down.sql")
+	path := filepath.Join("..", "..", "database", "migrations", "postgres", "202604150004_expand_console_management.down.sql")
 	content := mustReadMigration(t, path)
 
 	if strings.Contains(strings.ToUpper(content), "DROP COLUMN") {
@@ -71,7 +148,7 @@ func TestConsoleManagementDownPreservesBaseColumns(t *testing.T) {
 }
 
 func TestConsoleAdminPasswordStateMigrationMatchesModelContract(t *testing.T) {
-	path := filepath.Join("..", "..", "database", "migrations", "202604150008_add_console_admin_password_state.up.sql")
+	path := filepath.Join("..", "..", "database", "migrations", "postgres", "202604150008_add_console_admin_password_state.up.sql")
 	content := mustReadMigration(t, path)
 	if !strings.Contains(content, "must_change_password BOOLEAN NOT NULL DEFAULT FALSE") {
 		t.Fatal("password state migration must add a non-null false-by-default flag")
@@ -79,7 +156,7 @@ func TestConsoleAdminPasswordStateMigrationMatchesModelContract(t *testing.T) {
 }
 
 func TestIntegrityMigrationDefinesDeletionAndConstraintContracts(t *testing.T) {
-	path := filepath.Join("..", "..", "database", "migrations", "202604150009_define_integrity_semantics.up.sql")
+	path := filepath.Join("..", "..", "database", "migrations", "postgres", "202604150009_define_integrity_semantics.up.sql")
 	content := mustReadMigration(t, path)
 	for _, fragment := range []string{
 		"DROP COLUMN IF EXISTS deleted_at",
@@ -100,7 +177,7 @@ func TestIntegrityMigrationDefinesDeletionAndConstraintContracts(t *testing.T) {
 }
 
 func TestConsoleSessionsMigrationDefinesPersistentRefreshContract(t *testing.T) {
-	path := filepath.Join("..", "..", "database", "migrations", "202604150010_create_console_sessions.up.sql")
+	path := filepath.Join("..", "..", "database", "migrations", "postgres", "202604150010_create_console_sessions.up.sql")
 	content := mustReadMigration(t, path)
 	for _, fragment := range []string{
 		"CREATE TABLE IF NOT EXISTS console_sessions",
@@ -118,13 +195,13 @@ func TestConsoleSessionsMigrationDefinesPersistentRefreshContract(t *testing.T) 
 }
 
 func TestSystemConfigSecretMigrationMatchesModelContract(t *testing.T) {
-	upPath := filepath.Join("..", "..", "database", "migrations", "202604150011_add_system_config_secrets.up.sql")
+	upPath := filepath.Join("..", "..", "database", "migrations", "postgres", "202604150011_add_system_config_secrets.up.sql")
 	up := mustReadMigration(t, upPath)
 	if !strings.Contains(up, "ADD COLUMN IF NOT EXISTS is_secret BOOLEAN NOT NULL DEFAULT FALSE") {
 		t.Fatal("system config secret migration must add is_secret")
 	}
 
-	downPath := filepath.Join("..", "..", "database", "migrations", "202604150011_add_system_config_secrets.down.sql")
+	downPath := filepath.Join("..", "..", "database", "migrations", "postgres", "202604150011_add_system_config_secrets.down.sql")
 	down := mustReadMigration(t, downPath)
 	if strings.Contains(down, "RAISE EXCEPTION") {
 		t.Fatal("system config secret down migration must not fail after the migration engine marks the version dirty")

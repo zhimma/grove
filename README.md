@@ -15,7 +15,7 @@ Grove 是一个面向中大型项目的 console-first Go 单体脚手架。它�
 ## 当前能力
 
 - `api / console / worker` 三个 Go 服务入口
-- PostgreSQL 迁移、bootstrap/demo seed 和可回滚生命周期
+- PostgreSQL/MySQL 迁移、bootstrap/demo seed 和可回滚生命周期
 - Console access/refresh token、持久化 Session、退出和强制下线
 - Casbin API RBAC、前端路由菜单权限
 - 配置、数据库资源、Redis、Cache、Event、Job、Scheduler、Storage
@@ -39,7 +39,7 @@ AI 或自动化工具先读取仓库根目录的 [AGENTS.md](AGENTS.md) 和 [AI 
 
 ```bash
 cp config.example.yaml config.yaml
-# 编辑 config.yaml，启用 PostgreSQL 并填写本地凭据
+# 编辑 config.yaml，启用 PostgreSQL 或 MySQL 并填写本地凭据
 make migrate.up
 make seed.bootstrap
 make run.console
@@ -65,8 +65,8 @@ internal/config/                 严格配置加载和服务校验
 internal/provider/               启动装配和资源生命周期
 internal/model/                  共享 GORM 模型
 pkg/                             可复用基础组件
-database/migrations/             正反向 SQL 迁移
-database/seeds/                  bootstrap/demo seed
+database/migrations/{postgres,mysql}/ 正反向 SQL 迁移
+database/seeds/{postgres,mysql}/     bootstrap/demo seed
 web/admin-vben/apps/console/     Vue 管理后台
 docs/                            canonical 指南、运行手册和历史计划
 ```

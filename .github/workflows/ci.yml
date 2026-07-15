@@ -58,6 +58,13 @@ jobs:
         run: govulncheck ./...
 
       - name: Run PostgreSQL integration tests
+        env:
+          GROVE_INTEGRATION_DB: postgres
+        run: go test -tags=integration ./tests/integration -v
+
+      - name: Run MySQL integration tests
+        env:
+          GROVE_INTEGRATION_DB: mysql
         run: go test -tags=integration ./tests/integration -v
 
       - name: Build backend binaries
