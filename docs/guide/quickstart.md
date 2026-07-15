@@ -1,119 +1,148 @@
 # 快速上手
 
-本文按当前 `console-first` 模板说明最短启动路径。
+本指南只维护一个本地配置文件：`config.yaml`。模板是 `config.example.yaml`；后端不会自动读取 `.env`。
 
 ## 1. 准备环境
 
 - Go 1.25.12+
 - PostgreSQL 14+
-- Redis 6+（仅在启用队列、缓存或 worker 时需要）
 - Node.js 20.19+
-- pnpm 10.28.2
+- pnpm 10.28.2（仅启动前端需要）
+- Redis 6+（启用 Cache、Job 或 Worker 时需要）
 
-## 2. 初始化配置
+确认 Go 环境：
 
 ```bash
-cp .env.example .env
+export PATH="/Users/zhimma/.local/share/mise/installs/go/1.25.12/bin:$PATH"
+export GOTOOLCHAIN=local
+go version
+```
+
+## 2. 创建配置
+
+```bash
 cp config.example.yaml config.yaml
-go mod download
 ```
 
-编辑 `config.yaml` 或 `.env`，至少启用默认数据库：
-
-```bash
-export DB_PASSWORD='replace-with-your-postgres-password'
-export JWT_SECRET='replace-with-at-least-32-random-characters'
-```
+编辑 `config.yaml`，开发环境至少填写：
 
 ```yaml
+app:
+  env: development
+
 databases:
   default:
     enabled: true
     driver: postgres
     host: 127.0.0.1
     port: 5432
-    user: postgres
-    password: ${DB_PASSWORD}
-    dbname: golang_web
+    user: zhimma
+    password: <your-postgres-password>
+    dbname: grove_dev
     ssl_mode: disable
+
+jwt:
+  secret: <at-least-32-random-characters>
 ```
 
-如果要启用管理后台 RBAC，请同时启用 `casbin.enforcers.console`。
+如果需要后台 API 权限，再打开：
 
-## 3. 初始化数据库
+```yaml
+casbin:
+  enforcers:
+    console:
+      enabled: true
+      database: default
+      mode: rbac
+      table_name: console_casbin_rules
+```
+
+## 3. 初始化 PostgreSQL
+
+数据库只需创建一次：
 
 ```bash
-createdb golang_web
+createdb -h 127.0.0.1 -p 5432 -U zhimma -W grove_dev
+```
+
+执行迁移和基础种子：
+
+```bash
 make migrate.up
 make seed.bootstrap
-# 仅开发/测试环境按需执行
+```
+
+`seed.bootstrap` 创建 `root` 管理员和基础角色，不会覆盖已有 root 密码。未通过 `GROVE_ROOT_PASSWORD` 注入时，CLI 会生成一次性随机密码并只输出一次。
+
+开发/测试环境如需要演示数据：
+
+```bash
 make seed.demo
 ```
 
-`seed.bootstrap` 只写入基础配置和 root 管理员，不覆盖已有密码。可通过 `GROVE_ROOT_PASSWORD` 指定初始密码；未指定时 CLI 仅在首次创建 root 时显示一次随机密码。`seed.demo` 会写入演示数据，并在 production 环境直接拒绝执行。
+## 4. 启动后端
 
-启用 Console RBAC 后，可检查数据库角色真相源和 Casbin 派生数据：
-
-```bash
-go run ./cmd/grove rbac check
-go run ./cmd/grove rbac repair --dry-run
-# 确认差异后再执行
-go run ./cmd/grove rbac repair --dry-run=false
-```
-
-## 4. 启动服务
+Console：
 
 ```bash
 make run.console
 ```
 
-常用服务入口：
+API（可选）：
 
 ```bash
 make run.api
-make run.console
+```
+
+Worker 只有启用 Job 或 Scheduler 后才启动：
+
+```bash
 make run.worker
+```
+
+默认端口：
+
+- API：`http://127.0.0.1:8080`
+- Console：`http://127.0.0.1:8081`
+- Worker health：`http://127.0.0.1:8082`
+
+健康检查：
+
+```bash
+curl -fsS http://127.0.0.1:8081/health/live
+curl -fsS http://127.0.0.1:8081/health/ready
 ```
 
 ## 5. 启动管理后台前端
 
+首次安装依赖：
+
 ```bash
 make admin.install
+```
+
+开发启动：
+
+```bash
 make admin.dev
 ```
 
-前端应用位于 `web/admin-vben/apps/console`。
+默认地址：`http://127.0.0.1:5666`。前端开发配置位于 `web/admin-vben/apps/console/.env.development`，它只属于 Vite 前端，不是后端配置入口。
 
-## 6. 新增一个 Console 模块
-
-推荐使用 `grove make:module` 生成当前约定的最小模板：
-
-```bash
-go run ./cmd/grove migrate create create_articles_table
-go run ./cmd/grove make:module Article
-```
-
-命令会生成：
-
-- `internal/model/article.go`
-- `app/console/internal/service/article.go`
-- `app/console/internal/handler/article.go`
-- `app/console/internal/router/router.go` 中的路由注册
-
-生成后继续补齐：
-
-- migration 的建表 SQL
-- model 字段
-- service 业务逻辑
-- handler 请求/响应结构
-- 前端 API、页面和本地路由
-
-## 7. 验证
+## 6. 验证
 
 ```bash
 make test
 make build
-make admin.typecheck
+make verify
 ```
 
-运行时日志统一使用 `pkg/logger`，底层基于 zerolog。日志文案尽量使用中文，字段名保持英文 snake_case。
+高风险改动追加：
+
+```bash
+go test -race ./...
+go vet ./...
+govulncheck ./...
+```
+
+下一步阅读：[项目结构](structure.md)、[开发规范](../01-开发规范.md)、[新增 Console 模块](../03-console-新增模块指南.md)。

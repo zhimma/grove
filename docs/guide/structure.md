@@ -1,6 +1,6 @@
 # 项目结构
 
-本文档说明 Grove 的目录组织方式，以及各目录的职责边界。
+本文档说明 Grove 的目录组织方式，以及各目录的职责边界。整体架构先看 [项目架构](../architecture.md)，命令先看 [命令参考](../commands.md)。
 
 ## 结构概览
 
@@ -101,11 +101,14 @@ grove/
 
 ### `docs/`
 
-`docs/` 按用途分为三类：
+`docs/` 按维护职责分为：
 
-- 根目录编号文档：开发规范与 console 核心约定
-- `guide/`：使用指南
-- `deployment/` 与 `development/`：部署、测试与错误处理说明
+- `architecture.md`、`commands.md`、`operations.md`：canonical 总览和运行手册
+- `guide/`：配置、数据库、路由、组件和领域指南
+- 根目录编号文档：开发规范与 Console 核心约定
+- `deployment/`、`development/`：部署、测试和错误处理专题
+- `ai/`：AI 项目上下文与变更清单
+- `plans/`：设计计划、历史决策和完成审计
 
 ## 组织原则
 
@@ -142,5 +145,7 @@ grove/
 ## 相关文档
 
 - [快速上手](./quickstart.md)
+- [项目架构](../architecture.md)
+- [命令参考](../commands.md)
 - [开发规范](../01-%E5%BC%80%E5%8F%91%E8%A7%84%E8%8C%83.md)
 - [pkg 基础组件](./pkg-components.md)

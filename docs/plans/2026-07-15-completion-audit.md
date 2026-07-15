@@ -18,6 +18,8 @@
 - 前端：使用 pnpm 10.28.2 执行 `test:unit`（41 个文件、316 个测试）、Console `typecheck` 和 `@grove/console build` 均通过。
 - CI：包含 unit、route/OpenAPI contract、race、vet、govulncheck、Testcontainers PostgreSQL integration、backend build、frontend typecheck/unit/build。
 - 配置安全：示例和部署文档不再提供固定 PostgreSQL 密码或 JWT secret；`internal/config` 增加静态凭据回归测试。
+- 配置来源已收敛为单一 `config.yaml`；`.env` 不再由后端自动读取，环境变量只保留为部署覆盖机制。
+- Makefile 已删除 `run/dev`、`test.go`、`fmt.go`、`verify.go`、独立后端 build 和重复前端 verify 入口，只保留面向开发者的公开命令。
 
 ## 环境边界
 
@@ -30,3 +32,11 @@
 - `config.example.yaml` 将数据库密码和 JWT secret 默认值改为空环境变量。
 - 快速开始、配置、数据库和部署文档改为通过 `DB_PASSWORD`、`JWT_SECRET` 注入敏感值。
 - 增加 `TestConfigExampleDoesNotContainStaticCredentials`，防止固定凭据回归。
+- 删除 `.env.example`，增加 `.env` 不会被读取的配置回归测试。
+
+## 文档重构补充
+
+- 建立 `AGENTS.md`、`docs/architecture.md`、`docs/commands.md`、`docs/operations.md` 和 `docs/ai/` 作为开发者与 AI 的统一入口。
+- 重写快速上手、项目结构、配置、Console 新增模块和响应错误文档，按当前代码路径、Makefile、配置和 OpenAPI 入口校正。
+- `docs/plans/` 增加索引与文档重构计划；历史设计文档保留为决策背景，不再作为日常开发入口。
+- 文档链接、旧命令、旧路径和配置来源扫描通过；文档修改未改变运行时代码行为。

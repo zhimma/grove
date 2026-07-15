@@ -1,7 +1,6 @@
 package config
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -31,17 +30,10 @@ func LoadWithOptions(opts LoadOptions) (*Config, error) {
 		configFile = "config.yaml"
 	}
 
-	configDir := filepath.Dir(configFile)
-	if configDir == "." {
-		configDir = ""
-	}
-
 	debugConfigured := false
 	if raw, err := os.ReadFile(filepath.Clean(configFile)); err == nil {
 		rawText := string(raw)
 		debugConfigured = configHasAppDebug(rawText)
-		envForDotEnv := detectAppEnv(rawText, cfg.App.Env)
-		loadDotEnv(configDir, envForDotEnv)
 		expanded := expandEnv(rawText)
 		decoder := yaml.NewDecoder(strings.NewReader(expanded))
 		decoder.KnownFields(true)
@@ -56,8 +48,6 @@ func LoadWithOptions(opts LoadOptions) (*Config, error) {
 		}
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read config: %w", err)
-	} else {
-		loadDotEnv(configDir, cfg.App.Env)
 	}
 
 	applyEnvironmentOverrides(&cfg)
@@ -176,57 +166,6 @@ func defaultConfig() Config {
 			},
 		},
 	}
-}
-
-func loadDotEnv(configDir, env string) {
-	if strings.EqualFold(env, "production") {
-		return
-	}
-
-	candidates := []string{".env"}
-	if configDir != "" {
-		candidates = append([]string{filepath.Join(configDir, ".env")}, candidates...)
-	}
-
-	for _, candidate := range candidates {
-		raw, err := os.ReadFile(filepath.Clean(candidate))
-		if err != nil {
-			continue
-		}
-		lines := bytes.Split(raw, []byte("\n"))
-		for _, line := range lines {
-			trimmed := strings.TrimSpace(string(line))
-			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-				continue
-			}
-			parts := strings.SplitN(trimmed, "=", 2)
-			if len(parts) != 2 {
-				continue
-			}
-			key := strings.TrimSpace(parts[0])
-			value := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
-			if os.Getenv(key) == "" {
-				_ = os.Setenv(key, value)
-			}
-		}
-		return
-	}
-}
-
-func detectAppEnv(rawConfig, fallback string) string {
-	if value := strings.TrimSpace(os.Getenv("APP_ENV")); value != "" {
-		return value
-	}
-	var partial struct {
-		App AppConfig `yaml:"app"`
-	}
-	expanded := expandEnv(rawConfig)
-	if err := yaml.Unmarshal([]byte(expanded), &partial); err == nil {
-		if value := strings.TrimSpace(partial.App.Env); value != "" {
-			return value
-		}
-	}
-	return fallback
 }
 
 func configHasAppDebug(rawConfig string) bool {

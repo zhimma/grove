@@ -1,5 +1,7 @@
 # Console 架构与权限
 
+本文档是 Console 领域的 canonical 设计说明。仓库整体边界见 [项目架构](architecture.md)，新增模块按 [新增 Console 模块指南](03-console-新增模块指南.md) 执行。
+
 本文档说明当前基础框架中 `console` 的整体设计，重点覆盖：
 
 - 请求如何完成认证与授权
@@ -27,11 +29,11 @@
 
 ### 后端
 
-- `app/console/handler`
+- `app/console/internal/handler`
   负责 HTTP Request / Response
-- `app/console/service`
+- `app/console/internal/service`
   负责业务逻辑
-- `app/console/middleware`
+- `app/console/internal/middleware`
   负责认证、权限、审计
 - `app/console/internal/router`
   负责路由注册与中间件链路

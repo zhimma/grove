@@ -1,27 +1,35 @@
 # Console 新增模块指南
 
-本文档说明在 `console` 中新增业务模块的最小实施路径。
+本文档是新增 Console 业务模块的 canonical 流程。目标是让一个模块从数据库、后端接口、权限、OpenAPI 到前端页面形成完整闭环。
 
-示例场景：
+## 先判断模块范围
 
-- 新增一个“文章管理”
-- 新增一个“标签管理”
-- 新增一个“通知模板”
+不要求每个模块都做完整 CRUD。先明确本次变更属于哪一种：
 
-## 1. 先明确你要新增的是哪一层
+- 只有后端接口：完成 service、handler、路由、权限和 OpenAPI。
+- 只有后台页面：完成前端 API、页面、本地路由和菜单权限。
+- 完整业务模块：按本文全部步骤执行。
+- 仅内部任务：放入 worker/job，不强行增加 Console 页面。
 
-通常一个 `console` 模块会包含 4 层内容：
+## 后端实施顺序
 
-1. 后端路由
-2. handler
-3. service
-4. 前端页面与菜单
+### 1. 数据库与模型
 
-补充操作接口时不一定需要新增页面；补充页面时也不一定需要完整 CRUD。
+需要持久化时：
 
-## 2. 后端推荐步骤
+1. 使用 `make migrate.up` 之前先创建正反向 SQL 迁移。
+2. 可用 CLI 创建迁移文件对：
 
-### 2.1 新增 service
+   ```bash
+   go run ./cmd/grove migrate create create_articles_table
+   ```
+
+3. 共享 GORM 模型放在 `internal/model`。
+4. 迁移和模型先补测试，再进入 service。
+
+模型只负责字段、表名和通用查询辅助，不负责 HTTP、权限或业务流程。
+
+### 2. Service
 
 放在：
 
@@ -29,13 +37,17 @@
 app/console/internal/service/
 ```
 
-推荐模式：
+建议：
 
-- 定义 `XxxService`
-- 定义 `Input / Output`
-- service 只接收 `context.Context`
+- 一个明确的 `XxxService`，只接收实际依赖。
+- 方法接收 `context.Context`。
+- 使用 `Input / Output` 表达复杂输入输出。
+- 在 service 中编排事务、缓存、事件和队列。
+- 预期业务错误使用 `pkg/errx`，底层错误用 `WithCause` 保留原因。
 
-### 2.2 新增 handler
+不要为了单一实现新增 Repository、ServiceContainer 或字符串依赖注入。
+
+### 3. Handler
 
 放在：
 
@@ -43,87 +55,91 @@ app/console/internal/service/
 app/console/internal/handler/
 ```
 
-handler 负责：
+handler 只负责：
 
-- 参数绑定
-- 从 `request` 读取身份
-- 调用 service
-- 输出 `response.Success / response.Fail`
+- 使用 `validation.BindJSON/BindQuery/BindURI` 绑定参数。
+- 从 request context 读取当前身份。
+- 调用 service。
+- 使用 `response.Success/Fail` 输出统一响应。
 
-### 2.3 注册路由
+不要在 handler 中直接创建数据库、Redis、Job 或 Casbin 实例。
 
-在 `app/console/internal/router/router.go` 中注册。
+### 4. 路由与权限
 
-所有需要权限控制的路由，都应该：
-
-1. 注册在受保护路由组
-2. 使用 `route.Wrap(...)`
-3. 尽量补上 `.Name(...)`
-
-示例：
+现有模块都在对应 handler 文件中提供 `RegisterXxxRoutes`，由
+`app/console/internal/router/router.go` 统一调用。新增模块应保持同样结构：
 
 ```go
-articles := route.Wrap(protected.Group("/articles"))
-articles.GET("", h.List).Name("内容管理.文章列表")
-articles.POST("", h.Create).Name("内容管理.创建文章")
-articles.PUT("/:id", h.Update).Name("内容管理.更新文章")
-articles.DELETE("/:id", h.Delete).Name("内容管理.删除文章")
+func RegisterArticleRoutes(protected *gin.RouterGroup, p *provider.Provider) {
+	h := NewArticleHandler(p)
+	articles := route.Wrap(protected.Group("/articles"))
+	articles.GET("", h.List).Name("内容管理.文章列表")
+	articles.POST("", h.Create).Name("内容管理.创建文章")
+	articles.PUT("/:id", h.Update).Name("内容管理.更新文章")
+	articles.DELETE("/:id", h.Delete).Name("内容管理.删除文章")
+}
 ```
 
-## 3. 如何接入权限系统
+然后在 `app/console/internal/router/router.go` 的 `// grove:register-routes` 标记附近注册：
 
-### 3.1 API 权限
-
-无需手工同步权限清单，也无需维护 catalog 表。
-
-只要路由满足：
-
-- 在 `protected` 路由组里
-- 没有 `.Ignore()`
-
-它就会自动进入运行时 API 权限清单。
-
-### 3.2 展示名
-
-建议为受保护接口补充 `.Name("模块.动作")`。
-
-角色授权页会优先展示该文案。
-
-### 3.3 按钮权限
-
-前端页面中，按钮显隐应该基于：
-
-```ts
-permissionStore.hasApiPermission('POST', '/console/v1/articles')
-permissionStore.hasApiPermission('PUT', '/console/v1/articles/:id')
-permissionStore.hasApiPermission('DELETE', '/console/v1/articles/:id')
+```go
+handler.RegisterArticleRoutes(protected, r.p)
 ```
 
-不要使用旧式字符串权限，例如：
+所有需要进入 API 权限目录的接口必须注册在 `protected` 组，且不能使用 `.Ignore()`。`route.Name("模块.动作")` 只影响角色授权页的展示文案，不改变实际权限 key。
 
-```ts
-console.articles.post
+API 权限 key 固定为：
+
+```text
+METHOD + 空格 + gin full path
 ```
 
-## 4. 前端推荐步骤
+例如：`POST /console/v1/articles`。
 
-### 4.1 新增页面
+## OpenAPI 契约
+
+Console 的文档入口是：
+
+- Scalar 页面：`GET /console/docs`
+- OpenAPI JSON：`GET /console/docs/openapi.json`
+
+新增或修改接口时同步更新：
+
+1. `app/console/internal/docs/contract.go` 的请求、响应 schema 和 operation。
+2. 路由 contract test，确保 Gin 路由与 OpenAPI 没有缺失或多余。
+3. 响应结构、状态码和字段错误说明。
+
+不要只让接口能运行而不更新 OpenAPI；文档契约是接口变更的回归门槛。
+
+## 前端实施顺序
+
+### 1. API 文件
+
+按领域放在：
+
+```text
+web/admin-vben/apps/console/src/api/
+```
+
+复用 `requestClient`，不要在页面中直接创建 Axios 实例。请求路径使用后端完整 Console 前缀，例如 `/console/v1/articles`。
+
+### 2. 页面
 
 页面放在：
 
 ```text
-web/admin-vben/apps/console/src/views/
+web/admin-vben/apps/console/src/views/console/
 ```
 
-### 4.2 新增路由
+目录按业务领域组织，例如 `views/console/content/articles.vue`。
 
-在：
+### 3. 本地路由和菜单
+
+在以下目录新增或修改路由：
 
 ```text
 web/admin-vben/apps/console/src/router/routes/modules/
 ```
-
-把新页面加进本地路由。
 
 示例：
 
@@ -136,111 +152,95 @@ web/admin-vben/apps/console/src/router/routes/modules/
 }
 ```
 
-### 4.3 菜单权限
+当前菜单授权真相源是前端本地路由树：
 
-前端路由 `name` 就是菜单权限 key。
+- `route.name` 是稳定的 `menu_key`，不要随意修改。
+- `meta.title` 是展示文案。
+- `path` 可以调整，但修改后要验证跳转、重定向和收藏页。
+- 后端只保存角色的 `menu_keys`，不维护菜单表或菜单同步命令。
 
-约束如下：
+仓库里部分旧页面仍存在 `meta.permissions`，它不是后端 `menu_keys` 的真相源；新模块优先遵循路由 `name` + API 权限模型。
 
-- `name` 要稳定
-- 改 `path` 问题不大
-- 改 `name` 属于破坏性变更
+### 4. 按钮权限
 
-## 5. 角色授权页会自动发生什么
+按钮显隐使用 API 权限：
 
-### 接口权限部分
-
-后端新接口会自动出现在：
-
-```text
-GET /console/v1/permissions/apis
+```ts
+permissionStore.hasApiPermission('POST', '/console/v1/articles')
+permissionStore.hasApiPermission('PUT', '/console/v1/articles/:id')
+permissionStore.hasApiPermission('DELETE', '/console/v1/articles/:id')
 ```
 
-角色授权页会自动展示该接口权限项。
+不要新增 `console.articles.post` 这类业务字符串权限。
 
-### 菜单权限部分
+## 测试与验证清单
 
-只要你把新页面加进本地路由树，角色页菜单树也会自动看到它。
+后端至少覆盖：
 
-无需菜单同步。
+- 正常请求和响应字段。
+- JSON、Query、URI 参数错误。
+- 未登录 `401` 和无权限 `403`。
+- 角色授权后可访问，未授权时被拒绝。
+- 资源不存在、唯一冲突和数据库异常。
+- 路由与 OpenAPI contract。
 
-## 6. 数据库与迁移
+前端至少覆盖：
 
-如果模块需要新表：
-
-1. 创建 migration
-2. 创建 model
-3. 在 service 中使用
+- API 类型与错误解析。
+- 菜单过滤和默认首页。
+- 按钮权限显隐。
+- 页面 typecheck 和 production build。
 
 推荐命令：
 
 ```bash
-go run ./cmd/grove migrate create create_articles_table
-go run ./cmd/grove make:model Article
+make test
+make admin.typecheck
+make admin.build
+make verify
 ```
 
-仅补充业务代码时不要求每次都使用脚手架。
+## CLI 生成器边界
 
-## 7. 测试建议
+可用以下命令减少模板代码：
 
-至少补两类验证：
+```bash
+go run ./cmd/grove make:model Article
+go run ./cmd/grove make:service Article
+go run ./cmd/grove make:handler Article
+go run ./cmd/grove make:module Article
+```
 
-### 后端
+`make:module` 会生成 `internal/model`、Console service、Console handler，并在路由标记处注册后端路由；它不会生成迁移、前端页面、菜单或权限数据。生成后必须人工补齐业务逻辑、OpenAPI、测试和前端。
 
-- 接口正常可用
-- 未授权时返回拒绝
-- 角色分配后可以访问
+## 常见错误
 
-### 前端
+### 接口没有出现在角色授权页
 
-- 菜单可见性正确
-- 按钮显隐正确
-- 角色页能看到新增 API 权限项
+- 注册到了公开或普通路由组。
+- 使用了 `.Ignore()`。
+- 没有重启 Console，运行时路由目录尚未刷新。
+- 没有更新角色页面实际请求的权限接口。
 
-## 8. 一套最小新增清单
+### 页面没有出现在菜单
 
-标准 CRUD 模块通常包含以下内容：
+- 本地路由没有加入 `routes/modules`。
+- `route.name` 与角色已有 `menu_keys` 不一致。
+- 页面被 `filterConsoleRoutesByMenuKeys` 过滤。
 
-1. migration
-2. model
-3. service
-4. handler
-5. route registration
-6. `route.Name(...)`
-7. 前端 API 文件
-8. 前端页面
-9. 本地路由配置
-10. 按钮权限判断
+### 按钮显隐不正确
 
-## 9. 常见错误
+- method 没有转为大写或 path 不是完整 `/console/v1/...`。
+- 使用了旧字符串权限，而不是 `hasApiPermission`。
+- 只做了前端隐藏，没有同步后端受保护路由。
 
-### 错误 1：接口加了，但没进角色页
+## 完成定义
 
-通常原因：
+一个可交付的 Console 模块至少应有：
 
-- 路由注册在公开组
-- 路由被 `.Ignore()`
-- 服务没重启
-
-### 错误 2：页面加了，但菜单里不显示
-
-通常原因：
-
-- 本地路由没有配置
-- 当前角色没有勾选对应 `menu_key`
-- 路由 `name` 改了，历史角色数据还保存旧 key
-
-### 错误 3：按钮显隐不对
-
-通常原因：
-
-- 前端还在用旧字符串权限
-- `hasApiPermission()` 的 method/path 写错
-
-## 10. 当前建议
-
-新增 `console` 模块时，应优先遵守以下约定：
-
-1. API 权限只认 `METHOD + path`
-2. 菜单权限只认前端路由 `name`
-3. 接口展示文案统一来自 `route.Name(...)`
+1. 迁移和模型（如需要）。
+2. service、handler、受保护路由和 `route.Name`。
+3. OpenAPI schema/operation 和 contract test。
+4. 前端 API、页面、本地路由和菜单 key。
+5. 按钮权限和错误回填。
+6. 后端、前端和关键权限路径验证记录。

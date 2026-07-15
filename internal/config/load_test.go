@@ -119,6 +119,26 @@ func TestConfigExampleDoesNotContainStaticCredentials(t *testing.T) {
 	}
 }
 
+func TestLoadDoesNotReadDotEnv(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte("app:\n  env: development\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("DB_ENABLED=true\n"), 0o600); err != nil {
+		t.Fatalf("write dot env: %v", err)
+	}
+	t.Setenv("DB_ENABLED", "")
+
+	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "api"})
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Databases.Default.Enabled {
+		t.Fatal(".env must not be loaded as a second configuration source")
+	}
+}
+
 func TestObservabilityConfigValidation(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Observability.TraceSampleRatio = 1.1

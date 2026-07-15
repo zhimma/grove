@@ -9,7 +9,7 @@
 - Go 单元测试与集成测试
 - Testcontainers 驱动的真实 PostgreSQL 生命周期测试
 - 路由与服务层测试
-- 前端类型检查
+- 前端 unit、类型检查和 production build
 
 ## 最短路径
 
@@ -30,6 +30,20 @@ make verify
 - Go 测试
 - 后端构建
 - 管理后台类型检查
+
+前端专项验证：
+
+```bash
+make admin.typecheck
+make admin.build
+```
+
+前端 unit 测试使用仓库现有 Vitest 配置：
+
+```bash
+cd web/admin-vben
+pnpm test:unit
+```
 
 ### 运行 PostgreSQL 集成测试
 
@@ -58,7 +72,7 @@ go test -tags=integration ./tests/integration -v
 ## 边界
 
 - `tests/integration/` 仅放依赖真实基础设施的跨包生命周期测试。
-- 前端以类型检查为主，不在本轮文档中展开 UI 自动化测试规范。
+- 前端 unit 目前覆盖请求错误解析、认证状态、权限菜单过滤和基础组件；端到端浏览器测试不属于当前基线。
 
 ## 相关文档
 

@@ -4,11 +4,9 @@
 
 ## 配置来源
 
-Grove 默认按以下顺序读取配置：
+Grove 只维护一个本地配置文件：`config.yaml`。
 
-1. `config.yaml`
-2. `.env`
-3. 环境变量覆盖
+`config.example.yaml` 是模板，不参与运行。部署平台可以通过进程环境变量覆盖配置文件中的 `${VAR:default}` 占位符，但 Grove 不会自动读取 `.env` 文件。
 
 配置文件支持 `${VAR:default}` 语法。
 
@@ -26,6 +24,7 @@ app:
 
 port: 8080
 console_port: 8081
+worker_port: 8082
 
 databases:
   default:
@@ -54,7 +53,7 @@ if err != nil {
 }
 ```
 
-## 核心配置项
+## 配置分组
 
 ### `app`
 
@@ -66,6 +65,24 @@ if err != nil {
 
 - `port`：`api` 服务端口
 - `console_port`：`console` 服务端口
+- `worker_port`：`worker` 的 health/metrics 端口；Worker 不提供业务 API
+
+### `server`
+
+HTTP 服务级限制：
+
+- `shutdown_timeout`
+- `read_timeout`
+- `write_timeout`
+- `max_header_bytes`
+- `max_body_bytes`
+
+### `log`
+
+- `level`：日志级别
+- `path`：日志目录
+- `console`：是否输出到标准输出
+- `service`：日志中的服务名
 
 ### `databases.default`
 
@@ -78,6 +95,12 @@ if err != nil {
 ### `redis`
 
 Redis 连接配置。启用缓存、队列或 worker 时需要。
+
+### `job`
+
+- `enabled`：是否启用 Asynq 队列
+- `concurrency`：Worker 并发数
+- `queues`：队列权重；启用 Job 时必须同时启用 Redis
 
 ### `scheduler`
 
@@ -101,6 +124,35 @@ Redis 连接配置。启用缓存、队列或 worker 时需要。
 
 定义默认存储磁盘与各磁盘配置。
 
+### `observability`
+
+- `enabled`：是否启用观测运行时
+- `metrics_enabled`：是否暴露 Prometheus metrics
+- `metrics_path`：metrics 路径，默认 `/metrics`
+- `readiness_timeout`：readiness 依赖检查超时
+- `trace_sample_ratio`：Trace 采样比例
+- `otlp_trace_endpoint`、`otlp_insecure`：OTLP HTTP trace 导出配置
+
+### `docs`
+
+控制 Scalar/OpenAPI 文档：
+
+- API 文档页面：`/docs`
+- API OpenAPI JSON：`/docs/openapi.json`
+- Console 文档页面：`/console/docs`
+- Console OpenAPI JSON：`/console/docs/openapi.json`
+- `base_path` 只作为 API 文档默认业务前缀；Console 固定使用 `/console/v1`
+
+### `cors`、`api`、`demo`、`security`
+
+- `cors`：跨域开关、来源、方法、请求头和凭据策略
+- `api`：API 前缀、默认分页和最大分页大小
+- `demo`：开发/测试演示接口；production 始终忽略
+- `security.trusted_proxies`：显式信任的代理地址或 CIDR
+- `security.hsts_enabled`：是否启用 HSTS
+- `security.config_encryption_key`：系统配置敏感值加密密钥
+- `security.login`：登录限流与锁定参数
+
 ## 使用约定
 
 - 生产环境必须替换 `jwt.secret`。
@@ -109,8 +161,8 @@ Redis 连接配置。启用缓存、队列或 worker 时需要。
 - Worker 必须至少启用 Job 或 Scheduler；启用 Job 时必须同时启用 Redis。
 - 已启用的数据库必须配置 `driver`、`host`、`port`、`user` 和 `dbname`。
 - 已启用的 Casbin enforcer 必须引用已启用的数据库。
-- 生产环境建议保持 `app.debug=false`，避免响应体暴露底层错误信息。
-- 推荐把敏感信息放到环境变量，不直接写入版本库。
+- 生产环境必须保持 `app.debug=false`，避免响应体暴露底层错误信息。
+- 本地开发直接编辑未提交的 `config.yaml`；生产环境挂载受保护的配置文件，或由部署平台通过环境变量覆盖敏感字段。
 - 多数据库资源命名应体现业务语义，例如 `orders`、`crm`。
 - 未启用的组件应显式保持 `enabled: false`。
 
@@ -124,3 +176,4 @@ Redis 连接配置。启用缓存、队列或 worker 时需要。
 
 - [快速上手](./quickstart.md)
 - [部署指南](../deployment/deploy.md)
+- [命令参考](../commands.md)
