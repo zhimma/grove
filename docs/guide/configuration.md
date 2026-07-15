@@ -34,12 +34,12 @@ databases:
     host: 127.0.0.1
     port: 5432
     user: postgres
-    password: postgres
+    password: ${DB_PASSWORD}
     dbname: grove
     ssl_mode: disable
 
 jwt:
-  secret: change-me
+  secret: ${JWT_SECRET}
   issuer: grove
   access_expiry_hours: 24
   refresh_expiry_hours: 168

@@ -101,6 +101,24 @@ func TestLoadConfigExampleWithCleanEnvironment(t *testing.T) {
 	}
 }
 
+func TestConfigExampleDoesNotContainStaticCredentials(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "config.example.yaml"))
+	if err != nil {
+		t.Fatalf("read config example: %v", err)
+	}
+	content := string(raw)
+	for _, forbidden := range []string{
+		"${DB_PASSWORD:postgres}",
+		"password: postgres",
+		"${JWT_SECRET:change-me}",
+		"secret: change-me",
+	} {
+		if strings.Contains(content, forbidden) {
+			t.Fatalf("config example contains static credential pattern %q", forbidden)
+		}
+	}
+}
+
 func TestObservabilityConfigValidation(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Observability.TraceSampleRatio = 1.1

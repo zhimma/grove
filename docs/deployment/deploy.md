@@ -77,7 +77,7 @@ databases:
     host: 127.0.0.1
     port: 5432
     user: postgres
-    password: change-me
+    password: ${DB_PASSWORD}
     dbname: grove
     ssl_mode: disable
 
@@ -86,7 +86,7 @@ redis:
   addr: 127.0.0.1:6379
 
 jwt:
-  secret: change-me
+  secret: ${JWT_SECRET}
   issuer: grove
 
 casbin:

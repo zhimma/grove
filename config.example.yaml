@@ -30,7 +30,7 @@ databases:
     host: ${DB_HOST:127.0.0.1}
     port: ${DB_PORT:5432}
     user: ${DB_USER:postgres}
-    password: ${DB_PASSWORD:postgres}
+    password: ${DB_PASSWORD:}
     dbname: ${DB_NAME:golang_web}
     ssl_mode: ${DB_SSLMODE:disable}
     max_connections: ${DB_MAX_CONNECTIONS:20}
@@ -45,7 +45,7 @@ redis:
   db: ${REDIS_DB:0}
 
 jwt:
-  secret: ${JWT_SECRET:change-me}
+  secret: ${JWT_SECRET:}
   issuer: ${JWT_ISSUER:grove}
   access_expiry_hours: ${JWT_ACCESS_EXPIRY_HOURS:24}
   refresh_expiry_hours: ${JWT_REFRESH_EXPIRY_HOURS:168}

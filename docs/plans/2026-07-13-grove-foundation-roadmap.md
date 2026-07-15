@@ -1574,3 +1574,5 @@ type Channel interface {
 - CI 包含 unit、integration、race、vet、vulnerability、frontend build。
 - README、快速开始、部署和组件文档与实际命令一致。
 - 仓库不存在默认固定密码、公开任意 token、未限制上传等生产阻断项。
+
+2026-07-15 完成审计记录见 `docs/plans/2026-07-15-completion-audit.md`。本轮补齐了示例配置固定凭据缺口，并重新验证后端、PostgreSQL、路由/OpenAPI、前端和安全门禁。

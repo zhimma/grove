@@ -20,6 +20,11 @@ go mod download
 
 编辑 `config.yaml` 或 `.env`，至少启用默认数据库：
 
+```bash
+export DB_PASSWORD='replace-with-your-postgres-password'
+export JWT_SECRET='replace-with-at-least-32-random-characters'
+```
+
 ```yaml
 databases:
   default:
@@ -28,7 +33,7 @@ databases:
     host: 127.0.0.1
     port: 5432
     user: postgres
-    password: postgres
+    password: ${DB_PASSWORD}
     dbname: golang_web
     ssl_mode: disable
 ```

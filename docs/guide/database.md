@@ -25,7 +25,7 @@ databases:
     host: 127.0.0.1
     port: 5432
     user: postgres
-    password: postgres
+    password: ${DB_PASSWORD}
     dbname: grove
     ssl_mode: disable
 ```
