@@ -61,6 +61,8 @@ func (r *Router) InstallToEngine(engine *gin.Engine) {
 	handler.RegisterRoleRoutesWithDeps(protected, r.p.DB, r.p.GetEnforcer("console"), runtimeCatalog, pagePolicies, catalog)
 	handler.RegisterPermissionRoutes(protected, runtimeCatalog, catalog)
 	handler.RegisterAdminRoutesWithDeps(protected, r.p.DB, r.p.GetEnforcer("console"), pagePolicies, catalog)
+	handler.RegisterUserRoutesWithDeps(protected, r.p.DB, catalog)
+	handler.RegisterArticleRoutesWithDeps(protected, r.p.DB, pagePolicies, catalog)
 	handler.RegisterSessionRoutesWithDeps(protected, r.p.DB, r.p.TokenManager, pagePolicies, catalog)
 	handler.RegisterSystemConfigRoutesWithDeps(protected, r.p.DB, r.p.ConfigSecrets, pagePolicies, catalog)
 	handler.RegisterStorageRoutesWithDeps(protected, r.p.Storage, catalog)

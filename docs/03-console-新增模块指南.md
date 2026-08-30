@@ -83,6 +83,7 @@ func RegisterArticleRoutes(protected *gin.RouterGroup, dbs database.Connections,
 	articles.GET("", h.List).Name("内容管理.文章列表")
 	articles.POST("", h.Create).Name("内容管理.创建文章")
 	articles.PUT("/:id", h.Update).Name("内容管理.更新文章")
+	articles.PUT("/:id/status", h.UpdateStatus).Name("内容管理.更新文章状态")
 	articles.DELETE("/:id", h.Delete).Name("内容管理.删除文章")
 }
 ```

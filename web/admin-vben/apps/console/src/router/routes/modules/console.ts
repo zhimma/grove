@@ -30,6 +30,25 @@ const routes: RouteRecordRaw[] = [
         component: () => import('#/views/console/configs/system-configs.vue'),
         meta: { title: '系统配置' },
       },
+      {
+        name: 'ConsoleSiteConfigs',
+        path: '/configs/site',
+        component: () => import('#/views/console/configs/site-configs.vue'),
+        meta: { title: '站点配置' },
+      },
+    ],
+  },
+  {
+    meta: { icon: 'lucide:notebook-tabs', order: 1005, title: '内容管理' },
+    name: 'ConsoleContent',
+    path: '/content',
+    children: [
+      {
+        name: 'ConsoleArticles',
+        path: '/content/articles',
+        component: () => import('#/views/console/content/articles.vue'),
+        meta: { title: '文章管理' },
+      },
     ],
   },
   {
@@ -42,6 +61,12 @@ const routes: RouteRecordRaw[] = [
         path: '/system/admins',
         component: () => import('#/views/console/system/admins.vue'),
         meta: { title: '管理员管理' },
+      },
+      {
+        name: 'ConsoleUsers',
+        path: '/system/users',
+        component: () => import('#/views/console/system/users.vue'),
+        meta: { title: '用户管理' },
       },
       {
         name: 'ConsoleRoles',

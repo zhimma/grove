@@ -127,6 +127,66 @@
       "path": "/admins/{id}"
     },
     {
+      "operationId": "consoleListUsers",
+      "method": "GET",
+      "path": "/users"
+    },
+    {
+      "operationId": "consoleCreateUser",
+      "method": "POST",
+      "path": "/users"
+    },
+    {
+      "operationId": "consoleGetUser",
+      "method": "GET",
+      "path": "/users/{id}"
+    },
+    {
+      "operationId": "consoleUpdateUser",
+      "method": "PUT",
+      "path": "/users/{id}"
+    },
+    {
+      "operationId": "consoleUpdateUserStatus",
+      "method": "PUT",
+      "path": "/users/{id}/status"
+    },
+    {
+      "operationId": "consoleDeleteUser",
+      "method": "DELETE",
+      "path": "/users/{id}"
+    },
+    {
+      "operationId": "consoleListArticles",
+      "method": "GET",
+      "path": "/articles"
+    },
+    {
+      "operationId": "consoleCreateArticle",
+      "method": "POST",
+      "path": "/articles"
+    },
+    {
+      "operationId": "consoleGetArticle",
+      "method": "GET",
+      "path": "/articles/{id}"
+    },
+    {
+      "operationId": "consoleUpdateArticle",
+      "method": "PUT",
+      "path": "/articles/{id}"
+    },
+    {
+      "operationId": "consoleUpdateArticleStatus",
+      "method": "PUT",
+      "path": "/articles/{id}/status"
+    },
+    {
+      "operationId": "consoleDeleteArticle",
+      "method": "DELETE",
+      "path": "/articles/{id}"
+    },
+    {
       "operationId": "consoleListSystemConfigs",
       "method": "GET",
       "path": "/system-configs"

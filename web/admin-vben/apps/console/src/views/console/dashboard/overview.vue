@@ -11,6 +11,7 @@ const overview = ref<Record<string, any>>({});
 
 const statItems = computed(() => [
   { label: '管理员总数', value: overview.value.admin_count || 0 },
+  { label: '用户总数', value: overview.value.user_count || 0 },
   { label: '角色总数', value: overview.value.role_count || 0 },
   { label: '操作日志', value: overview.value.operation_count || 0 },
   { label: '登录日志', value: overview.value.login_count || 0 },
@@ -26,22 +27,27 @@ onMounted(loadDashboard);
 <template>
   <div class="p-5">
     <Row :gutter="[16, 16]">
-      <Col :span="6">
+      <Col :span="4">
         <Card>
           <Statistic title="管理员总数" :value="overview.admin_count || 0" />
         </Card>
       </Col>
-      <Col :span="6">
+      <Col :span="4">
+        <Card>
+          <Statistic title="用户总数" :value="overview.user_count || 0" />
+        </Card>
+      </Col>
+      <Col :span="4">
         <Card>
           <Statistic title="角色总数" :value="overview.role_count || 0" />
         </Card>
       </Col>
-      <Col :span="6">
+      <Col :span="4">
         <Card>
           <Statistic title="操作日志" :value="overview.operation_count || 0" />
         </Card>
       </Col>
-      <Col :span="6">
+      <Col :span="4">
         <Card>
           <Statistic title="登录日志" :value="overview.login_count || 0" />
         </Card>

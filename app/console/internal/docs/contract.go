@@ -44,6 +44,16 @@ func spec(cfg *config.Config) docsui.Document {
 	updateAdminStatusRequest := doc.AddSchema("ConsoleUpdateAdminStatusRequest", handler.UpdateAdminStatusRequest{})
 	resetAdminPasswordRequest := doc.AddSchema("ConsoleResetAdminPasswordRequest", handler.ResetAdminPasswordRequest{})
 	messageResponse := doc.AddSchema("ConsoleMessageResponse", handler.MessageResponse{})
+	userResponse := doc.AddSchema("ConsoleUserResponse", handler.UserResponse{})
+	listUsersResponse := doc.AddSchema("ConsoleListUsersResponse", handler.ListUsersResponse{})
+	createUserRequest := doc.AddSchema("ConsoleCreateUserRequest", handler.CreateUserRequest{})
+	updateUserRequest := doc.AddSchema("ConsoleUpdateUserRequest", handler.UpdateUserRequest{})
+	updateUserStatusRequest := doc.AddSchema("ConsoleUpdateUserStatusRequest", handler.UpdateUserStatusRequest{})
+	articleResponse := doc.AddSchema("ConsoleArticleResponse", handler.ArticleResponse{})
+	listArticlesResponse := doc.AddSchema("ConsoleListArticlesResponse", handler.ListArticlesResponse{})
+	createArticleRequest := doc.AddSchema("ConsoleCreateArticleRequest", handler.CreateArticleRequest{})
+	updateArticleRequest := doc.AddSchema("ConsoleUpdateArticleRequest", handler.UpdateArticleRequest{})
+	updateArticleStatusRequest := doc.AddSchema("ConsoleUpdateArticleStatusRequest", handler.UpdateArticleStatusRequest{})
 
 	listSystemConfigsResponse := doc.AddSchema("ConsoleListSystemConfigsResponse", handler.ListSystemConfigsResponse{})
 	systemConfigItem := doc.AddSchema("ConsoleSystemConfigItem", handler.SystemConfigItem{})
@@ -118,6 +128,34 @@ func spec(cfg *config.Config) docsui.Document {
 		adminPath, docsui.JSONBody("新密码", resetAdminPasswordRequest, true), messageResponse)
 	addConsoleOperation(&doc, "管理员", "/admins/{id}", http.MethodDelete, "consoleDeleteAdmin", "删除管理员", true,
 		adminPath, nil, docsui.Schema{})
+
+	userPath := docsui.ParametersFor(handler.UserPathRequest{}, "uri", "path")
+	addConsoleOperation(&doc, "用户管理", "/users", http.MethodGet, "consoleListUsers", "获取用户列表", true,
+		docsui.ParametersFor(handler.ListUsersRequest{}, "form", "query"), nil, listUsersResponse)
+	addConsoleOperation(&doc, "用户管理", "/users", http.MethodPost, "consoleCreateUser", "创建用户", true,
+		nil, docsui.JSONBody("用户", createUserRequest, true), userResponse)
+	addConsoleOperation(&doc, "用户管理", "/users/{id}", http.MethodGet, "consoleGetUser", "获取用户详情", true,
+		userPath, nil, userResponse)
+	addConsoleOperation(&doc, "用户管理", "/users/{id}", http.MethodPut, "consoleUpdateUser", "更新用户", true,
+		userPath, docsui.JSONBody("用户", updateUserRequest, true), userResponse)
+	addConsoleOperation(&doc, "用户管理", "/users/{id}/status", http.MethodPut, "consoleUpdateUserStatus", "更新用户状态", true,
+		userPath, docsui.JSONBody("状态", updateUserStatusRequest, true), userResponse)
+	addConsoleOperation(&doc, "用户管理", "/users/{id}", http.MethodDelete, "consoleDeleteUser", "删除用户", true,
+		userPath, nil, docsui.Schema{})
+
+	articlePath := docsui.ParametersFor(handler.ArticlePathRequest{}, "uri", "path")
+	addConsoleOperation(&doc, "内容管理", "/articles", http.MethodGet, "consoleListArticles", "获取文章列表", true,
+		docsui.ParametersFor(handler.ListArticlesRequest{}, "form", "query"), nil, listArticlesResponse)
+	addConsoleOperation(&doc, "内容管理", "/articles", http.MethodPost, "consoleCreateArticle", "创建文章", true,
+		nil, docsui.JSONBody("文章", createArticleRequest, true), articleResponse)
+	addConsoleOperation(&doc, "内容管理", "/articles/{id}", http.MethodGet, "consoleGetArticle", "获取文章详情", true,
+		articlePath, nil, articleResponse)
+	addConsoleOperation(&doc, "内容管理", "/articles/{id}", http.MethodPut, "consoleUpdateArticle", "更新文章", true,
+		articlePath, docsui.JSONBody("文章", updateArticleRequest, true), articleResponse)
+	addConsoleOperation(&doc, "内容管理", "/articles/{id}/status", http.MethodPut, "consoleUpdateArticleStatus", "更新文章状态", true,
+		articlePath, docsui.JSONBody("状态", updateArticleStatusRequest, true), articleResponse)
+	addConsoleOperation(&doc, "内容管理", "/articles/{id}", http.MethodDelete, "consoleDeleteArticle", "删除文章", true,
+		articlePath, nil, docsui.Schema{})
 
 	systemConfigPath := docsui.ParametersFor(handler.SystemConfigPathRequest{}, "uri", "path")
 	systemConfigGroupPath := docsui.ParametersFor(handler.SystemConfigGroupPathRequest{}, "uri", "path")

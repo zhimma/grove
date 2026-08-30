@@ -36,7 +36,7 @@ CoreServer → middleware → router → handler → service → model / databas
 
 位置：`app/console`，前端位置：`web/admin-vben/apps/console`
 
-当前主线服务，包含管理员认证、Session、RBAC、系统配置、文件上传、审计日志和管理页面。
+当前主线服务，包含管理员认证、Session、RBAC、终端用户管理、系统/站点配置、文章管理、文件上传、审计日志和管理页面。
 
 ### Worker
 
@@ -76,7 +76,7 @@ CoreServer → middleware → router → handler → service → model / databas
 ## 数据与配置边界
 
 - `config.yaml` 是唯一的本地配置文件；默认值直接写在 YAML 中。启动时支持代码明确列出的环境变量覆盖和 `${ENV}` / `${ENV:default}` 展开，但不会自动读取 `.env` 文件。
-- PostgreSQL 是默认数据库；MySQL 8.0.16+ 通过同一 GORM/Connections 抽象提供支持。迁移、管理员、角色、Session、系统配置和审计数据的持久化真相源仍是配置选定的关系数据库。
+- PostgreSQL 是默认数据库；MySQL 8.0.16+ 通过同一 GORM/Connections 抽象提供支持。迁移、用户、文章、管理员、角色、Session、系统配置和审计数据的持久化真相源仍是配置选定的关系数据库。
 - migration 和 seed 按数据库 driver 分目录，版本号保持一致。
 - Redis 是缓存和队列后端，不替代 Session 数据库真相源。
 - `console_casbin_rules` 保存 API 权限；菜单不进入 Casbin。

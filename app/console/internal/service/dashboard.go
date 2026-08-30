@@ -13,6 +13,7 @@ type DashboardService struct {
 
 type SummaryOutput struct {
 	AdminCount     int64  `json:"admin_count"`
+	UserCount      int64  `json:"user_count"`
 	RoleCount      int64  `json:"role_count"`
 	OperationCount int64  `json:"operation_count"`
 	LoginCount     int64  `json:"login_count"`
@@ -30,12 +31,16 @@ func (s *DashboardService) Summary(ctx context.Context) (SummaryOutput, error) {
 
 	var (
 		adminCount     int64
+		userCount      int64
 		roleCount      int64
 		operationCount int64
 		loginCount     int64
 	)
 	db := s.dbs.Default().WithContext(ctx)
 	if err := db.Table("console_admins").Count(&adminCount).Error; err != nil {
+		return SummaryOutput{}, errx.Internal().WithCause(err)
+	}
+	if err := db.Table("users").Count(&userCount).Error; err != nil {
 		return SummaryOutput{}, errx.Internal().WithCause(err)
 	}
 	if err := db.Table("console_roles").Count(&roleCount).Error; err != nil {
@@ -50,6 +55,7 @@ func (s *DashboardService) Summary(ctx context.Context) (SummaryOutput, error) {
 
 	return SummaryOutput{
 		AdminCount:     adminCount,
+		UserCount:      userCount,
 		RoleCount:      roleCount,
 		OperationCount: operationCount,
 		LoginCount:     loginCount,

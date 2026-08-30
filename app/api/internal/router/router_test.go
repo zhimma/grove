@@ -63,9 +63,10 @@ func TestRouterPingAndProfile(t *testing.T) {
 		t.Fatalf("migrate users: %v", err)
 	}
 	if err := db.Create(&model.User{
-		Base:  model.Base{ID: "api-user"},
-		Name:  "API User",
-		Email: "api-user@example.test",
+		Base:   model.Base{ID: "api-user"},
+		Name:   "API User",
+		Email:  "api-user@example.test",
+		Status: model.UserStatusActive,
 	}).Error; err != nil {
 		t.Fatalf("create API user: %v", err)
 	}

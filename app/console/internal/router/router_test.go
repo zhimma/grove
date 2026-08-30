@@ -378,6 +378,46 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 		t.Fatalf("expected login logs to be recorded: %#v", loginLogsResp)
 	}
 
+	createUserResp := performJSON(t, engine, http.MethodPost, "/console/v1/users", map[string]any{
+		"name":   "终端用户",
+		"email":  "member@example.com",
+		"status": model.UserStatusDisabled,
+	}, token)
+	if got := int(createUserResp["code"].(float64)); got != 0 {
+		t.Fatalf("create user failed: %#v", createUserResp)
+	}
+	userData := createUserResp["data"].(map[string]any)
+	userID, _ := userData["id"].(string)
+	if userID == "" || int(userData["status"].(float64)) != model.UserStatusDisabled {
+		t.Fatalf("created user status was not preserved: %#v", createUserResp)
+	}
+	userListResp := performJSON(t, engine, http.MethodGet, "/console/v1/users?status=0", nil, token)
+	if got := int(userListResp["code"].(float64)); got != 0 || len(userListResp["data"].(map[string]any)["list"].([]any)) != 1 {
+		t.Fatalf("list users failed: %#v", userListResp)
+	}
+	performJSON(t, engine, http.MethodPut, "/console/v1/users/"+userID+"/status", map[string]any{"status": model.UserStatusActive}, token)
+
+	createArticleResp := performJSON(t, engine, http.MethodPost, "/console/v1/articles", map[string]any{
+		"title":    "平台公告",
+		"slug":     "platform-notice",
+		"summary":  "公告摘要",
+		"content":  "公告正文",
+		"category": "公告",
+		"status":   model.ArticleStatusDraft,
+	}, token)
+	if got := int(createArticleResp["code"].(float64)); got != 0 {
+		t.Fatalf("create article failed: %#v", createArticleResp)
+	}
+	articleID := createArticleResp["data"].(map[string]any)["id"].(string)
+	articleStatusResp := performJSON(t, engine, http.MethodPut, "/console/v1/articles/"+articleID+"/status", map[string]any{"status": model.ArticleStatusPublished}, token)
+	if got := int(articleStatusResp["data"].(map[string]any)["status"].(float64)); got != model.ArticleStatusPublished {
+		t.Fatalf("publish article failed: %#v", articleStatusResp)
+	}
+	articleListResp := performJSON(t, engine, http.MethodGet, "/console/v1/articles?status=1", nil, token)
+	if got := int(articleListResp["code"].(float64)); got != 0 || len(articleListResp["data"].(map[string]any)["list"].([]any)) != 1 {
+		t.Fatalf("list articles failed: %#v", articleListResp)
+	}
+
 	logoutResp := performJSON(t, engine, http.MethodPost, "/console/v1/auth/logout", map[string]any{
 		"refresh_token": refreshToken,
 	}, token)
@@ -395,6 +435,8 @@ func openConsoleTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	if err := db.AutoMigrate(
+		&model.User{},
+		&model.Article{},
 		&model.ConsoleRole{},
 		&model.ConsoleAdmin{},
 		&model.SystemConfig{},
@@ -446,7 +488,7 @@ func seedConsoleTestData(t *testing.T, db *gorm.DB, enforcer *rbac.Enforcer) {
 		Code:        "admin",
 		DisplayName: "System Administrator",
 		Description: "seed role",
-		MenuKeys:    datatype.NewStringArray([]string{"ConsoleDashboard", "ConsoleOverview", "ConsoleConfigs", "ConsoleSystemConfigs", "ConsoleSystem", "ConsoleAdmins", "ConsoleRoles", "ConsoleSessions"}),
+		MenuKeys:    datatype.NewStringArray([]string{"ConsoleDashboard", "ConsoleOverview", "ConsoleConfigs", "ConsoleSystemConfigs", "ConsoleSiteConfigs", "ConsoleContent", "ConsoleArticles", "ConsoleSystem", "ConsoleAdmins", "ConsoleUsers", "ConsoleRoles", "ConsoleSessions"}),
 		Status:      model.ConsoleRoleStatusActive,
 		Sort:        10,
 	}
@@ -509,6 +551,18 @@ func seedConsoleTestData(t *testing.T, db *gorm.DB, enforcer *rbac.Enforcer) {
 		{role.ID, "PUT /console/v1/admins/:id/status"},
 		{role.ID, "PUT /console/v1/admins/:id/reset-password"},
 		{role.ID, "DELETE /console/v1/admins/:id"},
+		{role.ID, "GET /console/v1/users"},
+		{role.ID, "GET /console/v1/users/:id"},
+		{role.ID, "POST /console/v1/users"},
+		{role.ID, "PUT /console/v1/users/:id"},
+		{role.ID, "PUT /console/v1/users/:id/status"},
+		{role.ID, "DELETE /console/v1/users/:id"},
+		{role.ID, "GET /console/v1/articles"},
+		{role.ID, "GET /console/v1/articles/:id"},
+		{role.ID, "POST /console/v1/articles"},
+		{role.ID, "PUT /console/v1/articles/:id"},
+		{role.ID, "PUT /console/v1/articles/:id/status"},
+		{role.ID, "DELETE /console/v1/articles/:id"},
 		{role.ID, "GET /console/v1/system-configs"},
 		{role.ID, "GET /console/v1/system-configs/groups/:group"},
 		{role.ID, "POST /console/v1/system-configs"},

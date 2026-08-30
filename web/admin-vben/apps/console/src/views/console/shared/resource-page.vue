@@ -40,6 +40,7 @@ const props = defineProps<{
   deleteApi?: (id: string) => Promise<any>;
   fetchApi: (params: Record<string, any>) => Promise<any>;
   formFields?: ConsoleFormField[];
+  getDetailApi?: (id: string) => Promise<any>;
   // 是否有自定义提交函数，若有则会在默认的提交函数前调用，参数为当前表单数据，需返回一个对象作为最终提交数据
   hasCustomSubmitFun?: Function;
   // 初次加载列表时是否需要收入加入固定参数
@@ -151,18 +152,22 @@ function openCreate() {
   modalOpen.value = true;
 }
 
-function openEdit(record: any) {
+async function openEdit(record: any) {
   // 如果有customerId，则说明需要使用record[customerId]作为编辑接口的id参数，否则使用record.id
   editingId.value = props.customerId ? record[props.customerId] : record.id;
+  let source = record;
+  if (props.getDetailApi && editingId.value) {
+    source = await props.getDetailApi(editingId.value);
+  }
   if (props.isNeedEditOrganizaFun) {
-    const organizedData = props.isNeedEditOrganizaFun(record);
+    const organizedData = props.isNeedEditOrganizaFun(source);
     Object.assign(editModel, organizedData);
     if (props.setCascaderData) {
       props.setCascaderData(editModel);
     }
   } else {
-    Object.keys(record).forEach((key) => {
-      editModel[key] = record[key];
+    Object.keys(source).forEach((key) => {
+      editModel[key] = source[key];
     });
   }
   modalOpen.value = true;

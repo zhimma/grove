@@ -17,6 +17,7 @@ export interface ConsoleListResult<T> {
 
 export interface DashboardOverview {
   admin_count: number;
+  user_count: number;
   role_count: number;
   operation_count: number;
   login_count: number;
@@ -37,6 +38,38 @@ export interface ConsoleAdmin {
   created_at: string;
   last_login_at?: string;
 }
+
+export interface ConsoleUser {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  avatar?: string;
+  status: number;
+  status_text: string;
+  remark?: string;
+  last_login_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConsoleArticle {
+  id: string;
+  title: string;
+  slug: string;
+  summary?: string;
+  content?: string;
+  cover?: string;
+  category?: string;
+  status: number;
+  status_text: string;
+  published_at?: string;
+  author_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ConsoleArticleListItem = Omit<ConsoleArticle, 'content'>;
 
 export interface SystemConfigRecord {
   id: string;
@@ -112,6 +145,82 @@ export function resetAdminPassword(id: string, password: string) {
 
 export function deleteAdmin(id: string) {
   return requestClient.delete(consoleEndpoint('consoleDeleteAdmin', { id }));
+}
+
+export function getUserList(params: PageParams & Record<string, any>) {
+  return requestClient.get<ConsoleListResult<ConsoleUser>>(
+    consoleEndpoint('consoleListUsers'),
+    { params },
+  );
+}
+
+export function getUser(id: string) {
+  return requestClient.get<ConsoleUser>(
+    consoleEndpoint('consoleGetUser', { id }),
+  );
+}
+
+export function createUser(data: Record<string, any>) {
+  return requestClient.post<ConsoleUser>(
+    consoleEndpoint('consoleCreateUser'),
+    data,
+  );
+}
+
+export function updateUser(id: string, data: Record<string, any>) {
+  return requestClient.put<ConsoleUser>(
+    consoleEndpoint('consoleUpdateUser', { id }),
+    data,
+  );
+}
+
+export function updateUserStatus(id: string, status: number) {
+  return requestClient.put<ConsoleUser>(
+    consoleEndpoint('consoleUpdateUserStatus', { id }),
+    { status },
+  );
+}
+
+export function deleteUser(id: string) {
+  return requestClient.delete(consoleEndpoint('consoleDeleteUser', { id }));
+}
+
+export function getArticleList(params: PageParams & Record<string, any>) {
+  return requestClient.get<ConsoleListResult<ConsoleArticleListItem>>(
+    consoleEndpoint('consoleListArticles'),
+    { params },
+  );
+}
+
+export function getArticle(id: string) {
+  return requestClient.get<ConsoleArticle>(
+    consoleEndpoint('consoleGetArticle', { id }),
+  );
+}
+
+export function createArticle(data: Record<string, any>) {
+  return requestClient.post<ConsoleArticle>(
+    consoleEndpoint('consoleCreateArticle'),
+    data,
+  );
+}
+
+export function updateArticle(id: string, data: Record<string, any>) {
+  return requestClient.put<ConsoleArticle>(
+    consoleEndpoint('consoleUpdateArticle', { id }),
+    data,
+  );
+}
+
+export function updateArticleStatus(id: string, status: number) {
+  return requestClient.put<ConsoleArticle>(
+    consoleEndpoint('consoleUpdateArticleStatus', { id }),
+    { status },
+  );
+}
+
+export function deleteArticle(id: string) {
+  return requestClient.delete(consoleEndpoint('consoleDeleteArticle', { id }));
 }
 
 export function getSessionList(params: PageParams & Record<string, any>) {

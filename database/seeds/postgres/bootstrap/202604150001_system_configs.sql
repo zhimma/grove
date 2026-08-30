@@ -14,6 +14,10 @@ INSERT INTO system_configs (
 VALUES
     ('syscfg-platform-name', 'platform', 'site_name', '平台名称', '管理后台展示名称', 'string', 'Grove Console', 'Grove Console', true, true, 10),
     ('syscfg-platform-domain', 'platform', 'site_domain', '平台域名', '平台公开访问域名', 'string', '', '', true, false, 20),
+    ('syscfg-site-title', 'site', 'title', '站点标题', '前台站点页面标题', 'string', 'Grove', 'Grove', true, false, 10),
+    ('syscfg-site-description', 'site', 'description', '站点描述', '前台站点描述和 SEO 摘要', 'string', '', '', true, false, 20),
+    ('syscfg-site-logo', 'site', 'logo', '站点 Logo', '前台站点 Logo 地址', 'string', '', '', true, false, 30),
+    ('syscfg-site-icp', 'site', 'icp', '备案信息', '站点底部备案信息', 'string', '', '', true, false, 40),
     ('syscfg-storage-max-size', 'storage', 'upload_max_mb', '上传大小上限', '前端演示页展示用上传大小限制（MB）', 'int', '20', '20', true, true, 10),
     ('syscfg-feature-sts', 'feature', 'storage_sts_enabled', '启用 STS 直传', '控制台存储演示页是否展示 STS 凭证区块', 'bool', 'true', 'true', true, true, 10)
 ON CONFLICT DO NOTHING;

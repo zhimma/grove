@@ -98,6 +98,11 @@ storage:
       max_bytes: 5242880
       extensions: [.jpg, .jpeg, .png, .gif, .webp]
       mime_types: [image/jpeg, image/png, image/gif, image/webp]
+    article-cover:
+      directory: article-covers
+      max_bytes: 5242880
+      extensions: [.jpg, .jpeg, .png, .gif, .webp]
+      mime_types: [image/jpeg, image/png, image/gif, image/webp]
     document:
       directory: documents
       max_bytes: 20971520
