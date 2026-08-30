@@ -7,10 +7,12 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
 
 	"github.com/zhimma/grove/pkg/errx"
@@ -19,19 +21,75 @@ import (
 const validationMessage = "请求参数校验失败"
 const invalidParamsMessage = "请求参数格式不正确"
 
+var unknownJSONFieldPattern = regexp.MustCompile(`unknown field "([^"]+)"`)
+
+var errTrailingJSON = errors.New("request contains more than one JSON value")
+
 func BindJSON(c *gin.Context, target any) error {
-	if err := c.ShouldBindJSON(target); err != nil {
-		if _, ok := err.(validator.ValidationErrors); ok {
+	// Keep the historical permissive behavior for compatibility endpoints.
+	// Public API handlers should call BindJSONStrict; callers that need the
+	// legacy behavior can use the explicit BindJSONAllowUnknown alias.
+	return bindJSON(c, target, false)
+}
+
+// BindJSONStrict rejects unknown object fields and trailing JSON values before
+// running the same validator and request hooks as BindJSON. This is the
+// default contract for newly added public API endpoints.
+func BindJSONStrict(c *gin.Context, target any) error {
+	return bindJSON(c, target, true)
+}
+
+// BindJSONAllowUnknown documents an intentional compatibility exception. It
+// is equivalent to the legacy BindJSON behavior and should not be used for
+// newly introduced public endpoints.
+func BindJSONAllowUnknown(c *gin.Context, target any) error {
+	return bindJSON(c, target, false)
+}
+
+func bindJSON(c *gin.Context, target any, disallowUnknown bool) error {
+	if c == nil || c.Request == nil || c.Request.Body == nil {
+		return newBindingError(c, errors.New("invalid request"), target, "json")
+	}
+
+	decoder := json.NewDecoder(c.Request.Body)
+	if disallowUnknown {
+		decoder.DisallowUnknownFields()
+	}
+
+	if err := decoder.Decode(target); err != nil {
+		if isValidationError(err) {
 			return newValidationError(c, err, target, "json")
 		}
 		return newBindingError(c, err, target, "json")
+	}
+
+	// A request is one JSON document. Gin's default binder stops after the
+	// first value, which could otherwise accept `{...}{...}` accidentally.
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			err = errTrailingJSON
+		}
+		return newBindingError(c, err, target, "json")
+	}
+
+	if binding.Validator != nil {
+		if err := binding.Validator.ValidateStruct(target); err != nil {
+			if isValidationError(err) {
+				return newValidationError(c, err, target, "json")
+			}
+			return newBindingError(c, err, target, "json")
+		}
 	}
 	return runRequestHooks(target)
 }
 
 func BindQuery(c *gin.Context, target any) error {
+	if c == nil || c.Request == nil {
+		return newBindingError(c, errors.New("invalid request"), target, "query")
+	}
 	if err := c.ShouldBindQuery(target); err != nil {
-		if _, ok := err.(validator.ValidationErrors); ok {
+		if isValidationError(err) {
 			return newValidationError(c, err, target, "query")
 		}
 		return newBindingError(c, err, target, "query")
@@ -40,8 +98,11 @@ func BindQuery(c *gin.Context, target any) error {
 }
 
 func BindURI(c *gin.Context, target any) error {
+	if c == nil || c.Request == nil {
+		return newBindingError(c, errors.New("invalid request"), target, "uri")
+	}
 	if err := c.ShouldBindUri(target); err != nil {
-		if _, ok := err.(validator.ValidationErrors); ok {
+		if isValidationError(err) {
 			return newValidationError(c, err, target, "uri")
 		}
 		return newBindingError(c, err, target, "uri")
@@ -59,6 +120,10 @@ func Require(condition bool, message string) error {
 func runRequestHooks(target any) error {
 	if validatable, ok := target.(interface{ Validate() error }); ok {
 		if err := validatable.Validate(); err != nil {
+			var httpErr *errx.HTTPError
+			if errors.As(err, &httpErr) && httpErr != nil {
+				return httpErr
+			}
 			return errx.InvalidParams().
 				WithHTTPStatus(http.StatusUnprocessableEntity).
 				WithMessage(validationMessage).
@@ -115,6 +180,17 @@ func formatErrors(c *gin.Context, err error, target any, source string) map[stri
 		}
 	}
 
+	if matches := unknownJSONFieldPattern.FindStringSubmatch(err.Error()); len(matches) == 2 {
+		return map[string][]string{
+			"_error": {fmt.Sprintf("请求包含不支持的字段%s", matches[1])},
+		}
+	}
+	if errors.Is(err, errTrailingJSON) {
+		return map[string][]string{
+			"_error": {"请求体只能包含一个 JSON 对象"},
+		}
+	}
+
 	var numErr *strconv.NumError
 	if errors.As(err, &numErr) {
 		if meta, ok := resolveTypeErrorField(c, target, source); ok {
@@ -134,7 +210,7 @@ func formatErrors(c *gin.Context, err error, target any, source string) map[stri
 
 func resolveTypeErrorField(c *gin.Context, target any, source string) (fieldMeta, bool) {
 	structType := indirectStructType(target)
-	if structType == nil || c == nil {
+	if structType == nil || c == nil || c.Request == nil {
 		return fieldMeta{}, false
 	}
 	return resolveTypeErrorFieldInStruct(c, target, *structType, source)
@@ -239,6 +315,14 @@ func formatValidationErrors(validationErrors validator.ValidationErrors, target 
 		}
 	}
 	return errorsMap
+}
+
+func isValidationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var validationErrors validator.ValidationErrors
+	return errors.As(err, &validationErrors)
 }
 
 func formatValidationMessage(target any, meta fieldMeta, fieldErr validator.FieldError) string {

@@ -12,6 +12,7 @@ server:
   shutdown_timeout: 30
   read_timeout: 30
   write_timeout: 30
+  idle_timeout: 60
   max_header_bytes: 1048576
   max_body_bytes: 33554432
 
@@ -28,7 +29,7 @@ databases:
     host: 127.0.0.1
     port: 3306
     user: root
-    password: '123456'
+    password: ''
     dbname: db_grove
     ssl_mode: disable
     charset: utf8mb4
@@ -38,16 +39,17 @@ databases:
     max_connections: 20
     max_idle_conns: 10
     conn_max_lifetime: 3600
+    connect_timeout: 5
   resources: {}
 
 redis:
   enabled: true
   addr: 127.0.0.1:6379
-  password: '123456'
+  password: ''
   db: 0
 
 jwt:
-  secret: '123456789012345678901234567890123'
+  secret: ''
   issuer: grove
   access_expiry_hours: 24
   refresh_expiry_hours: 168
@@ -114,6 +116,9 @@ storage:
       driver: local
       root: ./storage
       base_url: /storage
+      # 文件默认私有；local 盘只有明确同时开启 public 和 serve_static 才会返回应用直链并公开静态访问。
+      public: false
+      serve_static: false
       prefix: console
     s3:
       driver: s3
@@ -124,6 +129,8 @@ storage:
       secret_key: ''
       secure: true
       base_url: ''
+      public: false
+      serve_static: false
       prefix: console
       sts:
         enabled: false

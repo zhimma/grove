@@ -3,7 +3,7 @@ import type { ConsoleSession } from '#/api/core/console';
 
 import { computed, onMounted, ref } from 'vue';
 
-import { Modal, message } from 'ant-design-vue';
+import { message, Modal } from 'ant-design-vue';
 
 import { getSessionList, revokeSession } from '#/api/core/console';
 import { useAuthStore } from '#/store';
@@ -157,7 +157,9 @@ onMounted(loadSessions);
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'admin'">
             <div class="admin-cell">
-              <strong>{{ record.admin?.display_name || record.admin?.account || '-' }}</strong>
+              <strong>{{
+                record.admin?.display_name || record.admin?.account || '-'
+              }}</strong>
               <span>{{ record.admin?.account || record.admin_id }}</span>
             </div>
           </template>
@@ -200,11 +202,11 @@ onMounted(loadSessions);
 
 .session-hero {
   display: flex;
+  gap: 32px;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 32px;
-  margin-bottom: 20px;
   padding: 8px 4px;
+  margin-bottom: 20px;
 }
 
 .session-hero h1 {
@@ -235,9 +237,9 @@ onMounted(loadSessions);
 .metric {
   min-width: 112px;
   padding: 12px 16px;
+  background: rgb(255 255 255 / 68%);
   border: 1px solid rgb(148 163 184 / 24%);
   border-radius: 12px;
-  background: rgb(255 255 255 / 68%);
   backdrop-filter: blur(12px);
 }
 
@@ -274,14 +276,14 @@ onMounted(loadSessions);
 
 .device-cell {
   flex-direction: row;
-  align-items: center;
   gap: 8px;
+  align-items: center;
 }
 
 @media (max-width: 900px) {
   .session-hero {
-    align-items: stretch;
     flex-direction: column;
+    align-items: stretch;
   }
 
   .session-metrics {

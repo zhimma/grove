@@ -188,7 +188,11 @@ func TestCoreServerStartReturnsBindError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reserve port: %v", err)
 	}
-	defer listener.Close()
+	t.Cleanup(func() {
+		if err := listener.Close(); err != nil {
+			t.Errorf("close listener: %v", err)
+		}
+	})
 	port := listener.Addr().(*net.TCPAddr).Port
 
 	core, cleanup, err := NewCoreServer(testServerConfig(t), "api", fmt.Sprint(port))
@@ -257,6 +261,29 @@ func TestNewCoreServerUsesCaseInsensitiveProductionMode(t *testing.T) {
 	t.Cleanup(cleanup)
 	if gin.Mode() != gin.ReleaseMode {
 		t.Fatalf("gin mode = %q, want %q", gin.Mode(), gin.ReleaseMode)
+	}
+}
+
+func TestNewCoreServerAppliesIdleTimeoutAndSafeDefaults(t *testing.T) {
+	cfg := testServerConfig(t)
+	cfg.Server.IdleTimeout = 7
+	core, cleanup, err := NewCoreServer(cfg, "api", "0")
+	if err != nil {
+		t.Fatalf("new core server: %v", err)
+	}
+	t.Cleanup(cleanup)
+	if core.Server.IdleTimeout != 7*time.Second {
+		t.Fatalf("idle timeout = %s, want 7s", core.Server.IdleTimeout)
+	}
+
+	cfg.Server.IdleTimeout = 0
+	core, cleanup, err = NewCoreServer(cfg, "api", "0")
+	if err != nil {
+		t.Fatalf("new core server with zero idle timeout: %v", err)
+	}
+	t.Cleanup(cleanup)
+	if core.Server.IdleTimeout <= 0 {
+		t.Fatal("zero idle timeout must fall back to a positive default")
 	}
 }
 

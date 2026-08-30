@@ -71,6 +71,46 @@ func TestReplaceConsoleRoleForUserReplacesMultipleStaleGroupings(t *testing.T) {
 	assertGroupingsEqual(t, enforcer, adminID, [][]string{})
 }
 
+func TestRefreshPolicyReloadsDatabaseChangesAndAdvancesVersion(t *testing.T) {
+	db, enforcer := openRBACFailureTest(t)
+	allowed, err := enforcer.Can("user-1", "GET /console/v1/roles")
+	if err != nil {
+		t.Fatalf("initial enforce: %v", err)
+	}
+	if allowed {
+		t.Fatal("unexpected initial permission")
+	}
+	initialVersion := enforcer.PolicyVersion()
+	if err := db.Exec("INSERT INTO console_casbin_rules (ptype, v0, v1) VALUES ('p', 'member', 'GET /console/v1/roles'), ('g', 'user-1', 'member')").Error; err != nil {
+		t.Fatalf("insert policy: %v", err)
+	}
+	if allowed, err := enforcer.Can("user-1", "GET /console/v1/roles"); err != nil {
+		t.Fatalf("enforce before refresh: %v", err)
+	} else if allowed {
+		t.Fatal("database policy should not be visible before refresh")
+	}
+	if err := enforcer.RefreshPolicy(); err != nil {
+		t.Fatalf("refresh policy: %v", err)
+	}
+	allowed, err = enforcer.Can("user-1", "GET /console/v1/roles")
+	if err != nil {
+		t.Fatalf("enforce after refresh: %v", err)
+	}
+	if !allowed {
+		t.Fatal("database policy should be visible after refresh")
+	}
+	if enforcer.PolicyVersion() <= initialVersion {
+		t.Fatalf("policy version did not advance: initial=%d current=%d", initialVersion, enforcer.PolicyVersion())
+	}
+}
+
+func TestNilEnforcerCanFailsClosed(t *testing.T) {
+	var enforcer *Enforcer
+	if _, err := enforcer.Can("user-1", "permission"); err == nil {
+		t.Fatal("nil enforcer must return an error")
+	}
+}
+
 func openRBACFailureTest(t *testing.T) (*gorm.DB, *Enforcer) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/rbac.db"), &gorm.Config{})

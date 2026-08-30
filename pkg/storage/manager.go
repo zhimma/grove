@@ -2,6 +2,9 @@ package storage
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -19,6 +22,20 @@ type Driver interface {
 	URL(objectPath string) string
 }
 
+// ObjectReader is an optional read capability for storage drivers. Keeping
+// reads separate from Driver preserves the small upload/delete contract for
+// custom write-only drivers while allowing authenticated download handlers to
+// serve drivers that explicitly support reads.
+type ObjectReader interface {
+	Open(ctx context.Context, objectPath string) (io.ReadCloser, error)
+}
+
+var (
+	ErrObjectPath     = errors.New("invalid storage object path")
+	ErrObjectRead     = errors.New("storage object read is not supported")
+	ErrObjectNotFound = errors.New("storage object not found")
+)
+
 type STSProvider interface {
 	IssueToken(ctx context.Context, userID string) (*STSToken, error)
 }
@@ -33,14 +50,16 @@ type STSToken struct {
 }
 
 type DiskConfig struct {
-	Name      string
-	Driver    string
-	BaseURL   string
-	Endpoint  string
-	Region    string
-	Bucket    string
-	Prefix    string
-	IsDefault bool
+	Name        string
+	Driver      string
+	BaseURL     string
+	Public      bool
+	ServeStatic bool
+	Endpoint    string
+	Region      string
+	Bucket      string
+	Prefix      string
+	IsDefault   bool
 }
 
 type Disk struct {
@@ -57,16 +76,18 @@ type Manager struct {
 }
 
 type ClientConfig struct {
-	Disk       string           `json:"disk"`
-	Driver     string           `json:"driver"`
-	IsDefault  bool             `json:"is_default"`
-	BaseURL    string           `json:"base_url"`
-	Endpoint   string           `json:"endpoint"`
-	Region     string           `json:"region"`
-	Bucket     string           `json:"bucket"`
-	Prefix     string           `json:"prefix"`
-	UploadMode string           `json:"upload_mode"`
-	STS        *STSClientConfig `json:"sts,omitempty"`
+	Disk        string           `json:"disk"`
+	Driver      string           `json:"driver"`
+	IsDefault   bool             `json:"is_default"`
+	BaseURL     string           `json:"base_url"`
+	Public      bool             `json:"public"`
+	ServeStatic bool             `json:"serve_static"`
+	Endpoint    string           `json:"endpoint"`
+	Region      string           `json:"region"`
+	Bucket      string           `json:"bucket"`
+	Prefix      string           `json:"prefix"`
+	UploadMode  string           `json:"upload_mode"`
+	STS         *STSClientConfig `json:"sts,omitempty"`
 }
 
 type STSClientConfig struct {
@@ -84,9 +105,11 @@ type StoredFile struct {
 	Purpose     string `json:"purpose"`
 	Path        string `json:"path"`
 	URL         string `json:"url"`
+	Public      bool   `json:"public"`
 	Filename    string `json:"filename"`
 	Size        int64  `json:"size"`
 	ContentType string `json:"content_type"`
+	Checksum    string `json:"checksum,omitempty"`
 }
 
 func NewManager(defaultDisk string) *Manager {
@@ -233,15 +256,27 @@ func (m *Manager) SaveUploadedFile(ctx context.Context, diskName, purpose string
 	if err != nil {
 		return nil, fmt.Errorf("open upload file: %w", err)
 	}
-	defer src.Close()
 	validated, err := policy.Inspect(file.Filename, file.Size, src)
+	closeErr := src.Close()
+	if closeErr != nil && err == nil {
+		return nil, fmt.Errorf("close upload file: %w", closeErr)
+	}
 	if err != nil {
 		return nil, err
 	}
 	objectDir := buildObjectDir(disk.Config.Prefix, validated.Directory)
 	objectPath := buildUploadedObjectPath(objectDir, validated.Filename)
+	digest := sha256.New()
+	validated.Reader = io.TeeReader(validated.Reader, digest)
 	if err := disk.Driver.PutStream(ctx, objectPath, validated.Reader, validated.Size, validated.ContentType); err != nil {
+		// Drivers are expected to be atomic, but a best-effort delete protects
+		// implementations that create a visible object before reporting an error.
+		_ = disk.Driver.Delete(ctx, objectPath)
 		return nil, fmt.Errorf("%w: %w", ErrUploadStore, err)
+	}
+	checksum := ""
+	if digestBytes := digest.Sum(nil); len(digestBytes) > 0 {
+		checksum = hex.EncodeToString(digestBytes)
 	}
 
 	return &StoredFile{
@@ -249,25 +284,87 @@ func (m *Manager) SaveUploadedFile(ctx context.Context, diskName, purpose string
 		Driver:      disk.Config.Driver,
 		Purpose:     policyName,
 		Path:        objectPath,
-		URL:         disk.Driver.URL(objectPath),
+		URL:         objectURL(disk, objectPath),
+		Public:      diskHasPublicURL(disk),
 		Filename:    file.Filename,
 		Size:        file.Size,
 		ContentType: validated.ContentType,
+		Checksum:    checksum,
 	}, nil
+}
+
+// Open opens an object for a caller that has already passed its authorization
+// boundary (for example, the protected Console download route). The manager
+// still validates the object key before delegating to the driver so a caller
+// cannot use a local driver as a path traversal primitive.
+func (m *Manager) Open(ctx context.Context, diskName, objectPath string) (io.ReadCloser, error) {
+	disk, err := m.Get(diskName)
+	if err != nil {
+		return nil, err
+	}
+	cleanPath, err := validateObjectPath(objectPath)
+	if err != nil {
+		return nil, err
+	}
+	reader, ok := disk.Driver.(ObjectReader)
+	if !ok {
+		return nil, fmt.Errorf("%w: disk %q", ErrObjectRead, disk.Config.Name)
+	}
+	stream, err := reader.Open(ctx, cleanPath)
+	if err != nil {
+		return nil, fmt.Errorf("open storage object: %w", err)
+	}
+	return stream, nil
 }
 
 func describeDisk(disk *Disk) *ClientConfig {
 	return &ClientConfig{
-		Disk:       disk.Config.Name,
-		Driver:     disk.Config.Driver,
-		IsDefault:  disk.Config.IsDefault,
-		BaseURL:    disk.Config.BaseURL,
-		Endpoint:   disk.Config.Endpoint,
-		Region:     disk.Config.Region,
-		Bucket:     disk.Config.Bucket,
-		Prefix:     disk.Config.Prefix,
-		UploadMode: "server",
+		Disk:        disk.Config.Name,
+		Driver:      disk.Config.Driver,
+		IsDefault:   disk.Config.IsDefault,
+		BaseURL:     disk.Config.BaseURL,
+		Public:      disk.Config.Public,
+		ServeStatic: disk.Config.ServeStatic,
+		Endpoint:    disk.Config.Endpoint,
+		Region:      disk.Config.Region,
+		Bucket:      disk.Config.Bucket,
+		Prefix:      disk.Config.Prefix,
+		UploadMode:  "server",
 	}
+}
+
+func objectURL(disk *Disk, objectPath string) string {
+	if !diskHasPublicURL(disk) {
+		return ""
+	}
+	return disk.Driver.URL(objectPath)
+}
+
+func diskHasPublicURL(disk *Disk) bool {
+	if disk == nil || !disk.Config.Public || disk.Driver == nil {
+		return false
+	}
+	// Local files are only addressable through this application when the
+	// explicit static route is enabled. S3-compatible storage owns its own
+	// public endpoint and therefore has no matching in-process requirement.
+	return !strings.EqualFold(disk.Driver.Name(), "local") || disk.Config.ServeStatic
+}
+
+func validateObjectPath(objectPath string) (string, error) {
+	raw := strings.TrimSpace(objectPath)
+	if raw == "" || strings.ContainsAny(raw, "\\\x00\r\n") || strings.HasPrefix(raw, "/") {
+		return "", ErrObjectPath
+	}
+	clean := path.Clean(raw)
+	if clean == "." || clean != raw || clean == ".." || strings.HasPrefix(clean, "../") {
+		return "", ErrObjectPath
+	}
+	for _, segment := range strings.Split(clean, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return "", ErrObjectPath
+		}
+	}
+	return clean, nil
 }
 
 func normalizeDiskName(name string) string {

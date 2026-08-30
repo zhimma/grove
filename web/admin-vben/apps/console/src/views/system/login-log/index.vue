@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { message, Modal } from 'ant-design-vue';
-import { getLoginLogList, deleteLoginLog, clearLoginLog } from '#/api/log';
 import type { LoginLog } from '#/api/log';
+
+import { onMounted, ref } from 'vue';
+
+import { getLoginLogList } from '#/api/log';
+
 import LogDetail from './components/LogDetail.vue';
 
 // 状态
@@ -18,7 +20,7 @@ const pagination = ref({
 const filters = ref({
   admin_id: '',
   keyword: '',
-  status: undefined as number | undefined,
+  success: undefined as boolean | undefined,
   dateRange: [] as string[],
 });
 
@@ -66,16 +68,16 @@ const columns = [
   },
   {
     title: '操作',
-    key: 'action',
+    key: 'actions',
     width: 150,
     fixed: 'right',
   },
 ];
 
 // 状态选项
-const statusOptions = [
-  { label: '成功', value: 1 },
-  { label: '失败', value: 2 },
+const successOptions = [
+  { label: '成功', value: true },
+  { label: '失败', value: false },
 ];
 
 // 加载日志列表
@@ -87,12 +89,12 @@ async function loadLogList() {
       page_size: pagination.value.pageSize,
       admin_id: filters.value.admin_id,
       keyword: filters.value.keyword,
-      status: filters.value.status,
-      start_time: filters.value.dateRange[0],
-      end_time: filters.value.dateRange[1],
+      success: filters.value.success,
+      created_from: filters.value.dateRange[0],
+      created_to: filters.value.dateRange[1],
     });
     logList.value = res.list || [];
-    pagination.value.total = res.total || 0;
+    pagination.value.total = res.meta?.total || 0;
   } finally {
     loading.value = false;
   }
@@ -116,7 +118,7 @@ function handleReset() {
   filters.value = {
     admin_id: '',
     keyword: '',
-    status: undefined,
+    success: undefined,
     dateRange: [],
   };
   handleSearch();
@@ -128,42 +130,6 @@ function handleDetail(record: LoginLog) {
   detailVisible.value = true;
 }
 
-// 删除日志
-function handleDelete(record: LoginLog) {
-  Modal.confirm({
-    title: '确认删除',
-    content: '确定要删除这条登录日志吗？',
-    onOk: async () => {
-      try {
-        await deleteLoginLog(record.id);
-        message.success('删除成功');
-        loadLogList();
-      } catch (error) {
-        // 错误已在拦截器处理
-      }
-    },
-  });
-}
-
-// 清空日志
-function handleClear() {
-  Modal.confirm({
-    title: '确认清空',
-    content: '确定要清空所有登录日志吗？此操作不可恢复。',
-    okText: '清空',
-    okType: 'danger',
-    onOk: async () => {
-      try {
-        await clearLoginLog();
-        message.success('清空成功');
-        loadLogList();
-      } catch (error) {
-        // 错误已在拦截器处理
-      }
-    },
-  });
-}
-
 onMounted(() => {
   loadLogList();
 });
@@ -173,11 +139,8 @@ onMounted(() => {
   <div class="login-log">
     <a-card>
       <template #title>
-        <div class="flex justify-between items-center">
+        <div class="flex items-center justify-between">
           <span>登录日志</span>
-          <a-button danger @click="handleClear">
-            清空日志
-          </a-button>
         </div>
       </template>
 
@@ -193,9 +156,9 @@ onMounted(() => {
         </a-form-item>
         <a-form-item label="状态">
           <a-select
-            v-model:value="filters.status"
+            v-model:value="filters.success"
             placeholder="选择状态"
-            :options="statusOptions"
+            :options="successOptions"
             allow-clear
             style="width: 120px"
           />
@@ -230,14 +193,11 @@ onMounted(() => {
               {{ record.success ? '成功' : '失败' }}
             </a-tag>
           </template>
-          
-          <template v-if="column.key === 'action'">
+
+          <template v-if="column.key === 'actions'">
             <a-space>
               <a-button type="link" size="small" @click="handleDetail(record)">
                 详情
-              </a-button>
-              <a-button type="link" danger size="small" @click="handleDelete(record)">
-                删除
               </a-button>
             </a-space>
           </template>
@@ -246,11 +206,7 @@ onMounted(() => {
     </a-card>
 
     <!-- 详情弹窗 -->
-    <LogDetail
-      v-model:visible="detailVisible"
-      :log="currentLog"
-      type="login"
-    />
+    <LogDetail v-model:visible="detailVisible" :log="currentLog" type="login" />
   </div>
 </template>
 

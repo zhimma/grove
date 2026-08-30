@@ -20,7 +20,11 @@ import (
 	"gorm.io/gorm"
 )
 
-const metadataTable = "grove_migrations"
+const (
+	metadataTable              = "grove_migrations"
+	migrationCreateLockName    = ".grove-migration-create.lock"
+	migrationCreateLockTimeout = 5 * time.Second
+)
 
 type Manager struct {
 	db  *gorm.DB
@@ -319,18 +323,102 @@ func CreateFiles(dir, name string) (string, string, error) {
 		return "", "", fmt.Errorf("migration name is required")
 	}
 
-	prefix := time.Now().Format("20060102150405")
-	upPath := filepath.Join(dir, prefix+"_"+name+".up.sql")
-	downPath := filepath.Join(dir, prefix+"_"+name+".down.sql")
+	return withMigrationCreateLock(dir, func() (string, string, error) {
+		return createMigrationFiles(dir, name)
+	})
+}
 
-	if err := os.WriteFile(filepath.Clean(upPath), []byte("-- Write your UP migration here.\n"), 0o600); err != nil {
-		return "", "", err
-	}
-	if err := os.WriteFile(filepath.Clean(downPath), []byte("-- Write your DOWN migration here.\n"), 0o600); err != nil {
-		return "", "", err
-	}
+func createMigrationFiles(dir, name string) (string, string, error) {
+	baseVersion := time.Now().Unix()
+	for attempt := int64(0); attempt < 1000; attempt++ {
+		version := time.Unix(baseVersion+attempt, 0).Format("20060102150405")
+		upPath := filepath.Join(dir, version+"_"+name+".up.sql")
+		downPath := filepath.Join(dir, version+"_"+name+".down.sql")
 
-	return upPath, downPath, nil
+		err := createMigrationPair(upPath, downPath, "-- Write your UP migration here.\n", "-- Write your DOWN migration here.\n")
+		if err != nil {
+			if errors.Is(err, os.ErrExist) {
+				continue
+			}
+			return "", "", err
+		}
+		return upPath, downPath, nil
+	}
+	return "", "", fmt.Errorf("could not allocate a unique migration version")
+}
+
+// createMigrationPair prepares both files before publishing either final
+// filename. os.Link gives us O_EXCL-style publication without allowing a
+// concurrent process to overwrite an existing migration.
+func createMigrationPair(upPath, downPath, upContent, downContent string) error {
+	upTemp, err := writeMigrationTemp(filepath.Dir(upPath), upContent)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(upTemp) }()
+
+	downTemp, err := writeMigrationTemp(filepath.Dir(downPath), downContent)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(downTemp) }()
+
+	if err := os.Link(upTemp, upPath); err != nil {
+		return err
+	}
+	if err := os.Link(downTemp, downPath); err != nil {
+		_ = os.Remove(upPath)
+		return err
+	}
+	return nil
+}
+
+func writeMigrationTemp(dir, content string) (string, error) {
+	file, err := os.CreateTemp(dir, ".grove-migration-*")
+	if err != nil {
+		return "", err
+	}
+	path := file.Name()
+	cleanup := func() {
+		_ = file.Close()
+		_ = os.Remove(path)
+	}
+	if err := file.Chmod(0o600); err != nil {
+		cleanup()
+		return "", err
+	}
+	if _, err := file.WriteString(content); err != nil {
+		cleanup()
+		return "", err
+	}
+	if err := file.Sync(); err != nil {
+		cleanup()
+		return "", err
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", err
+	}
+	return path, nil
+}
+
+func withMigrationCreateLock(dir string, action func() (string, string, error)) (string, string, error) {
+	lockPath := filepath.Join(dir, migrationCreateLockName)
+	deadline := time.Now().Add(migrationCreateLockTimeout)
+	for {
+		err := os.Mkdir(lockPath, 0o700)
+		if err == nil {
+			defer func() { _ = os.Remove(lockPath) }()
+			return action()
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return "", "", fmt.Errorf("create migration lock: %w", err)
+		}
+		if time.Now().After(deadline) {
+			return "", "", fmt.Errorf("timed out waiting for migration creation lock %s", lockPath)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func RunSQLDir(db *gorm.DB, dir string) (int, error) {

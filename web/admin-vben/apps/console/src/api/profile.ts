@@ -1,22 +1,29 @@
+import { consoleEndpoint } from '#/api/console-contract';
 import { requestClient } from '#/api/request';
 
 export interface Profile {
   id: string;
+  account: string;
   username: string;
+  real_name: string;
+  display_name: string;
   email: string;
   phone: string;
   avatar: string;
   role_id: string;
   role_name: string;
-  is_super_admin: boolean;
+  is_super: boolean;
   status: number;
   created_at: string;
 }
 
 export interface UpdateProfileParams {
-  email?: string;
-  phone?: string;
+  account: string;
   avatar?: string;
+  display_name?: string;
+  phone?: string;
+  real_name?: string;
+  username?: string;
 }
 
 export interface ChangePasswordParams {
@@ -32,22 +39,25 @@ export interface TokenInfo {
 
 // 获取个人资料
 export function getProfile() {
-  return requestClient.get<Profile>('/console/v1/auth/me');
+  return requestClient.get<Profile>(consoleEndpoint('consoleGetCurrentAdmin'));
 }
 
 // 更新个人资料
 export function updateProfile(data: UpdateProfileParams) {
-  return requestClient.put<Profile>('/console/v1/auth/me', data);
+  return requestClient.put<Profile>(
+    consoleEndpoint('consoleUpdateCurrentAdmin'),
+    data,
+  );
 }
 
 // 修改密码
 export function changePassword(data: ChangePasswordParams) {
-  return requestClient.put('/console/v1/auth/password', data);
+  return requestClient.put(consoleEndpoint('consoleChangePassword'), data);
 }
 
 // 刷新Token
 export function refreshToken(refreshToken: string) {
-  return requestClient.post<TokenInfo>('/console/v1/auth/refresh', {
+  return requestClient.post<TokenInfo>(consoleEndpoint('consoleRefreshToken'), {
     refresh_token: refreshToken,
   });
 }

@@ -44,8 +44,7 @@ function defineApplicationConfig(userConfigPromise?: DefineApplicationOptions) {
       nitroMockOptions: {},
       print: !isBuild,
       printInfoMap: {
-        'Grove Admin':
-          'https://github.com/zhimma/grove',
+        'Grove Admin': 'https://github.com/zhimma/grove',
       },
       pwa: true,
       pwaOptions: getDefaultPwaOptions(appTitle),

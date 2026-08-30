@@ -122,6 +122,9 @@ func New(config Config) (*Scheduler, error) {
 		cron.WithLocation(location),
 		cron.WithSeconds(),
 		cron.WithLogger(cron.VerbosePrintfLogger(&cronLogger{})),
+		// robfig/cron's default chain is empty in v3.0.1. Keep an explicit
+		// recovery wrapper so a panic in a scheduled job cannot kill the worker.
+		cron.WithChain(cron.Recover(cron.VerbosePrintfLogger(&cronLogger{}))),
 	)
 	return s, nil
 }
@@ -207,7 +210,13 @@ func (s *Scheduler) RegisterFunc(name, schedule string, fn JobFunc) error {
 	return s.Register(&Task{Name: name, Schedule: schedule, Job: fn})
 }
 
-func (s *Scheduler) executeTask(record *scheduledTask) error {
+func (s *Scheduler) executeTask(record *scheduledTask) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("scheduler task %q panicked: %v", record.task.Name, recovered)
+			logger.Error().Interface("panic", recovered).Str("task", record.task.Name).Msg("任务 panic 已隔离")
+		}
+	}()
 	if record.task.Mutex && !record.state.locked.CompareAndSwap(false, true) {
 		logger.Warn().Str("task", record.task.Name).Msg("任务正在运行，跳过本次执行")
 		return ErrTaskRunning
@@ -236,7 +245,7 @@ func (s *Scheduler) executeTask(record *scheduledTask) error {
 
 	start := time.Now()
 	logger.Info().Str("task", record.task.Name).Msg("任务开始执行")
-	err := record.task.Job.Run(ctx)
+	err = record.task.Job.Run(ctx)
 	event := logger.Info()
 	message := "任务执行完成"
 	if err != nil {

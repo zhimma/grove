@@ -76,11 +76,22 @@ func newCoreServer(cfg *config.Config, serviceName, port string, p *provider.Pro
 		router.GET(p.Observability.MetricsPath(), gin.WrapH(p.Observability.MetricsHandler()))
 	}
 
+	readTimeout, writeTimeout, idleTimeout := cfg.Server.ReadTimeout, cfg.Server.WriteTimeout, cfg.Server.IdleTimeout
+	if readTimeout <= 0 {
+		readTimeout = 30
+	}
+	if writeTimeout <= 0 {
+		writeTimeout = 30
+	}
+	if idleTimeout <= 0 {
+		idleTimeout = 60
+	}
 	srv := &http.Server{
 		Addr:              ":" + port,
 		Handler:           router,
-		ReadTimeout:       time.Duration(cfg.Server.ReadTimeout) * time.Second,
-		WriteTimeout:      time.Duration(cfg.Server.WriteTimeout) * time.Second,
+		ReadTimeout:       time.Duration(readTimeout) * time.Second,
+		WriteTimeout:      time.Duration(writeTimeout) * time.Second,
+		IdleTimeout:       time.Duration(idleTimeout) * time.Second,
 		ReadHeaderTimeout: 10 * time.Second,
 		MaxHeaderBytes:    cfg.Server.MaxHeaderBytes,
 	}

@@ -1,5 +1,6 @@
 import type { PageData, PageParams } from '#/types/common';
 
+import { consoleEndpoint } from '#/api/console-contract';
 import { requestClient } from '#/api/request';
 
 export interface Role {
@@ -51,37 +52,47 @@ export interface AssignMenusParams {
  * 获取角色列表
  */
 export function getRoleList(params: RoleListParams) {
-  return requestClient.get<PageData<Role>>('/console/v1/roles', {
-    params,
-  });
+  return requestClient.get<PageData<Role>>(
+    consoleEndpoint('consoleListRoles'),
+    {
+      params,
+    },
+  );
 }
 
 /**
  * 创建角色
  */
 export function createRole(data: CreateRoleParams) {
-  return requestClient.post<Role>('/console/v1/roles', data);
+  return requestClient.post<Role>(consoleEndpoint('consoleCreateRole'), data);
 }
 
 /**
  * 更新角色
  */
 export function updateRole(id: string, data: UpdateRoleParams) {
-  return requestClient.put<Role>(`/console/v1/roles/${id}`, data);
+  return requestClient.put<Role>(
+    consoleEndpoint('consoleUpdateRole', { id }),
+    data,
+  );
 }
 
 /**
  * 删除角色
  */
 export function deleteRole(id: string) {
-  return requestClient.delete<null>(`/console/v1/roles/${id}`);
+  return requestClient.delete<null>(
+    consoleEndpoint('consoleDeleteRole', { id }),
+  );
 }
 
 /**
  * 获取角色权限
  */
 export function getRolePermissions(id: string) {
-  return requestClient.get<string[]>(`/console/v1/roles/${id}/permissions`);
+  return requestClient.get<string[]>(
+    consoleEndpoint('consoleGetRolePermissions', { id }),
+  );
 }
 
 /**
@@ -91,13 +102,21 @@ export function assignRolePermissions(
   id: string,
   data: AssignPermissionsParams,
 ) {
-  return requestClient.post<null>(`/console/v1/roles/${id}/permissions`, data);
+  return requestClient.post<null>(
+    consoleEndpoint('consoleAssignRolePermissions', { id }),
+    data,
+  );
 }
 
 export function getRoleMenus(id: string) {
-  return requestClient.get<string[]>(`/console/v1/roles/${id}/menus`);
+  return requestClient.get<string[]>(
+    consoleEndpoint('consoleGetRoleMenus', { id }),
+  );
 }
 
 export function assignRoleMenus(id: string, data: AssignMenusParams) {
-  return requestClient.post<null>(`/console/v1/roles/${id}/menus`, data);
+  return requestClient.post<null>(
+    consoleEndpoint('consoleAssignRoleMenus', { id }),
+    data,
+  );
 }

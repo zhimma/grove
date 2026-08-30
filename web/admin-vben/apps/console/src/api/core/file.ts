@@ -1,3 +1,4 @@
+import { consoleEndpoint } from '#/api/console-contract';
 import { requestClient } from '#/api/request';
 
 export type StorageDriver = 'local' | 's3';
@@ -10,16 +11,20 @@ export interface StorageClientConfig {
   endpoint: string;
   is_default: boolean;
   prefix: string;
+  public: boolean;
   region: string;
+  serve_static: boolean;
   upload_mode: 'server' | 'sts';
 }
 
 export interface StoredFile {
   content_type: string;
+  checksum?: string;
   disk: string;
   driver: StorageDriver;
   filename: string;
   path: string;
+  public: boolean;
   purpose: string;
   size: number;
   url: string;
@@ -33,14 +38,17 @@ interface UploadStorageFileInput {
 }
 
 export function getStorageConfig(disk?: string) {
-  return requestClient.get<StorageClientConfig>('/console/v1/storage/config', {
-    params: disk ? { disk } : undefined,
-  });
+  return requestClient.get<StorageClientConfig>(
+    consoleEndpoint('consoleGetStorageConfig'),
+    {
+      params: disk ? { disk } : undefined,
+    },
+  );
 }
 
 export function uploadStorageFile(input: UploadStorageFileInput) {
   return requestClient.upload<StoredFile>(
-    '/console/v1/storage/upload',
+    consoleEndpoint('consoleUploadFile'),
     {
       disk: input.disk,
       file: input.file,

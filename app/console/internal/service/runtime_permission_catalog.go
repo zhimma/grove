@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/zhimma/grove/pkg/permission"
+	"github.com/zhimma/grove/pkg/route"
 )
 
 type APIPermissionOption struct {
@@ -30,8 +31,8 @@ func NewRuntimePermissionCatalog() *RuntimePermissionCatalog {
 	}
 }
 
-func (c *RuntimePermissionCatalog) LoadRoutes(routes gin.RoutesInfo) {
-	options := buildConsoleAPIPermissionOptions(routes)
+func (c *RuntimePermissionCatalog) LoadRoutes(routes gin.RoutesInfo, catalogs ...*route.Catalog) {
+	options := buildConsoleAPIPermissionOptions(routes, routeCatalog(catalogs))
 	identifiers := make(map[string]struct{}, len(options))
 	for _, item := range options {
 		identifiers[item.Identifier] = struct{}{}
@@ -61,17 +62,17 @@ func (c *RuntimePermissionCatalog) HasAPIIdentifier(identifier string) bool {
 	return ok
 }
 
-func buildConsoleAPIPermissionOptions(routes gin.RoutesInfo) []APIPermissionOption {
+func buildConsoleAPIPermissionOptions(routes gin.RoutesInfo, catalog *route.Catalog) []APIPermissionOption {
 	collected := permission.CollectProtectedRoutes(
-		routes,
-		permission.AppConsole,
-		"console",
-		"admin_auth",
+		routes, permission.AppConsole, "console", "admin_auth",
 	)
+	if catalog != nil {
+		collected = permission.CollectProtectedRoutesWithCatalog(routes, permission.AppConsole, "console", "admin_auth", catalog)
+	}
 
 	items := make([]APIPermissionOption, 0, len(collected))
 	for _, item := range collected {
-		name := permission.BuildDisplayName(item.Method, item.Path)
+		name := permission.BuildDisplayNameWithCatalog(catalog, item.Method, item.Path)
 		category := permission.BuildModuleCode(item.Path)
 		if namedCategory, ok := permission.BuildModuleCodeFromDisplayName(name); ok {
 			category = namedCategory
@@ -97,4 +98,11 @@ func buildConsoleAPIPermissionOptions(routes gin.RoutesInfo) []APIPermissionOpti
 	})
 
 	return items
+}
+
+func routeCatalog(catalogs []*route.Catalog) *route.Catalog {
+	if len(catalogs) == 0 {
+		return nil
+	}
+	return catalogs[0]
 }

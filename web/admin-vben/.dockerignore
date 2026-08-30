@@ -1,0 +1,17 @@
+.git
+.github
+.turbo
+.cache
+node_modules
+**/node_modules
+dist
+**/dist
+output
+**/output
+coverage
+*.log
+.env
+.env.*
+!.env.example
+config.yaml
+storage

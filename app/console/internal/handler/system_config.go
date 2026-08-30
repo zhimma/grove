@@ -4,9 +4,10 @@ import (
 	"github.com/gin-gonic/gin"
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
-	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
+	"github.com/zhimma/grove/pkg/secretbox"
 	"github.com/zhimma/grove/pkg/validation"
 )
 
@@ -52,12 +53,12 @@ type SystemConfigGroupPathRequest struct {
 	Group string `uri:"group" binding:"required" label:"配置分组"`
 }
 
-func RegisterSystemConfigRoutes(protected *gin.RouterGroup, p *provider.Provider) {
+func RegisterSystemConfigRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, secrets *secretbox.Box, policies []consoleservice.PagePolicy, catalogs ...*route.Catalog) {
 	h := &SystemConfigHandler{
-		service: consoleservice.NewSystemConfigService(p.DB, p.ConfigSecrets),
+		service: consoleservice.NewSystemConfigService(dbs, secrets, policies...),
 	}
 
-	group := route.Wrap(protected.Group("/system-configs"))
+	group := wrapRoute(protected.Group("/system-configs"), routeCatalog(catalogs))
 	group.GET("", h.List).Name("配置管理.系统配置列表")
 	group.GET("/groups/:group", h.ListGroup).Name("配置管理.系统配置分组")
 	group.POST("", h.Create).Name("配置管理.创建系统配置")

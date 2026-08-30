@@ -1,6 +1,8 @@
 package router
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
@@ -9,6 +11,7 @@ import (
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/ratelimit"
 )
 
 type Router struct {
@@ -26,6 +29,17 @@ func (r *Router) InstallToEngine(engine *gin.Engine) {
 	authStateResolver := consoleservice.NewAdminAuthStateResolver(r.p.DB)
 	sessions := consoleservice.NewSessionService(r.p.DB, r.p.TokenManager)
 	runtimeCatalog := consoleservice.NewRuntimePermissionCatalog()
+	var loginGuard ratelimit.LoginGuard
+	pagePolicies := []consoleservice.PagePolicy{consoleservice.NewPagePolicy(r.cfg.API.DefaultPerPage, r.cfg.API.MaxPerPage)}
+	if r.p.Config != nil && r.p.Config.Security.Login.Enabled {
+		loginCfg := r.p.Config.Security.Login
+		loginGuard = ratelimit.NewLoginGuard(ratelimit.LoginConfig{
+			AttemptsPerMinute: loginCfg.AttemptsPerMinute,
+			Burst:             loginCfg.Burst,
+			FailureLimit:      loginCfg.FailureLimit,
+			LockDuration:      time.Duration(loginCfg.LockSeconds) * time.Second,
+		}, r.p.RedisClient)
+	}
 
 	public := v1.Group("")
 	authed := v1.Group("")
@@ -38,19 +52,20 @@ func (r *Router) InstallToEngine(engine *gin.Engine) {
 	protected.Use(
 		consolemiddleware.AdminAuthn(r.p.TokenManager, sessions, authStateResolver),
 		consolemiddleware.AuditOperation(auditDB),
-		consolemiddleware.AdminPermission(r.p.GetEnforcer("console"), r.cfg.App.Env),
+		consolemiddleware.AdminPermissionWithCatalog(r.p.GetEnforcer("console"), r.p.RouteCatalog),
 	)
 
-	handler.RegisterAuthRoutes(public, authed, r.p)
-	handler.RegisterDashboardRoutes(protected, r.p)
-	handler.RegisterRoleRoutes(protected, r.p, runtimeCatalog)
-	handler.RegisterPermissionRoutes(protected, runtimeCatalog)
-	handler.RegisterAdminRoutes(protected, r.p)
-	handler.RegisterSessionRoutes(protected, r.p)
-	handler.RegisterSystemConfigRoutes(protected, r.p)
-	handler.RegisterStorageRoutes(protected, r.p)
-	handler.RegisterLogRoutes(protected, r.p)
+	catalog := r.p.RouteCatalog
+	handler.RegisterAuthRoutesWithDeps(public, authed, r.p.DB, r.p.GetEnforcer("console"), r.p.TokenManager, loginGuard, catalog)
+	handler.RegisterDashboardRoutesWithDeps(protected, r.p.DB, catalog)
+	handler.RegisterRoleRoutesWithDeps(protected, r.p.DB, r.p.GetEnforcer("console"), runtimeCatalog, pagePolicies, catalog)
+	handler.RegisterPermissionRoutes(protected, runtimeCatalog, catalog)
+	handler.RegisterAdminRoutesWithDeps(protected, r.p.DB, r.p.GetEnforcer("console"), pagePolicies, catalog)
+	handler.RegisterSessionRoutesWithDeps(protected, r.p.DB, r.p.TokenManager, pagePolicies, catalog)
+	handler.RegisterSystemConfigRoutesWithDeps(protected, r.p.DB, r.p.ConfigSecrets, pagePolicies, catalog)
+	handler.RegisterStorageRoutesWithDeps(protected, r.p.Storage, catalog)
+	handler.RegisterLogRoutesWithDeps(protected, r.p.DB, pagePolicies, catalog)
 	// grove:register-routes
 
-	runtimeCatalog.LoadRoutes(engine.Routes())
+	runtimeCatalog.LoadRoutes(engine.Routes(), catalog)
 }

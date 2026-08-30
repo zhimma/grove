@@ -53,6 +53,11 @@ func registerLocalStorageRoutes(engine *gin.Engine, cfg *config.Config) {
 		if strings.TrimSpace(strings.ToLower(disk.Driver)) != "local" {
 			continue
 		}
+		// A local disk is private by default. Static serving is an explicit
+		// opt-in that requires both visibility and route exposure to be true.
+		if !disk.Public || !disk.ServeStatic {
+			continue
+		}
 		if strings.TrimSpace(disk.BaseURL) == "" || strings.TrimSpace(disk.Root) == "" {
 			continue
 		}

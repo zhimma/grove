@@ -20,6 +20,7 @@ const sessionActivityWriteInterval = 5 * time.Minute
 type SessionService struct {
 	dbs          database.Connections
 	tokenManager *auth.Manager
+	pagePolicy   PagePolicy
 }
 
 type CreateSessionInput struct {
@@ -42,8 +43,8 @@ type ListSessionsResult struct {
 	Meta ListMeta
 }
 
-func NewSessionService(dbs database.Connections, tokenManager *auth.Manager) *SessionService {
-	return &SessionService{dbs: dbs, tokenManager: tokenManager}
+func NewSessionService(dbs database.Connections, tokenManager *auth.Manager, policies ...PagePolicy) *SessionService {
+	return &SessionService{dbs: dbs, tokenManager: tokenManager, pagePolicy: pagePolicyFromArgs(policies)}
 }
 
 func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (*model.ConsoleSession, *auth.TokenPair, error) {
@@ -216,7 +217,7 @@ func (s *SessionService) List(ctx context.Context, input ListSessionsInput) (*Li
 	if err != nil {
 		return nil, err
 	}
-	page, pageSize := resolvePage(ListRequest{Page: input.Page, PageSize: input.PageSize})
+	page, pageSize := resolvePageWithPolicy(ListRequest{Page: input.Page, PageSize: input.PageSize}, s.pagePolicy)
 	now := time.Now()
 	query := db.Model(&model.ConsoleSession{}).Preload("Admin")
 	if adminID := strings.TrimSpace(input.AdminID); adminID != "" {

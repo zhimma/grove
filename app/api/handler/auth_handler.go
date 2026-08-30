@@ -4,8 +4,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/zhimma/grove/app/api/service"
-	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/auth"
 	"github.com/zhimma/grove/pkg/response"
+	"github.com/zhimma/grove/pkg/route"
 	"github.com/zhimma/grove/pkg/validation"
 )
 
@@ -23,17 +24,19 @@ type IssueAccessTokenResponse struct {
 	TokenType   string `json:"token_type"`
 }
 
-func RegisterDemoAuthRoutes(public *gin.RouterGroup, p *provider.Provider) {
+// RegisterDemoAuthRoutes registers the demo authentication endpoint with its
+// exact runtime dependency. Provider ownership stays in the API router.
+func RegisterDemoAuthRoutes(public *route.Group, tokenManager *auth.Manager) {
 	h := &DemoAuthHandler{
-		authSvc: service.NewDemoAuthService(p.TokenManager),
+		authSvc: service.NewDemoAuthService(tokenManager),
 	}
-	public.POST("/auth/access-token", h.IssueAccessToken)
+	public.POST("/auth/access-token", h.IssueAccessToken).Name("示例.签发访问令牌").Ignore()
 }
 
 func (h *DemoAuthHandler) IssueAccessToken(c *gin.Context) {
 	var req IssueAccessTokenRequest
 	if c.Request.ContentLength > 0 {
-		if err := validation.BindJSON(c, &req); err != nil {
+		if err := validation.BindJSONStrict(c, &req); err != nil {
 			response.Fail(c, err)
 			return
 		}

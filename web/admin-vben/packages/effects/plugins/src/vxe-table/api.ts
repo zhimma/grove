@@ -1,6 +1,11 @@
 import type { VxeGridInstance } from 'vxe-table';
 
-import type { ExtendedFormApi } from '@vben-core/form-ui';
+import type { Ref } from 'vue';
+
+import type {
+  BaseFormComponentType,
+  ExtendedFormApi,
+} from '@vben-core/form-ui';
 
 import type { VxeGridProps } from './types';
 
@@ -126,3 +131,12 @@ export class VxeGridApi<T extends Record<string, any> = any> {
     this.stateHandler.reset();
   }
 }
+
+export type ExtendedVxeGridApi<
+  D extends Record<string, any> = any,
+  F extends BaseFormComponentType = BaseFormComponentType,
+> = VxeGridApi<D> & {
+  useStore: <T = NoInfer<VxeGridProps<D, F>>>(
+    selector?: (state: NoInfer<VxeGridProps<any, any>>) => T,
+  ) => Readonly<Ref<T>>;
+};

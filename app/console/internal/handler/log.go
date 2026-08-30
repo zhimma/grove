@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
-	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
 	"github.com/zhimma/grove/pkg/validation"
@@ -42,11 +42,11 @@ type ListLoginLogsResponse struct {
 	Meta ListMeta       `json:"meta"`
 }
 
-func RegisterLogRoutes(protected *gin.RouterGroup, p *provider.Provider) {
+func RegisterLogRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, policies []consoleservice.PagePolicy, catalogs ...*route.Catalog) {
 	h := &LogHandler{
-		logSvc: consoleservice.NewLogService(p.DB),
+		logSvc: consoleservice.NewLogService(dbs, policies...),
 	}
-	group := route.Wrap(protected.Group("/logs"))
+	group := wrapRoute(protected.Group("/logs"), routeCatalog(catalogs))
 	group.GET("/operations", h.OperationLogs).Name("系统日志.操作日志列表")
 	group.GET("/operations/:id", h.OperationLogDetail).Name("系统日志.操作日志详情")
 	group.GET("/logins", h.LoginLogs).Name("系统日志.登录日志列表")

@@ -12,7 +12,8 @@ import type { SetupContext } from 'vue';
 
 import type { VbenFormProps } from '@vben-core/form-ui';
 
-import type { ExtendedVxeGridApi, VxeGridProps } from './types';
+import type { ExtendedVxeGridApi } from './api';
+import type { VxeGridProps } from './types';
 
 import {
   computed,

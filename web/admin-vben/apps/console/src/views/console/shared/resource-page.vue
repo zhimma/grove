@@ -18,10 +18,10 @@ import {
   InputNumber,
   message,
   Modal,
+  Radio,
   Select,
   Space,
   Table,
-  Radio
 } from 'ant-design-vue';
 
 import FileUpload from '#/components/upload/FileUpload.vue';
@@ -33,29 +33,29 @@ const props = defineProps<{
   // 自定义组件名称，需放在 src/views/custom 目录下
   componentName?: string;
   createApi?: (data: Record<string, any>) => Promise<any>;
+  // 自定义列表主键id
+  customerId?: string;
   // 接口返回数据列表的key，默认为list
   dataKey?: string;
-  // 初次加载列表时是否需要收入加入固定参数
-  hasListParams?: Record<string, any>;
   deleteApi?: (id: string) => Promise<any>;
   fetchApi: (params: Record<string, any>) => Promise<any>;
   formFields?: ConsoleFormField[];
   // 是否有自定义提交函数，若有则会在默认的提交函数前调用，参数为当前表单数据，需返回一个对象作为最终提交数据
   hasCustomSubmitFun?: Function;
+  // 初次加载列表时是否需要收入加入固定参数
+  hasListParams?: Record<string, any>;
   // 是否有自定义搜索提交函数，若有则会在默认的搜索提交函数前调用，参数为当前搜索表单数据，需返回一个对象作为最终搜索提交数据
   hasSearchSubmitFun?: Function;
   // 是否需要编辑组织架构数据，
   isNeedEditOrganizaFun?: Function;
-  // 自定义列表主键id
-  customerId?: string;
   modalWidth?: number;
   searchFields?: ConsoleSearchField[];
   // 设置级联选择器数据的函数，只有当编辑或搜索需要选择组织架构时才需要传入，参数为当前编辑或搜索数据
   setCascaderData?: Function;
+  showSendButton?: boolean;
   statusApi?: (id: string, status: number) => Promise<any>;
   title: string;
   updateApi?: (id: string, data: Record<string, any>) => Promise<any>;
-  showSendButton?: boolean;
   useDefault?: boolean;
 }>();
 
@@ -70,7 +70,7 @@ const modalOpen = ref(false);
 const editingId = ref('');
 const dataSource = ref<any[]>([]);
 const searchModel = reactive<Record<string, any>>({});
-let editModel = reactive<Record<string, any>>({});
+const editModel = reactive<Record<string, any>>({});
 const pagination = reactive<TablePaginationConfig>({
   current: 1,
   pageSize: 10,
@@ -87,9 +87,13 @@ for (const field of props.formFields || []) {
   editModel[field.key] = undefined;
 }
 
-const canEdit = computed(() => !!props.updateApi && (!!props.formFields?.length || !!props.componentName));
+const canEdit = computed(
+  () =>
+    !!props.updateApi && (!!props.formFields?.length || !!props.componentName),
+);
 const canCreate = computed(
-  () => !!props.createApi && (!!props.formFields?.length || !!props.componentName),
+  () =>
+    !!props.createApi && (!!props.formFields?.length || !!props.componentName),
 );
 
 async function fetchList() {
@@ -153,7 +157,9 @@ function openEdit(record: any) {
   if (props.isNeedEditOrganizaFun) {
     const organizedData = props.isNeedEditOrganizaFun(record);
     Object.assign(editModel, organizedData);
-    props.setCascaderData ? props.setCascaderData(editModel) : null;
+    if (props.setCascaderData) {
+      props.setCascaderData(editModel);
+    }
   } else {
     Object.keys(record).forEach((key) => {
       editModel[key] = record[key];
@@ -180,7 +186,7 @@ async function submitEdit() {
     fetchList();
     return;
   }
-  
+
   await editFormRef.value?.validate();
   let payload = { ...editModel };
 
@@ -204,14 +210,15 @@ function handleDelete(record: any) {
   }
   Modal.confirm({
     title: '确认删除',
-    content: `确定删除 ${record.name ||
+    content: `确定删除 ${
+      record.name ||
       record.title ||
       record.order_no ||
       record.aftersale_no ||
       record.statement_no ||
       record.account ||
       '该记录'
-      } 吗？`,
+    } 吗？`,
     onOk: async () => {
       await props.deleteApi?.(record.id);
       message.success('删除成功');
@@ -289,14 +296,32 @@ watch(
     <Form ref="searchFormRef" :model="searchModel" layout="inline" class="mb-4">
       <template v-for="field in searchFields || []" :key="field.key">
         <Form.Item :label="field.label" :name="field.key">
-          <Input v-if="!field.type || field.type === 'input'" v-model:value="searchModel[field.key]" allow-clear
-            :placeholder="`请输入${field.label}`" />
-          <Select v-else-if="field.type === 'select'" v-model:value="searchModel[field.key]" allow-clear
-            style="width: 180px" :options="field.options" :placeholder="`请选择${field.label}`" @change="
+          <Input
+            v-if="!field.type || field.type === 'input'"
+            v-model:value="searchModel[field.key]"
+            allow-clear
+            :placeholder="`请输入${field.label}`"
+          />
+          <Select
+            v-else-if="field.type === 'select'"
+            v-model:value="searchModel[field.key]"
+            allow-clear
+            style="width: 180px"
+            :options="field.options"
+            :placeholder="`请选择${field.label}`"
+            @change="
               field.haschange ? field.onChange?.(searchModel[field.key]) : null
-              " />
-          <Cascader v-else-if="field.type === 'cascader'" style="width: 180px" v-model:value="searchModel[field.key]"
-            :options="field.options" :load-data="field.loadData" :placeholder="`请选择${field.label}`" change-on-select />
+            "
+          />
+          <Cascader
+            v-else-if="field.type === 'cascader'"
+            style="width: 180px"
+            v-model:value="searchModel[field.key]"
+            :options="field.options"
+            :load-data="field.loadData"
+            :placeholder="`请选择${field.label}`"
+            change-on-select
+          />
         </Form.Item>
       </template>
       <Form.Item>
@@ -310,24 +335,52 @@ watch(
       </Form.Item>
     </Form>
 
-    <Table :columns="[
-      ...columns,
-      { title: '操作', key: 'action', width: 100, fixed: 'right' },
-    ]" :data-source="dataSource" :loading="loading" :pagination="pagination" row-key="id" :scroll="{ x: 1200 }"
-      @change="handleTableChange">
+    <Table
+      :columns="[
+        ...columns,
+        { title: '操作', key: 'action', width: 100, fixed: 'right' },
+      ]"
+      :data-source="dataSource"
+      :loading="loading"
+      :pagination="pagination"
+      row-key="id"
+      :scroll="{ x: 1200 }"
+      @change="handleTableChange"
+    >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'action'">
           <Space>
-            <Button v-if="canEdit" type="link" size="small" @click="openEdit(record)">
+            <Button
+              v-if="canEdit"
+              type="link"
+              size="small"
+              @click="openEdit(record)"
+            >
               编辑
             </Button>
-            <Button v-if="statusApi" type="link" size="small" @click="handleToggleStatus(record)">
+            <Button
+              v-if="statusApi"
+              type="link"
+              size="small"
+              @click="handleToggleStatus(record)"
+            >
               {{ record.status === 1 ? '停用' : '启用' }}
             </Button>
-            <Button v-if="deleteApi" danger type="link" size="small" @click="handleDelete(record)">
+            <Button
+              v-if="deleteApi"
+              danger
+              type="link"
+              size="small"
+              @click="handleDelete(record)"
+            >
               删除
             </Button>
-            <Button v-if="showSendButton" type="link" size="small" @click="emit('send', record)">
+            <Button
+              v-if="showSendButton"
+              type="link"
+              size="small"
+              @click="emit('send', record)"
+            >
               发送
             </Button>
           </Space>
@@ -335,36 +388,86 @@ watch(
       </template>
     </Table>
 
-    <Modal v-model:open="modalOpen" :width="props.modalWidth || 1000" :title="editingId ? `编辑${title}` : `新增${title}`"
-      @ok="submitEdit">
-      <component v-if="props.componentName" :is="loadedCustomComponent" :editModel="editModel" ref="componentRef" />
+    <Modal
+      v-model:open="modalOpen"
+      :width="props.modalWidth || 1000"
+      :title="editingId ? `编辑${title}` : `新增${title}`"
+      @ok="submitEdit"
+    >
+      <component
+        v-if="props.componentName"
+        :is="loadedCustomComponent"
+        :edit-model="editModel"
+        ref="componentRef"
+      />
       <Form v-else ref="editFormRef" :model="editModel" layout="vertical">
         <template v-for="field in formFields || []" :key="field.key">
-          <Form.Item v-if="!field.isNotShow" :label="field.label" :name="field.key" :rules="field.required
-            ? [{ required: true, message: `请输入${field.label}` }]
-            : []
-            ">
-            <Input v-if="!field.type || field.type === 'input'" v-model:value="editModel[field.key]" />
-            <Input.TextArea v-else-if="field.type === 'textarea'" v-model:value="editModel[field.key]" :rows="4" />
-            <InputNumber v-else-if="field.type === 'number'" v-model:value="editModel[field.key]" style="width: 100%" />
-            <Select v-else-if="field.type === 'select'" v-model:value="editModel[field.key]" :options="field.options"
+          <Form.Item
+            v-if="!field.isNotShow"
+            :label="field.label"
+            :name="field.key"
+            :rules="
+              field.required
+                ? [{ required: true, message: `请输入${field.label}` }]
+                : []
+            "
+          >
+            <Input
+              v-if="!field.type || field.type === 'input'"
+              v-model:value="editModel[field.key]"
+            />
+            <Input.TextArea
+              v-else-if="field.type === 'textarea'"
+              v-model:value="editModel[field.key]"
+              :rows="4"
+            />
+            <InputNumber
+              v-else-if="field.type === 'number'"
+              v-model:value="editModel[field.key]"
+              style="width: 100%"
+            />
+            <Select
+              v-else-if="field.type === 'select'"
+              v-model:value="editModel[field.key]"
+              :options="field.options"
               @change="
                 field.haschange ? field.onChange?.(editModel[field.key]) : null
-                " />
+              "
+            />
 
-            <Radio.Group v-else-if="field.type === 'radio'" v-model:value="editModel[field.key]">
-              <Radio v-for="option in field.options" :key="option.value" :value="option.value">
+            <Radio.Group
+              v-else-if="field.type === 'radio'"
+              v-model:value="editModel[field.key]"
+            >
+              <Radio
+                v-for="option in field.options"
+                :key="option.value"
+                :value="option.value"
+              >
                 {{ option.label }}
               </Radio>
             </Radio.Group>
 
-            <Cascader v-else-if="field.type === 'cascader'" v-model:value="editModel[field.key]"
-              :options="field.options" :load-data="field.loadData" placeholder="请选择" change-on-select />
+            <Cascader
+              v-else-if="field.type === 'cascader'"
+              v-model:value="editModel[field.key]"
+              :options="field.options"
+              :load-data="field.loadData"
+              placeholder="请选择"
+              change-on-select
+            />
 
-            <FileUpload v-else-if="field.type === 'uploadImg'" v-model:value="editModel[field.key]"
-              :disk="field.disk" :purpose="field.purpose || 'avatar'" :accept="field.accept"
-              :max-count="field.maxCount || 1" :max-size="field.maxSize ? field.maxSize : 5" list-type="picture-card"
-              :upload-text="field.uploadText || '上传图片'" />
+            <FileUpload
+              v-else-if="field.type === 'uploadImg'"
+              v-model:value="editModel[field.key]"
+              :disk="field.disk"
+              :purpose="field.purpose || 'avatar'"
+              :accept="field.accept"
+              :max-count="field.maxCount || 1"
+              :max-size="field.maxSize ? field.maxSize : 5"
+              list-type="picture-card"
+              :upload-text="field.uploadText || '上传图片'"
+            />
           </Form.Item>
         </template>
       </Form>

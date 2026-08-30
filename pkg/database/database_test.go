@@ -1,6 +1,7 @@
 package database
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 
@@ -62,5 +63,34 @@ func TestBuildMySQLDSNEscapesCredentialsAndEnablesCompatibilityOptions(t *testin
 	}
 	if parsed.User != "root@example" || parsed.Passwd != "p@ss/word?&" || parsed.DBName != "grove" {
 		t.Fatalf("credentials were not preserved: %#v", parsed)
+	}
+}
+
+func TestBuildPostgresDSNEscapesCredentialsAndDatabaseName(t *testing.T) {
+	dsn := buildPostgresDSN(Config{
+		Host:     "db.example",
+		Port:     "5432",
+		User:     "grove user",
+		Password: `p@ss word/?&`,
+		DBName:   "grove db",
+		SSLMode:  "verify-full",
+	})
+	parsed, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatalf("parse generated postgres DSN: %v", err)
+	}
+	if parsed.Scheme != "postgres" || parsed.Host != "db.example:5432" {
+		t.Fatalf("unexpected postgres DSN endpoint: %s", dsn)
+	}
+	if got := parsed.Query().Get("dbname"); got != "grove db" {
+		t.Fatalf("database name was not preserved: %q", got)
+	}
+	if got := parsed.Query().Get("sslmode"); got != "verify-full" {
+		t.Fatalf("ssl mode was not preserved: %q", got)
+	}
+	user := parsed.User.Username()
+	password, ok := parsed.User.Password()
+	if !ok || user != "grove user" || password != `p@ss word/?&` {
+		t.Fatalf("credentials were not preserved: user=%q password=%q ok=%v", user, password, ok)
 	}
 }

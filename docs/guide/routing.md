@@ -14,7 +14,7 @@
 ### 注册路由
 
 ```go
-articles := route.Wrap(protected.Group("/articles"))
+articles := route.WrapWithCatalog(protected.Group("/articles"), catalog)
 articles.GET("", h.List).Name("内容管理.文章列表")
 articles.POST("", h.Create).Name("内容管理.创建文章")
 ```
@@ -48,6 +48,7 @@ func (h *ArticleHandler) List(c *gin.Context) {
 - `console` 路由建议补充 `route.Name(...)`
 - `.Name(...)` 影响接口展示文案，不影响实际鉴权
 - `.Ignore()` 仅用于明确不进入权限目录的接口
+- 应用路由优先使用启动时创建的 `route.Catalog`；无 catalog 的 `route.Wrap` 仅作为兼容旧代码和独立测试的过渡写法。
 
 ## 相关文档
 

@@ -46,19 +46,36 @@ make seed.bootstrap
 - `make test`：Go 全量测试
 - `make fmt`：格式化 Go 代码
 - `make tidy`：整理 Go modules；只在依赖变更后使用
-- `make build`：构建 `bin/api`、`bin/console`、`bin/worker`
+- `make build`：构建 `bin/api`、`bin/console`、`bin/worker` 与迁移/管理 CLI `bin/grove`
 - `make verify`：Go 测试、后端构建、Console typecheck
+- `make docs.check`：检查 canonical 文档中的 Provider、路由目录和依赖注入示例
+- `make quality`：Go 格式与 vet、文档一致性、前端 lint、循环依赖和当前 diff 空白检查
+- `make ci`：完整质量门禁；先执行 `make admin.install`，并确保本机已有 `golangci-lint` 与 `govulncheck`
+- `make quality.go.lint`：运行 `.golangci.yml` 中配置的 Go lint；本机未安装工具时给出明确错误
+- `make quality.govuln`：运行 Go 漏洞检查；本机未安装工具时给出明确错误
+- `make contracts`：检查 API/Console 路由与 OpenAPI 合同
 - `make admin.install`：按 lockfile 安装前端依赖
 - `make admin.typecheck`：Console TypeScript 类型检查
 - `make admin.build`：Console production build
+- `make admin.lint`、`make admin.circular`、`make admin.contract`、`make admin.test`：分别运行前端 lint、循环依赖、Console API 合同检查和 unit 测试
 
 高风险或合并前建议额外运行：
 
 ```bash
 go test -race ./...
 go vet ./...
-govulncheck ./...
+make quality.go.lint
+make quality.govuln
 go test -tags=integration ./tests/integration -v
+```
+
+GitLab 是 canonical CI，`.github/workflows/ci.yml` 是镜像门禁。GitLab 会安装 `golangci-lint` 和 `govulncheck`，并运行 Go/前端质量检查、PostgreSQL/MySQL Testcontainers 集成测试、Redis contract 与三个后端镜像构建。Testcontainers 与镜像构建要求 GitLab Runner 使用已启用 privileged Docker executor；该条件不满足时应修复 Runner，而不是跳过 Job。
+
+Redis contract 集成测试可单独执行：
+
+```bash
+CACHE_REDIS_ADDR=127.0.0.1:6379 CACHE_REDIS_DB=15 \
+  go test -tags=integration ./pkg/cache -run '^TestRedisStoreContract$' -v
 ```
 
 ## CLI

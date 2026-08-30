@@ -5,9 +5,10 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/app/api/service"
-	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/job"
 	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"
+	"github.com/zhimma/grove/pkg/route"
 	"github.com/zhimma/grove/pkg/validation"
 )
 
@@ -40,16 +41,18 @@ type DispatchEchoJobResponse struct {
 	TaskID string `json:"task_id"`
 }
 
-func RegisterDemoStarterRoutes(public *gin.RouterGroup, protected *gin.RouterGroup, p *provider.Provider) {
-	h := newStarterHandler(p)
-	public.GET("/ping", h.Ping)
-	protected.GET("/profile", h.Profile)
-	protected.POST("/jobs/echo", h.DispatchEchoJob)
+// RegisterDemoStarterRoutes receives only the dependencies that its service
+// actually needs. The API router remains responsible for provider composition.
+func RegisterDemoStarterRoutes(public *route.Group, protected *route.Group, db *gorm.DB, jobs *job.Client) {
+	h := newStarterHandler(db, jobs)
+	public.GET("/ping", h.Ping).Name("示例.连通性检查").Ignore()
+	protected.GET("/profile", h.Profile).Name("示例.当前用户")
+	protected.POST("/jobs/echo", h.DispatchEchoJob).Name("示例.投递回显任务")
 }
 
-func newStarterHandler(p *provider.Provider) *DemoStarterHandler {
+func newStarterHandler(db *gorm.DB, jobs *job.Client) *DemoStarterHandler {
 	return &DemoStarterHandler{
-		starterSvc: service.NewDemoStarterService(defaultDB(p), p.JobClient),
+		starterSvc: service.NewDemoStarterService(db, jobs),
 	}
 }
 
@@ -94,7 +97,7 @@ func (h *DemoStarterHandler) Profile(c *gin.Context) {
 
 func (h *DemoStarterHandler) DispatchEchoJob(c *gin.Context) {
 	var req DispatchEchoJobRequest
-	if err := validation.BindJSON(c, &req); err != nil {
+	if err := validation.BindJSONStrict(c, &req); err != nil {
 		response.Fail(c, err)
 		return
 	}
@@ -112,11 +115,4 @@ func (h *DemoStarterHandler) DispatchEchoJob(c *gin.Context) {
 	response.Success(c, DispatchEchoJobResponse{
 		TaskID: out.TaskID,
 	})
-}
-
-func defaultDB(p *provider.Provider) *gorm.DB {
-	if p == nil || p.DB == nil {
-		return nil
-	}
-	return p.DB.Default()
 }

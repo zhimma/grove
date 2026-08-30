@@ -12,6 +12,8 @@ Grove 文档按“先理解项目，再开发功能，最后运行验证”的�
 4. [项目结构](guide/structure.md)
 5. [开发规范](01-开发规范.md)
 
+升级审查与实施记录：[Grove Web 框架组件与工程规范升级计划](plans/2026-08-29-grove-framework-upgrade-plan.md)
+
 ### 开发 Console 模块
 
 1. [Console 架构与权限](02-console-架构与权限.md)
@@ -30,6 +32,7 @@ Grove 文档按“先理解项目，再开发功能，最后运行验证”的�
 - [队列](guide/queue.md)
 - [计划任务](guide/scheduler.md)
 - [HTTP Client](guide/httpclient.md)
+- [Console 日志与审计](guide/logging.md)
 
 ### 测试、部署与维护
 
@@ -37,6 +40,7 @@ Grove 文档按“先理解项目，再开发功能，最后运行验证”的�
 - [测试策略](development/testing.md)
 - [错误处理实践](development/error-handling.md)
 - [部署与运行](deployment/deploy.md)
+- [Staging smoke 清单](deployment/staging-checklist.md)
 - [运行状态与可观测性](operations.md)
 
 ### AI 协作

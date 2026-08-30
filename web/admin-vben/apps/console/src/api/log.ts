@@ -1,3 +1,6 @@
+import type { ConsoleListResult } from '#/api/core/console';
+
+import { consoleEndpoint } from '#/api/console-contract';
 import { requestClient } from '#/api/request';
 
 export interface OperationLog {
@@ -23,6 +26,11 @@ export interface OperationLog {
   created_at: string;
 }
 
+export interface OperationLogDetail {
+  log: OperationLog;
+  detail: Record<string, unknown>;
+}
+
 export interface LoginLog {
   id: string;
   admin_id: string;
@@ -40,56 +48,38 @@ export interface LoginLog {
 export interface LogListParams {
   page?: number;
   page_size?: number;
+  offset?: number;
+  limit?: number;
+  list_all?: boolean;
   admin_id?: string;
   keyword?: string;
   method?: string;
-  status?: number;
-  start_time?: string;
-  end_time?: string;
+  module?: string;
+  success?: boolean;
+  order_by?: string | string[];
+  created_from?: string;
+  created_to?: string;
 }
 
 // 获取操作日志列表
 export function getOperationLogList(params: LogListParams) {
-  return requestClient.get<{ list: OperationLog[]; total: number }>(
-    '/console/v1/logs/operations',
+  return requestClient.get<ConsoleListResult<OperationLog>>(
+    consoleEndpoint('consoleListOperationLogs'),
     { params },
   );
 }
 
 // 获取操作日志详情
 export function getOperationLogDetail(id: string) {
-  return requestClient.get<OperationLog>(`/console/v1/logs/operations/${id}`);
-}
-
-// 删除操作日志
-export function deleteOperationLog(id: string) {
-  return requestClient.delete(`/console/v1/logs/operations/${id}`);
-}
-
-// 清空操作日志
-export function clearOperationLog(days?: number) {
-  return requestClient.post('/console/v1/logs/operations/clear', { days });
+  return requestClient.get<OperationLogDetail>(
+    consoleEndpoint('consoleGetOperationLog', { id }),
+  );
 }
 
 // 获取登录日志列表
 export function getLoginLogList(params: LogListParams) {
-  return requestClient.get<{ list: LoginLog[]; total: number }>(
-    '/console/v1/logs/logins',
+  return requestClient.get<ConsoleListResult<LoginLog>>(
+    consoleEndpoint('consoleListLoginLogs'),
     { params },
   );
-}
-
-// 获取登录日志详情
-export function getLoginLogDetail(id: string) {
-  return requestClient.get<LoginLog>(`/console/v1/logs/logins/${id}`);
-}
-
-// 删除登录日志
-export function deleteLoginLog(id: string) {
-  return requestClient.delete(`/console/v1/logs/logins/${id}`);
-}
-
-// 清空登录日志
-export function clearLoginLog(days?: number) {
-  return requestClient.post('/console/v1/logs/logins/clear', { days });
 }

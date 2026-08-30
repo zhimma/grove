@@ -2,10 +2,12 @@ package middleware
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/zhimma/grove/pkg/errx"
+	permissionpkg "github.com/zhimma/grove/pkg/permission"
 	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"
@@ -34,6 +36,20 @@ func (s *PermissionSet) Require(permission string) gin.HandlerFunc {
 		userID := request.GetUserID(c)
 		if userID == "" {
 			response.Fail(c, errx.Unauthorized().WithMessage("缺少用户身份信息"))
+			c.Abort()
+			return
+		}
+
+		permission = strings.TrimSpace(permission)
+		if permission == "" {
+			resource := c.FullPath()
+			if resource == "" {
+				resource = c.Request.URL.Path
+			}
+			permission = permissionpkg.BuildAPIIdentifier(c.Request.Method, resource)
+		}
+		if permission == "" {
+			response.Fail(c, errx.ServiceUnavailable().WithMessage("权限标识未配置"))
 			c.Abort()
 			return
 		}
@@ -71,4 +87,11 @@ func (s *PermissionSet) Require(permission string) gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+// RequireRoute derives the canonical METHOD + full path permission identifier
+// at request time. It is useful for a protected router group where every
+// registered route is expected to be governed by the same fail-closed policy.
+func (s *PermissionSet) RequireRoute() gin.HandlerFunc {
+	return s.Require("")
 }

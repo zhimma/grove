@@ -3,31 +3,27 @@ set -euo pipefail
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
-LOG_FILE=${SCRIPT_DIR}/build-local-docker-image.log
+LOG_FILE="${SCRIPT_DIR}/build-local-docker-image.log"
 ERROR=""
-IMAGE_NAME="vben-admin-local"
+IMAGE_NAME="${IMAGE_NAME:-vben-admin-local}"
 APP_NAME="${APP_NAME:-console}"
 
 function stop_and_remove_container() {
-    # Stop and remove the existing container
-    docker stop ${IMAGE_NAME} >/dev/null 2>&1
-    docker rm ${IMAGE_NAME} >/dev/null 2>&1
-}
-
-function remove_image() {
-    # Remove the existing image
-    docker rmi ${IMAGE_NAME} >/dev/null 2>&1
+    # Stop/remove only this explicitly named local container. Missing
+    # resources are normal on the first run and must not abort the build.
+    docker stop "${IMAGE_NAME}" >/dev/null 2>&1 || true
+    docker rm "${IMAGE_NAME}" >/dev/null 2>&1 || true
 }
 
 function install_dependencies() {
     # Install all dependencies
-    cd ${REPO_ROOT}
-    pnpm install || ERROR="install_dependencies failed"
+    cd "${REPO_ROOT}"
+    pnpm install --frozen-lockfile || ERROR="install_dependencies failed"
 }
 
 function build_image() {
     # build docker
-    docker build ${REPO_ROOT} -f ${SCRIPT_DIR}/Dockerfile --build-arg APP_NAME=${APP_NAME} -t ${IMAGE_NAME} || ERROR="build_image failed"
+    docker build "${REPO_ROOT}" -f "${SCRIPT_DIR}/Dockerfile" --build-arg APP_NAME="${APP_NAME}" -t "${IMAGE_NAME}" || ERROR="build_image failed"
 }
 
 function log_message() {
@@ -43,16 +39,15 @@ function log_message() {
     fi
 }
 
-echo "Info: Stopping and removing existing container and image" | tee ${LOG_FILE}
+echo "Info: Stopping existing local container (image is replaced by docker build)" | tee "${LOG_FILE}"
 stop_and_remove_container
-remove_image
 
-echo "Info: Installing dependencies" | tee -a ${LOG_FILE}
-install_dependencies 1>> ${LOG_FILE} 2>> ${LOG_FILE}
+echo "Info: Installing dependencies" | tee -a "${LOG_FILE}"
+install_dependencies 1>> "${LOG_FILE}" 2>> "${LOG_FILE}"
 
 if [[ ${ERROR} == "" ]]; then
-    echo "Info: Building docker image" | tee -a ${LOG_FILE}
-    build_image 1>> ${LOG_FILE} 2>> ${LOG_FILE}
+    echo "Info: Building docker image" | tee -a "${LOG_FILE}"
+    build_image 1>> "${LOG_FILE}" 2>> "${LOG_FILE}"
 fi
 
 log_message | tee -a ${LOG_FILE}

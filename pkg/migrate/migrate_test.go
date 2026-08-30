@@ -3,7 +3,9 @@ package migrate
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -328,6 +330,70 @@ func TestCreateFilesSanitizesUnsafeMigrationName(t *testing.T) {
 	}
 	if !strings.Contains(filepath.Base(downPath), "_create_demo_table.down.sql") {
 		t.Fatalf("unexpected down migration name: %s", downPath)
+	}
+}
+
+func TestCreateFilesAllocatesUniqueVersionsOnRepeatedCalls(t *testing.T) {
+	dir := t.TempDir()
+	up1, down1, err := CreateFiles(dir, "first")
+	if err != nil {
+		t.Fatalf("create first migration: %v", err)
+	}
+	up2, down2, err := CreateFiles(dir, "second")
+	if err != nil {
+		t.Fatalf("create second migration: %v", err)
+	}
+	if up1 == up2 || down1 == down2 {
+		t.Fatalf("repeated migrations must have unique paths: %s %s", up1, up2)
+	}
+	for _, path := range []string{up1, down1, up2, down2} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected migration file %s: %v", path, err)
+		}
+	}
+}
+
+func TestCreateFilesAllocatesCompletePairsConcurrently(t *testing.T) {
+	dir := t.TempDir()
+	const count = 8
+	type pair struct {
+		up   string
+		down string
+		err  error
+	}
+	results := make(chan pair, count)
+	var wg sync.WaitGroup
+	for i := 0; i < count; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			up, down, err := CreateFiles(dir, "concurrent_"+strconv.Itoa(i))
+			results <- pair{up: up, down: down, err: err}
+		}(i)
+	}
+	wg.Wait()
+	close(results)
+
+	seen := make(map[string]struct{}, count*2)
+	for result := range results {
+		if result.err != nil {
+			t.Fatalf("concurrent migration creation failed: %v", result.err)
+		}
+		for _, path := range []string{result.up, result.down} {
+			if _, ok := seen[path]; ok {
+				t.Fatalf("migration path was reused: %s", path)
+			}
+			seen[path] = struct{}{}
+			if _, err := os.Stat(path); err != nil {
+				t.Fatalf("expected migration file %s: %v", path, err)
+			}
+		}
+	}
+	if len(seen) != count*2 {
+		t.Fatalf("expected %d migration files, got %d", count*2, len(seen))
+	}
+	if leftovers, err := filepath.Glob(filepath.Join(dir, ".grove-migration-*")); err != nil || len(leftovers) != 0 {
+		t.Fatalf("temporary migration files must be removed: files=%v err=%v", leftovers, err)
 	}
 }
 

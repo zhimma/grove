@@ -4,7 +4,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
-	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
@@ -70,12 +71,12 @@ type AdminPathRequest struct {
 	ID string `uri:"id" binding:"required" label:"管理员ID"`
 }
 
-func RegisterAdminRoutes(protected *gin.RouterGroup, p *provider.Provider) {
+func RegisterAdminRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, enforcer *rbac.Enforcer, policies []consoleservice.PagePolicy, catalogs ...*route.Catalog) {
 	h := &AdminHandler{
-		adminSvc: consoleservice.NewAdminService(p.DB, p.GetEnforcer("console")),
+		adminSvc: consoleservice.NewAdminService(dbs, enforcer, policies...),
 	}
 
-	admins := route.Wrap(protected.Group("/admins"))
+	admins := wrapRoute(protected.Group("/admins"), routeCatalog(catalogs))
 	admins.GET("", h.List).Name("系统管理.管理员列表")
 	admins.GET("/:id", h.Detail).Name("系统管理.管理员详情")
 	admins.POST("", h.Create).Name("系统管理.创建管理员")

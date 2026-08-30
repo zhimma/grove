@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -54,8 +55,10 @@ func TestCheckerTimesOutIndividualDependency(t *testing.T) {
 func TestCheckerReturnsWhenDependencyIgnoresContext(t *testing.T) {
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
+	var calls atomic.Int64
 	checker := New(map[string]Check{
 		"stuck": func(context.Context) error {
+			calls.Add(1)
 			<-release
 			return nil
 		},
@@ -68,5 +71,16 @@ func TestCheckerReturnsWhenDependencyIgnoresContext(t *testing.T) {
 	}
 	if report.Ready || len(report.Dependencies) != 1 || report.Dependencies[0].Status != "timeout" {
 		t.Fatalf("unexpected timeout report: %#v", report)
+	}
+	secondStarted := time.Now()
+	second := checker.Run(context.Background())
+	if elapsed := time.Since(secondStarted); elapsed > 100*time.Millisecond {
+		t.Fatalf("second readiness probe should not wait for stuck check: %s", elapsed)
+	}
+	if second.Ready || len(second.Dependencies) != 1 || second.Dependencies[0].Status != "timeout" {
+		t.Fatalf("unexpected concurrent timeout report: %#v", second)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("stuck check should not be started repeatedly, calls=%d", calls.Load())
 	}
 }

@@ -15,6 +15,7 @@ type fakeDriver struct {
 	contentType string
 	content     []byte
 	err         error
+	deleted     []string
 }
 
 func (d fakeDriver) Name() string {
@@ -34,7 +35,8 @@ func (d *fakeDriver) PutStream(_ context.Context, _ string, reader io.Reader, _ 
 	return nil
 }
 
-func (d fakeDriver) Delete(_ context.Context, _ ...string) error {
+func (d *fakeDriver) Delete(_ context.Context, paths ...string) error {
+	d.deleted = append(d.deleted, paths...)
 	return nil
 }
 
@@ -108,6 +110,55 @@ func TestSaveUploadedFileUsesNamedPolicy(t *testing.T) {
 	}
 }
 
+func TestSaveUploadedFileDoesNotReturnDirectURLForPrivateDisk(t *testing.T) {
+	manager := NewManager("local")
+	driver := &fakeDriver{name: "local"}
+	manager.AddDisk("local", driver, DiskConfig{BaseURL: "/storage"}, nil)
+	content := []byte("plain text")
+	file := newMultipartFileHeader(t, "notes.txt", content)
+
+	stored, err := manager.SaveUploadedFile(context.Background(), "local", "document", file)
+	if err != nil {
+		t.Fatalf("save uploaded file: %v", err)
+	}
+	if stored.URL != "" {
+		t.Fatalf("private disk must not return a direct URL: %#v", stored)
+	}
+	described, err := manager.Describe("local")
+	if err != nil {
+		t.Fatalf("describe disk: %v", err)
+	}
+	if described.Public || described.ServeStatic {
+		t.Fatalf("disk visibility must default to private: %#v", described)
+	}
+}
+
+func TestSaveUploadedFileReturnsURLOnlyForExplicitlyPublicDisk(t *testing.T) {
+	manager := NewManager("local")
+	driver := &fakeDriver{name: "local"}
+	manager.AddDisk("local", driver, DiskConfig{BaseURL: "/storage", Public: true, ServeStatic: true}, nil)
+	stored, err := manager.SaveUploadedFile(context.Background(), "local", "document", newMultipartFileHeader(t, "notes.txt", []byte("plain text")))
+	if err != nil {
+		t.Fatalf("save uploaded file: %v", err)
+	}
+	if stored.URL == "" {
+		t.Fatalf("explicitly public disk should return URL: %#v", stored)
+	}
+}
+
+func TestSaveUploadedFileDoesNotReturnLocalURLWithoutStaticServing(t *testing.T) {
+	manager := NewManager("local")
+	driver := &fakeDriver{name: "local"}
+	manager.AddDisk("local", driver, DiskConfig{BaseURL: "/storage", Public: true}, nil)
+	stored, err := manager.SaveUploadedFile(context.Background(), "local", "document", newMultipartFileHeader(t, "notes.txt", []byte("plain text")))
+	if err != nil {
+		t.Fatalf("save uploaded file: %v", err)
+	}
+	if stored.URL != "" || stored.Public {
+		t.Fatalf("local disk without static serving must not advertise a direct URL: %#v", stored)
+	}
+}
+
 func TestDescribeKeepsS3OnServerUploadUntilCredentialsAreExplicitlyIssued(t *testing.T) {
 	manager := NewManager("s3")
 	manager.AddDisk("s3", &fakeDriver{name: "s3"}, DiskConfig{Driver: "s3"}, fakeSTSProvider{})
@@ -138,6 +189,14 @@ func TestSaveUploadedFileWrapsDriverFailure(t *testing.T) {
 	_, err := manager.SaveUploadedFile(context.Background(), "local", "document", file)
 	if !errors.Is(err, ErrUploadStore) || !errors.Is(err, writeErr) {
 		t.Fatalf("driver failure must retain stable and original errors: %v", err)
+	}
+}
+
+func TestOpenRejectsTraversal(t *testing.T) {
+	manager := NewManager("local")
+	manager.AddDisk("local", &fakeDriver{name: "local"}, DiskConfig{}, nil)
+	if _, err := manager.Open(context.Background(), "local", "../secret.txt"); err == nil {
+		t.Fatal("expected traversal path to be rejected")
 	}
 }
 

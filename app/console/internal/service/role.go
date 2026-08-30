@@ -18,6 +18,7 @@ type RoleService struct {
 	dbs               database.Connections
 	rolePolicies      rolePolicyStore
 	runtimePermission *RuntimePermissionCatalog
+	pagePolicy        PagePolicy
 }
 
 type rolePolicyStore interface {
@@ -110,7 +111,14 @@ func NewRoleService(dbs database.Connections, enforcer *rbac.Enforcer, runtimePe
 		dbs:               dbs,
 		rolePolicies:      enforcer,
 		runtimePermission: catalog,
+		pagePolicy:        NewPagePolicy(20, 100),
 	}
+}
+
+func NewRoleServiceWithPolicy(dbs database.Connections, enforcer *rbac.Enforcer, catalog *RuntimePermissionCatalog, policy PagePolicy) *RoleService {
+	service := NewRoleService(dbs, enforcer, catalog)
+	service.pagePolicy = pagePolicyFromArgs([]PagePolicy{policy})
+	return service
 }
 
 func (s *RoleService) ListRoles(ctx context.Context, in ListRolesInput) (*ListRolesOutput, error) {
@@ -136,13 +144,13 @@ func (s *RoleService) ListRoles(ctx context.Context, in ListRolesInput) (*ListRo
 		return nil, errx.InvalidParams().WithMessage("时间范围格式不正确")
 	}
 
-	page, pageSize := resolvePage(ListRequest{
+	page, pageSize := resolvePageWithPolicy(ListRequest{
 		Page:     in.Page,
 		PageSize: in.PageSize,
 		Offset:   in.Offset,
 		Limit:    in.Limit,
 		ListAll:  in.ListAll,
-	})
+	}, s.pagePolicy)
 
 	var total int64
 	if err := query.Count(&total).Error; err != nil {

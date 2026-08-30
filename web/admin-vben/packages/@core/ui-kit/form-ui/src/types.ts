@@ -1,12 +1,10 @@
 import type { FieldOptions, FormContext, GenericObject } from 'vee-validate';
 import type { ZodTypeAny } from 'zod';
 
-import type { Component, HtmlHTMLAttributes, Ref } from 'vue';
+import type { Component, HtmlHTMLAttributes } from 'vue';
 
 import type { VbenButtonProps } from '@vben-core/shadcn-ui';
 import type { ClassType, MaybeComputedRef } from '@vben-core/typings';
-
-import type { FormApi } from './form-api';
 
 export type FormLayout = 'horizontal' | 'inline' | 'vertical';
 
@@ -432,12 +430,6 @@ export interface VbenFormProps<
    */
   submitOnEnter?: boolean;
 }
-
-export type ExtendedFormApi = FormApi & {
-  useStore: <T = NoInfer<VbenFormProps>>(
-    selector?: (state: NoInfer<VbenFormProps>) => T,
-  ) => Readonly<Ref<T>>;
-};
 
 export interface VbenFormAdapterOptions<
   T extends BaseFormComponentType = BaseFormComponentType,

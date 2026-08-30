@@ -80,6 +80,12 @@
 
 即使 claims 里还保留少量历史字段，也不应作为请求期最终授权依据。
 
+### 4.1 浏览器存储边界
+
+Console 使用显式 SPA token 策略：access token、refresh token 与权限缓存保存在 `sessionStorage`，页面刷新可恢复，关闭浏览器会话后需要重新登录。浏览器侧不把加密存储当作 XSS 防护；生产环境仍必须通过 CSP、依赖治理、最小化第三方脚本和 HTTPS 降低 XSS 风险。
+
+服务端会为实际 `api` / `console` 进程使用不同的 JWT issuer suffix 与 audience，两个 surface 的 access token 不可互换。
+
 ## 5. API 权限模型
 
 ### 5.1 权限标识
@@ -113,7 +119,9 @@ API 权限清单不是数据库真相源，而是运行时从已注册路由扫�
 接口展示名来自：
 
 ```go
-route.Wrap(group).GET(...).Name("角色权限.角色列表")
+catalog := route.NewCatalog() // 生产环境复用当前 HTTP engine 的 catalog
+roles := route.WrapWithCatalog(group, catalog)
+roles.GET(...).Name("角色权限.角色列表")
 ```
 
 `Name(...)` 只影响展示，不影响真正鉴权。

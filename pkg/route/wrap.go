@@ -9,22 +9,99 @@ import (
 )
 
 type Route struct {
-	method string
-	path   string
+	method  string
+	path    string
+	catalog *Catalog
+}
+
+// Catalog owns route metadata for one HTTP engine. It prevents API and
+// Console registrations (and parallel tests) from overwriting each other.
+type Catalog struct {
+	nameStore  sync.Map
+	scopeStore sync.Map
+	ignored    sync.Map
+}
+
+func NewCatalog() *Catalog { return &Catalog{} }
+
+func (c *Catalog) Name(method, routePath, displayName string) {
+	if c != nil {
+		c.nameStore.Store(routeKey(method, routePath), strings.TrimSpace(displayName))
+	}
+}
+
+func (c *Catalog) Scope(method, routePath, scope string) {
+	if c != nil {
+		c.scopeStore.Store(routeKey(method, routePath), strings.TrimSpace(scope))
+	}
+}
+
+func (c *Catalog) Ignore(method, routePath string) {
+	if c != nil {
+		c.ignored.Store(routeKey(method, routePath), true)
+	}
+}
+
+func (c *Catalog) GetName(method, routePath string) (string, bool) {
+	if c == nil {
+		return "", false
+	}
+	value, ok := c.nameStore.Load(routeKey(method, routePath))
+	name, valid := value.(string)
+	return name, ok && valid && name != ""
+}
+
+func (c *Catalog) GetScope(method, routePath string) (string, bool) {
+	if c == nil {
+		return "", false
+	}
+	value, ok := c.scopeStore.Load(routeKey(method, routePath))
+	scope, valid := value.(string)
+	return scope, ok && valid && scope != ""
+}
+
+func (c *Catalog) IsIgnored(method, routePath string) bool {
+	if c == nil {
+		return false
+	}
+	value, ok := c.ignored.Load(routeKey(method, routePath))
+	ignored, valid := value.(bool)
+	return ok && valid && ignored
 }
 
 func (r *Route) Name(displayName string) *Route {
-	routeNameStore.Store(routeKey(r.method, r.path), strings.TrimSpace(displayName))
+	if r == nil {
+		return r
+	}
+	if r.catalog != nil {
+		r.catalog.Name(r.method, r.path, displayName)
+	} else {
+		routeNameStore.Store(routeKey(r.method, r.path), strings.TrimSpace(displayName))
+	}
 	return r
 }
 
 func (r *Route) Scope(scope string) *Route {
-	routeScopeStore.Store(routeKey(r.method, r.path), strings.TrimSpace(scope))
+	if r == nil {
+		return r
+	}
+	if r.catalog != nil {
+		r.catalog.Scope(r.method, r.path, scope)
+	} else {
+		routeScopeStore.Store(routeKey(r.method, r.path), strings.TrimSpace(scope))
+	}
 	return r
 }
 
 func (r *Route) Ignore() *Route {
-	ignoredRouteStore.Store(routeKey(r.method, r.path), true)
+	if r == nil {
+		return r
+	}
+	if r.catalog != nil {
+		r.catalog.Ignore(r.method, r.path)
+	} else {
+		ignoredRouteStore.Store(routeKey(r.method, r.path), true)
+	}
 	return r
 }
 
@@ -64,16 +141,24 @@ func IsIgnored(method, routePath string) bool {
 type Group struct {
 	group        *gin.RouterGroup
 	defaultScope string
+	catalog      *Catalog
 }
 
 func Wrap(g *gin.RouterGroup) *Group {
 	return &Group{group: g}
 }
 
+// WrapWithCatalog is the preferred constructor for application routers.
+// Wrap remains available for legacy callers and tests.
+func WrapWithCatalog(g *gin.RouterGroup, catalog *Catalog) *Group {
+	return &Group{group: g, catalog: catalog}
+}
+
 func (g *Group) Group(relativePath string, handlers ...gin.HandlerFunc) *Group {
 	return &Group{
 		group:        g.group.Group(relativePath, handlers...),
 		defaultScope: g.defaultScope,
+		catalog:      g.catalog,
 	}
 }
 
@@ -136,8 +221,9 @@ func (g *Group) handle(method, routePath string, handlers ...gin.HandlerFunc) *R
 	}
 
 	registeredRoute := &Route{
-		method: strings.ToUpper(method),
-		path:   joinRoutePath(g.group.BasePath(), routePath),
+		method:  strings.ToUpper(method),
+		path:    joinRoutePath(g.group.BasePath(), routePath),
+		catalog: g.catalog,
 	}
 	if g.defaultScope != "" {
 		registeredRoute.Scope(g.defaultScope)

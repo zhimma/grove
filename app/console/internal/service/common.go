@@ -15,6 +15,34 @@ type ListRequest struct {
 	ListAll  bool
 }
 
+// PagePolicy is the executable pagination contract shared by Console list
+// services. Values are copied into each service so different applications do
+// not rely on mutable process-global defaults.
+type PagePolicy struct {
+	Default int
+	Max     int
+}
+
+func NewPagePolicy(defaultPerPage, maxPerPage int) PagePolicy {
+	if defaultPerPage <= 0 {
+		defaultPerPage = 20
+	}
+	if maxPerPage <= 0 {
+		maxPerPage = 100
+	}
+	if defaultPerPage > maxPerPage {
+		defaultPerPage = maxPerPage
+	}
+	return PagePolicy{Default: defaultPerPage, Max: maxPerPage}
+}
+
+func pagePolicyFromArgs(policies []PagePolicy) PagePolicy {
+	if len(policies) == 0 {
+		return NewPagePolicy(20, 100)
+	}
+	return NewPagePolicy(policies[0].Default, policies[0].Max)
+}
+
 type ListMeta struct {
 	Total      int64 `json:"total"`
 	Page       int   `json:"page"`
@@ -36,6 +64,11 @@ func NewListMeta(total int64, page, pageSize int) ListMeta {
 }
 
 func resolvePage(input ListRequest) (int, int) {
+	return resolvePageWithPolicy(input, NewPagePolicy(20, 100))
+}
+
+func resolvePageWithPolicy(input ListRequest, policy PagePolicy) (int, int) {
+	policy = NewPagePolicy(policy.Default, policy.Max)
 	page := input.Page
 	if page <= 0 {
 		page = 1
@@ -46,7 +79,10 @@ func resolvePage(input ListRequest) (int, int) {
 		pageSize = input.Limit
 	}
 	if pageSize <= 0 {
-		pageSize = 20
+		pageSize = policy.Default
+	}
+	if policy.Max > 0 && pageSize > policy.Max {
+		pageSize = policy.Max
 	}
 	if input.ListAll {
 		pageSize = 0

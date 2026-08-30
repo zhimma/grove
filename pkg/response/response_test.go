@@ -151,3 +151,102 @@ func TestFailIncludesDebugCauseWhenDebugEnabled(t *testing.T) {
 		t.Fatalf("unexpected debug type: %#v", got)
 	}
 }
+
+func TestFailUsesStableFallbackCodeForCustomHTTPError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/dependency", nil)
+	request.SetRequestID(c, "req-503")
+
+	Fail(c, errx.New(http.StatusServiceUnavailable, "", "服务暂不可用"))
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503, got %d", recorder.Code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data, ok := payload["data"].(map[string]any)
+	if !ok || data["error_code"] != "service_unavailable" {
+		t.Fatalf("expected stable 503 error code, got %#v", payload["data"])
+	}
+	if got := recorder.Header().Get("X-Request-Id"); got != "req-503" {
+		t.Fatalf("expected request id header, got %q", got)
+	}
+}
+
+func TestFailDoesNotExposeClientErrorCauseInDebug(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/roles", nil)
+	request.SetRequestMeta(c, request.RequestMeta{RequestID: "req-client-debug", Debug: true})
+
+	Fail(c, errx.Forbidden().WithCause(stderrors.New("sensitive parser detail")))
+	var payload map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if data, ok := payload["data"].(map[string]any); ok {
+		if _, exists := data["debug"]; exists {
+			t.Fatalf("client error cause must stay hidden: %#v", data["debug"])
+		}
+	}
+}
+
+func TestFailFiltersReservedDebugDataWhenDebugDisabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/roles", nil)
+	request.SetRequestMeta(c, request.RequestMeta{RequestID: "req-debug-data", Debug: false})
+
+	Fail(c, errx.Conflict().WithData(map[string]interface{}{
+		"debug":  "must not leak",
+		"reason": "safe",
+	}))
+	var payload map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data := payload["data"].(map[string]any)
+	if _, exists := data["debug"]; exists {
+		t.Fatalf("reserved debug data leaked: %#v", data["debug"])
+	}
+	if data["reason"] != "safe" {
+		t.Fatalf("safe error data was lost: %#v", data)
+	}
+}
+
+func TestResponseSuccessHelpersKeepEnvelopeAndStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	createdRecorder := httptest.NewRecorder()
+	created, _ := gin.CreateTestContext(createdRecorder)
+	created.Request = httptest.NewRequest(http.MethodPost, "/roles", nil)
+	request.SetRequestID(created, "req-created")
+	Created(created, map[string]any{"id": "role-1"})
+	if createdRecorder.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", createdRecorder.Code)
+	}
+	var createdPayload Response
+	if err := json.Unmarshal(createdRecorder.Body.Bytes(), &createdPayload); err != nil {
+		t.Fatalf("decode created response: %v", err)
+	}
+	if createdPayload.Code != 0 || createdPayload.RequestID != "req-created" {
+		t.Fatalf("unexpected created envelope: %#v", createdPayload)
+	}
+
+	noContentRecorder := httptest.NewRecorder()
+	noContent, _ := gin.CreateTestContext(noContentRecorder)
+	noContent.Request = httptest.NewRequest(http.MethodDelete, "/roles/role-1", nil)
+	request.SetRequestID(noContent, "req-no-content")
+	NoContent(noContent)
+	if noContentRecorder.Code != http.StatusNoContent || noContentRecorder.Body.Len() != 0 {
+		t.Fatalf("expected empty 204 response, status=%d body=%q", noContentRecorder.Code, noContentRecorder.Body.String())
+	}
+	if got := noContentRecorder.Header().Get("X-Request-Id"); got != "req-no-content" {
+		t.Fatalf("expected no-content request id header, got %q", got)
+	}
+}

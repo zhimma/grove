@@ -1,4 +1,4 @@
-FROM node:22-slim AS builder
+FROM node:22.14.0-slim AS builder
 ARG APP_NAME=console
 
 # --max-old-space-size
@@ -21,7 +21,7 @@ RUN pnpm run build:${APP_NAME}
 
 RUN echo "Builder Success 🎉"
 
-FROM nginx:stable-alpine AS production
+FROM nginx:1.27.5-alpine AS production
 ARG APP_NAME=console
 
 # 配置 nginx

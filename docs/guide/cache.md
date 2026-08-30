@@ -9,7 +9,7 @@
 - 内存缓存
 - Redis 缓存
 
-缓存实例通常通过 `internal/provider.Provider` 获取。
+缓存实例通常由启动或路由装配层从 `internal/provider.Provider` 获取，再通过构造函数传给实际使用它的 service；业务 service 不持有完整 Provider。
 
 ## 最短路径
 
@@ -23,7 +23,7 @@ redis:
   db: 0
 ```
 
-### 通过 Provider 获取缓存
+### 在装配层获取缓存
 
 ```go
 store, err := p.Cache.Get("memory")
@@ -51,11 +51,11 @@ _ = value
 
 ## 关键约定
 
-- 业务代码优先通过 `p.Cache.Get(name)` 获取缓存实例。
+- 由装配层通过 `p.Cache.Get(name)` 获取缓存实例，并把返回的 store 传给业务对象。
 - `Get(name)` 返回明确错误；不要依赖 `nil` 表示缓存未配置。
 - 缓存键命名应带业务前缀，例如 `dashboard:summary`、`user:123`。
 - Redis 适合多实例部署；内存缓存只适合单进程本地缓存。
-- 缓存失败不应伪装成业务成功，应按场景决定降级或直接返回错误。
+- 框架默认会把 Redis 读写错误返回给调用方，不自动回退到进程内缓存或伪装成业务成功；如果某个业务允许降级，必须在业务服务层显式定义降级数据、告警和一致性边界。
 - `TTL` 返回 `found=false` 表示不存在；永久 key 返回 `ttl=0, found=true`。
 - `Add` 是条件写入，不是完整分布式锁；需要锁所有权、续租或 fencing token 时使用独立组件。
 

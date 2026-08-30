@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/zhimma/grove/pkg/job"
 	"github.com/zhimma/grove/pkg/logger"
 	"github.com/zhimma/grove/pkg/rbac"
+	"github.com/zhimma/grove/pkg/route"
 	"github.com/zhimma/grove/pkg/scheduler"
 	"github.com/zhimma/grove/pkg/secretbox"
 	"github.com/zhimma/grove/pkg/storage"
@@ -43,6 +45,7 @@ type Provider struct {
 	Scheduler     *scheduler.Scheduler
 	ConfigSecrets *secretbox.Box
 	Observability *observability.Runtime
+	RouteCatalog  *route.Catalog
 	serviceName   string
 
 	closeMu   sync.Mutex
@@ -132,7 +135,7 @@ func New(cfg *config.Config, serviceName string, opts ...Option) (*Provider, err
 		return nil, err
 	}
 
-	p := &Provider{Config: cfg, serviceName: serviceName}
+	p := &Provider{Config: cfg, RouteCatalog: route.NewCatalog(), serviceName: serviceName}
 	p.AddCloser("logger", logger.Close)
 	for _, opt := range opts {
 		if err := opt(p); err != nil {
@@ -186,6 +189,7 @@ func WithDatabase() Option {
 			MaxConnections:  p.Config.Databases.Default.MaxConnections,
 			MaxIdleConns:    p.Config.Databases.Default.MaxIdleConns,
 			ConnMaxLifetime: p.Config.Databases.Default.ConnMaxLifetime,
+			ConnectTimeout:  p.Config.Databases.Default.ConnectTimeout,
 		}
 		resourceConfigs := make(map[string]database.Config, len(p.Config.Databases.Resources))
 		for name, cfg := range p.Config.Databases.Resources {
@@ -205,6 +209,7 @@ func WithDatabase() Option {
 				MaxConnections:  cfg.MaxConnections,
 				MaxIdleConns:    cfg.MaxIdleConns,
 				ConnMaxLifetime: cfg.ConnMaxLifetime,
+				ConnectTimeout:  cfg.ConnectTimeout,
 			}
 		}
 		dbs, err := database.NewConnections(defaultCfg, resourceConfigs)
@@ -306,7 +311,7 @@ func WithAuth() Option {
 	return func(p *Provider) error {
 		manager, err := auth.NewManager(
 			p.Config.JWT.Secret,
-			p.Config.JWT.Issuer,
+			serviceTokenIssuer(p.Config.JWT.Issuer, p.serviceName),
 			time.Duration(p.Config.JWT.AccessExpiryHours)*time.Hour,
 			time.Duration(p.Config.JWT.RefreshExpiryHours)*time.Hour,
 		)
@@ -315,6 +320,19 @@ func WithAuth() Option {
 		}
 		p.TokenManager = manager
 		return nil
+	}
+}
+
+func serviceTokenIssuer(baseIssuer, serviceName string) string {
+	baseIssuer = strings.TrimSpace(baseIssuer)
+	if baseIssuer == "" {
+		baseIssuer = "grove"
+	}
+	switch strings.ToLower(strings.TrimSpace(serviceName)) {
+	case "api", "console":
+		return baseIssuer + ":" + strings.ToLower(strings.TrimSpace(serviceName))
+	default:
+		return baseIssuer
 	}
 }
 
@@ -396,7 +414,6 @@ func WithStorage() Option {
 				driver, err = storage.NewLocalDriver(storage.LocalConfig{
 					Root:    diskCfg.Root,
 					BaseURL: diskCfg.BaseURL,
-					Secret:  p.Config.JWT.Secret,
 				})
 			case "s3", "aws":
 				driver, err = storage.NewS3Driver(storage.S3Config{
@@ -430,14 +447,16 @@ func WithStorage() Option {
 			}
 
 			manager.AddDisk(diskName, driver, storage.DiskConfig{
-				Name:      diskName,
-				Driver:    driver.Name(),
-				BaseURL:   diskCfg.BaseURL,
-				Endpoint:  diskCfg.Endpoint,
-				Region:    diskCfg.Region,
-				Bucket:    diskCfg.Bucket,
-				Prefix:    diskCfg.Prefix,
-				IsDefault: diskName == strings.TrimSpace(strings.ToLower(p.Config.Storage.Default)),
+				Name:        diskName,
+				Driver:      driver.Name(),
+				BaseURL:     diskCfg.BaseURL,
+				Public:      diskCfg.Public,
+				ServeStatic: diskCfg.ServeStatic,
+				Endpoint:    diskCfg.Endpoint,
+				Region:      diskCfg.Region,
+				Bucket:      diskCfg.Bucket,
+				Prefix:      diskCfg.Prefix,
+				IsDefault:   diskName == strings.TrimSpace(strings.ToLower(p.Config.Storage.Default)),
 			}, stsIssuer)
 		}
 		if len(manager.Names()) == 0 {
@@ -472,7 +491,9 @@ func WithCache() Option {
 
 		// 如果Redis可用，注册Redis缓存
 		if p.RedisClient != nil {
-			redisStore := cache.NewRedisStore(p.RedisClient, p.Config.App.Name)
+			parts := []string{strings.TrimSpace(p.Config.App.Name), strings.TrimSpace(p.Config.App.Env), p.serviceName}
+			parts = slices.DeleteFunc(parts, func(value string) bool { return value == "" })
+			redisStore := cache.NewRedisStore(p.RedisClient, strings.Join(parts, ":"))
 			manager.Register("redis", redisStore)
 			// 默认使用Redis（如果可用）
 			manager.SetDefault("redis")

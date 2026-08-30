@@ -4,7 +4,8 @@
 
 ## 使用原则
 
-- 业务代码优先通过 `internal/provider.Provider` 获取组件。
+- `internal/provider.Provider` 只在启动、server 和 router 装配边界获取组件；service、handler、job 只接收实际需要的依赖。
+- 下文中的 `p` 代表装配层变量。业务对象应在装配层完成 `p.*` 解析后，通过构造函数接收具体 store、dispatcher、manager 或数据库连接。
 - 全局 helper 只作为启动期或简单场景的便捷入口，不作为复杂业务的默认写法。
 - 组件日志统一走 `pkg/logger`，底层是 zerolog；日志文案尽量使用中文，字段名保持英文 snake_case。
 - 组件错误应尽量返回明确错误，不用 `nil` 表示配置错误。
@@ -105,6 +106,9 @@ if err != nil {
 - disk 名称会归一化为小写并去除前后空格。
 - 空 disk 名称表示默认 disk。
 - 上传目录会做路径清理，避免 `../` 逃逸。
+- 文件默认私有；local 磁盘只有同时设置 `public: true` 和 `serve_static: true` 才会注册静态路由并返回直链。
+- 私有文件通过受保护的 Console 下载接口读取；S3 直链是否公开由对象存储策略决定，Grove 不把 JWT secret 当作本地文件签名密钥。
+- 上传策略会限制扩展名、探测后的 MIME 和单文件大小；请求总量由全局 `server.max_body_bytes` 限制，文件以安全 ID 生成实际对象 key。
 - S3/ST​S 用于直传场景；普通后台上传优先走 server 模式。
 
 ## Database

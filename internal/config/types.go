@@ -37,6 +37,7 @@ type ServerConfig struct {
 	ShutdownTimeout int   `yaml:"shutdown_timeout"`
 	ReadTimeout     int   `yaml:"read_timeout"`
 	WriteTimeout    int   `yaml:"write_timeout"`
+	IdleTimeout     int   `yaml:"idle_timeout"`
 	MaxHeaderBytes  int   `yaml:"max_header_bytes"`
 	MaxBodyBytes    int64 `yaml:"max_body_bytes"`
 }
@@ -69,6 +70,7 @@ type DatabaseConfig struct {
 	MaxConnections  int    `yaml:"max_connections"`
 	MaxIdleConns    int    `yaml:"max_idle_conns"`
 	ConnMaxLifetime int    `yaml:"conn_max_lifetime"`
+	ConnectTimeout  int    `yaml:"connect_timeout"`
 }
 
 type RedisConfig struct {
@@ -133,17 +135,19 @@ type UploadPolicyConfig struct {
 }
 
 type StorageDiskConfig struct {
-	Driver    string           `yaml:"driver"`
-	Root      string           `yaml:"root"`
-	BaseURL   string           `yaml:"base_url"`
-	Endpoint  string           `yaml:"endpoint"`
-	Region    string           `yaml:"region"`
-	Bucket    string           `yaml:"bucket"`
-	AccessKey string           `yaml:"access_key"`
-	SecretKey string           `yaml:"secret_key"`
-	Secure    bool             `yaml:"secure"`
-	Prefix    string           `yaml:"prefix"`
-	STS       StorageSTSConfig `yaml:"sts"`
+	Driver      string           `yaml:"driver"`
+	Root        string           `yaml:"root"`
+	BaseURL     string           `yaml:"base_url"`
+	Public      bool             `yaml:"public"`
+	ServeStatic bool             `yaml:"serve_static"`
+	Endpoint    string           `yaml:"endpoint"`
+	Region      string           `yaml:"region"`
+	Bucket      string           `yaml:"bucket"`
+	AccessKey   string           `yaml:"access_key"`
+	SecretKey   string           `yaml:"secret_key"`
+	Secure      bool             `yaml:"secure"`
+	Prefix      string           `yaml:"prefix"`
+	STS         StorageSTSConfig `yaml:"sts"`
 }
 
 type StorageSTSConfig struct {

@@ -50,10 +50,11 @@ func newRBACCheckCmd() *cobra.Command {
 				return err
 			}
 			if len(differences) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "RBAC 一致性检查通过")
-				return nil
+				return writeLine(cmd.OutOrStdout(), "RBAC 一致性检查通过")
 			}
-			printRBACDifferences(cmd.OutOrStdout(), differences)
+			if err := printRBACDifferences(cmd.OutOrStdout(), differences); err != nil {
+				return err
+			}
 			return fmt.Errorf("发现 %d 个 RBAC 一致性差异", len(differences))
 		},
 	}
@@ -76,13 +77,13 @@ func newRBACRepairCmd() *cobra.Command {
 				return err
 			}
 			if len(differences) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "RBAC 数据无需修复")
-				return nil
+				return writeLine(cmd.OutOrStdout(), "RBAC 数据无需修复")
 			}
-			printRBACDifferences(cmd.OutOrStdout(), differences)
+			if err := printRBACDifferences(cmd.OutOrStdout(), differences); err != nil {
+				return err
+			}
 			if dryRun {
-				fmt.Fprintln(cmd.OutOrStdout(), "dry-run：未修改数据；使用 --dry-run=false 执行修复")
-				return nil
+				return writeLine(cmd.OutOrStdout(), "dry-run：未修改数据；使用 --dry-run=false 执行修复")
 			}
 			if err := repairConsoleRBAC(cmd.Context(), db, enforcer); err != nil {
 				return err
@@ -92,11 +93,12 @@ func newRBACRepairCmd() *cobra.Command {
 				return err
 			}
 			if len(remaining) > 0 {
-				printRBACDifferences(cmd.OutOrStdout(), remaining)
+				if err := printRBACDifferences(cmd.OutOrStdout(), remaining); err != nil {
+					return err
+				}
 				return fmt.Errorf("修复后仍存在 %d 个 RBAC 一致性差异", len(remaining))
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "RBAC 修复完成")
-			return nil
+			return writeLine(cmd.OutOrStdout(), "RBAC 修复完成")
 		},
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", true, "只输出差异，不修改数据；设置为 false 才执行修复")
@@ -296,10 +298,13 @@ func loadConsoleRBACSources(ctx context.Context, db *gorm.DB) ([]model.ConsoleRo
 	return roles, admins, nil
 }
 
-func printRBACDifferences(out io.Writer, differences []rbacDifference) {
+func printRBACDifferences(out io.Writer, differences []rbacDifference) error {
 	for _, difference := range differences {
-		fmt.Fprintf(out, "- %s subject=%s expected=%s actual=%s\n", difference.Kind, difference.Subject, difference.Expected, difference.Actual)
+		if _, err := fmt.Fprintf(out, "- %s subject=%s expected=%s actual=%s\n", difference.Kind, difference.Subject, difference.Expected, difference.Actual); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func uniqueSorted(values []string) []string {

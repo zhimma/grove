@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/pkg/cache"
 	"github.com/zhimma/grove/pkg/database"
@@ -48,6 +49,65 @@ func TestServiceOptionSets(t *testing.T) {
 	}
 	if len(WorkerOptions()) == 0 {
 		t.Fatal("expected worker options")
+	}
+}
+
+func TestWithCacheNamespacesRedisStoreByAppEnvironmentAndService(t *testing.T) {
+	p := &Provider{
+		Config:      &config.Config{App: config.AppConfig{Name: "grove", Env: "staging"}},
+		RedisClient: redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"}),
+		serviceName: "console",
+	}
+	if err := WithCache()(p); err != nil {
+		t.Fatalf("init cache: %v", err)
+	}
+	t.Cleanup(func() { _ = p.Cache.Close(); _ = p.RedisClient.Close() })
+	store, err := p.Cache.Get("redis")
+	if err != nil {
+		t.Fatalf("get redis store: %v", err)
+	}
+	redisStore, ok := store.(*cache.RedisStore)
+	if !ok {
+		t.Fatalf("expected redis store, got %T", store)
+	}
+	if got := redisStore.Prefix(); got != "grove:staging:console" {
+		t.Fatalf("unexpected redis namespace: %q", got)
+	}
+}
+
+func TestWithAuthSeparatesAPIAndConsoleIssuers(t *testing.T) {
+	newConfig := func() *config.Config {
+		return &config.Config{
+			App: config.AppConfig{Name: "grove", Env: "test"},
+			Log: config.LogConfig{Level: "error", Path: t.TempDir(), Console: false},
+			JWT: config.JWTConfig{Secret: "0123456789abcdef0123456789abcdef", Issuer: "grove", AccessExpiryHours: 1},
+		}
+	}
+	api, err := New(newConfig(), "api", WithAuth())
+	if err != nil {
+		t.Fatalf("new API provider: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := api.Close(); err != nil {
+			t.Errorf("close API provider: %v", err)
+		}
+	})
+	console, err := New(newConfig(), "console", WithAuth())
+	if err != nil {
+		t.Fatalf("new Console provider: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := console.Close(); err != nil {
+			t.Errorf("close Console provider: %v", err)
+		}
+	})
+
+	apiToken, err := api.TokenManager.IssueAccessToken("api-user")
+	if err != nil {
+		t.Fatalf("issue API token: %v", err)
+	}
+	if _, err := console.TokenManager.ValidateToken(apiToken); err == nil {
+		t.Fatal("Console token manager must reject API issuer")
 	}
 }
 

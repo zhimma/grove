@@ -56,7 +56,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
-	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
 )
@@ -65,12 +65,16 @@ type %sHandler struct {
 	%sSvc *consoleservice.%sService
 }
 
-func Register%sRoutes(protected *gin.RouterGroup, p *provider.Provider) {
+func Register%sRoutes(protected *gin.RouterGroup, dbs database.Connections, catalogs ...*route.Catalog) {
 	h := &%sHandler{
-		%sSvc: consoleservice.New%sService(p.DB),
+		%sSvc: consoleservice.New%sService(dbs),
 	}
 
-	group := route.Wrap(protected.Group("%s"))
+	var catalog *route.Catalog
+	if len(catalogs) > 0 {
+		catalog = catalogs[0]
+	}
+	group := route.WrapWithCatalog(protected.Group("%s"), catalog)
 	group.GET("", h.List).Name("%s.列表")
 }
 

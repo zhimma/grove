@@ -4,7 +4,8 @@ import type { SlotsType } from 'vue';
 
 import type { BaseFormComponentType } from '@vben-core/form-ui';
 
-import type { ExtendedVxeGridApi, VxeGridProps } from './types';
+import type { ExtendedVxeGridApi } from './api';
+import type { VxeGridProps } from './types';
 
 import { defineComponent, h, onBeforeUnmount } from 'vue';
 

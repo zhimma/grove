@@ -13,7 +13,8 @@ import (
 )
 
 type LogService struct {
-	dbs database.Connections
+	dbs        database.Connections
+	pagePolicy PagePolicy
 }
 
 type ListOperationLogsInput struct {
@@ -65,8 +66,8 @@ type OperationLogDetail struct {
 	Detail map[string]any
 }
 
-func NewLogService(dbs database.Connections) *LogService {
-	return &LogService{dbs: dbs}
+func NewLogService(dbs database.Connections, policies ...PagePolicy) *LogService {
+	return &LogService{dbs: dbs, pagePolicy: pagePolicyFromArgs(policies)}
 }
 
 func (s *LogService) ListOperationLogs(ctx context.Context, in ListOperationLogsInput) (*ListOperationLogsOutput, error) {
@@ -98,7 +99,7 @@ func (s *LogService) ListOperationLogs(ctx context.Context, in ListOperationLogs
 		return nil, errx.InvalidParams().WithMessage("时间范围格式不正确")
 	}
 
-	return queryConsoleLogs(query, in.Page, in.PageSize, in.Offset, in.Limit, in.ListAll, in.OrderBy, func(db *gorm.DB) *gorm.DB {
+	return queryConsoleLogs(query, s.pagePolicy, in.Page, in.PageSize, in.Offset, in.Limit, in.ListAll, in.OrderBy, func(db *gorm.DB) *gorm.DB {
 		return db.Order("created_at DESC")
 	}, func(result []model.ConsoleOperationLog, meta ListMeta) *ListOperationLogsOutput {
 		return &ListOperationLogsOutput{List: result, Meta: meta}
@@ -128,7 +129,7 @@ func (s *LogService) ListLoginLogs(ctx context.Context, in ListLoginLogsInput) (
 		return nil, errx.InvalidParams().WithMessage("时间范围格式不正确")
 	}
 
-	return queryConsoleLogs(query, in.Page, in.PageSize, in.Offset, in.Limit, in.ListAll, in.OrderBy, func(db *gorm.DB) *gorm.DB {
+	return queryConsoleLogs(query, s.pagePolicy, in.Page, in.PageSize, in.Offset, in.Limit, in.ListAll, in.OrderBy, func(db *gorm.DB) *gorm.DB {
 		return db.Order("created_at DESC")
 	}, func(result []model.ConsoleLoginLog, meta ListMeta) *ListLoginLogsOutput {
 		return &ListLoginLogsOutput{List: result, Meta: meta}
@@ -165,6 +166,7 @@ func (s *LogService) GetOperationLogDetail(ctx context.Context, in GetOperationL
 
 func queryConsoleLogs[T any, R any](
 	query *gorm.DB,
+	policy PagePolicy,
 	page int,
 	pageSize int,
 	offset int,
@@ -176,13 +178,13 @@ func queryConsoleLogs[T any, R any](
 ) (R, error) {
 	var zero R
 
-	page, pageSize = resolvePage(ListRequest{
+	page, pageSize = resolvePageWithPolicy(ListRequest{
 		Page:     page,
 		PageSize: pageSize,
 		Offset:   offset,
 		Limit:    limit,
 		ListAll:  listAll,
-	})
+	}, policy)
 
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
@@ -209,7 +211,9 @@ func queryConsoleLogs[T any, R any](
 		query = query.Offset(resolvedOffset).Limit(pageSize)
 	}
 
-	var list []T
+	// Return an empty JSON array rather than null when no records match. The
+	// console client treats list as a stable array in both list endpoints.
+	list := make([]T, 0)
 	if err := query.Find(&list).Error; err != nil {
 		return zero, errx.Internal().WithCause(err)
 	}

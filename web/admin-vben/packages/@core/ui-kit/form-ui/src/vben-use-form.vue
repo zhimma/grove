@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { Recordable } from '@vben-core/typings';
 
-import type { ExtendedFormApi, VbenFormProps } from './types';
+import type { ExtendedFormApi } from './form-api';
+import type { VbenFormProps } from './types';
 
 // import { toRaw, watch } from 'vue';
 import { nextTick, onMounted, watch } from 'vue';

@@ -1,6 +1,8 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useAuthStore } from './auth';
+
 const mocks = vi.hoisted(() => {
   const accessStore = {
     accessToken: 'access-token' as null | string,
@@ -51,8 +53,6 @@ vi.mock('#/locales', () => ({ $t: (key: string) => key }));
 vi.mock('./permission', () => ({
   usePermissionStore: () => mocks.permissionStore,
 }));
-
-import { useAuthStore } from './auth';
 
 describe('auth store logout', () => {
   beforeEach(() => {

@@ -1,3 +1,4 @@
+import { consoleEndpoint } from '#/api/console-contract';
 import { requestClient } from '#/api/request';
 
 export interface APIPermissionTreeNode {
@@ -11,6 +12,6 @@ export interface APIPermissionTreeNode {
 
 export function getApiPermissionOptions() {
   return requestClient.get<APIPermissionTreeNode[]>(
-    '/console/v1/permissions/apis',
+    consoleEndpoint('consoleListAPIPermissions'),
   );
 }

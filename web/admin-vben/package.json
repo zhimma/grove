@@ -31,6 +31,7 @@
     "build:play": "pnpm run build --filter=@vben/playground",
     "changeset": "pnpm exec changeset",
     "check": "pnpm run check:circular && pnpm run check:dep && pnpm run check:type && pnpm check:cspell",
+    "check:console-api-contract": "vitest run apps/console/src/api/console-contract.test.ts --dom",
     "check:circular": "vsh check-circular",
     "check:cspell": "cspell lint **/*.ts **/README.md .changeset/*.md --no-progress",
     "check:dep": "vsh check-dep",

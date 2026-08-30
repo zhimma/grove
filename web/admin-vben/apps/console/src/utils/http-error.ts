@@ -44,7 +44,9 @@ export function parseApiError(error: any): ParsedApiError {
     message:
       typeof responseData.message === 'string' ? responseData.message : '',
     requestId:
-      typeof responseData.request_id === 'string' ? responseData.request_id : '',
+      typeof responseData.request_id === 'string'
+        ? responseData.request_id
+        : '',
     status: typeof response?.status === 'number' ? response.status : 0,
   };
 }

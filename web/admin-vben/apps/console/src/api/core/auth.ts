@@ -1,3 +1,4 @@
+import { consoleEndpoint } from '#/api/console-contract';
 import { requestClient } from '#/api/request';
 
 export namespace AuthApi {
@@ -39,14 +40,13 @@ export namespace AuthApi {
 export async function loginApi(data: AuthApi.LoginParams) {
   const identifier = data.account?.trim();
   const payload = {
-    identifier,
     account: identifier,
     device_name:
       typeof navigator === 'undefined' ? '' : navigator.userAgent.slice(0, 120),
     password: data.password,
   };
   return requestClient.post<AuthApi.LoginResult>(
-    '/console/v1/auth/login',
+    consoleEndpoint('consoleLogin'),
     payload,
   );
 }
@@ -56,7 +56,7 @@ export async function loginApi(data: AuthApi.LoginParams) {
  */
 export async function refreshTokenApi(refreshToken?: null | string) {
   return requestClient.post<AuthApi.RefreshTokenResult>(
-    '/console/v1/auth/refresh',
+    consoleEndpoint('consoleRefreshToken'),
     {
       refresh_token: refreshToken,
     },
@@ -67,7 +67,7 @@ export async function refreshTokenApi(refreshToken?: null | string) {
  * 退出登录
  */
 export async function logoutApi(refreshToken?: null | string) {
-  return requestClient.post('/console/v1/auth/logout', {
+  return requestClient.post(consoleEndpoint('consoleLogout'), {
     refresh_token: refreshToken,
   });
 }
@@ -77,7 +77,7 @@ export async function logoutApi(refreshToken?: null | string) {
  */
 export async function getAuthorizationOverviewApi() {
   return requestClient.get<AuthApi.AuthorizationOverview>(
-    '/console/v1/auth/permissions',
+    consoleEndpoint('consoleGetAuthorizationOverview'),
   );
 }
 

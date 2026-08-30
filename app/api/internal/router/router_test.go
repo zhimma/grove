@@ -16,6 +16,7 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/internal/provider"
 	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/rbac"
 )
 
 func TestRouterDoesNotRegisterDemoRoutesInProduction(t *testing.T) {
@@ -69,6 +70,7 @@ func TestRouterPingAndProfile(t *testing.T) {
 		t.Fatalf("create API user: %v", err)
 	}
 	p.DB = database.NewConnectionsFromDBs(db, nil)
+	attachAPIEnforcer(t, p, db, "GET /api/v1/profile")
 
 	engine := gin.New()
 	engine.Use(appmiddleware.RequestID(), appmiddleware.RequestMeta("api"), appmiddleware.Recovery())
@@ -113,7 +115,7 @@ func TestRouterReturnsFieldErrorsForInvalidRequests(t *testing.T) {
 
 	cfg := newRouterTestConfig(t, "test")
 	cfg.Demo.Enabled = true
-	engine, p := newRouterTestEngine(t, cfg)
+	engine, p := newRouterTestEngine(t, cfg, "POST /api/v1/jobs/echo")
 
 	resp := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/access-token", strings.NewReader(`{}`))
@@ -173,16 +175,76 @@ func newRouterTestConfig(t *testing.T, env string) *config.Config {
 	}
 }
 
-func newRouterTestEngine(t *testing.T, cfg *config.Config) (*gin.Engine, *provider.Provider) {
+func TestRouterProtectedRoutesFailClosedWithoutAPIEnforcer(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := newRouterTestConfig(t, "test")
+	cfg.Demo.Enabled = true
+	engine, p := newRouterTestEngine(t, cfg)
+
+	token, err := p.TokenManager.IssueAccessToken("api-user")
+	if err != nil {
+		t.Fatalf("issue token: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/profile", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp := httptest.NewRecorder()
+	engine.ServeHTTP(resp, req)
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 without API enforcer, got %d body=%s", resp.Code, resp.Body.String())
+	}
+}
+
+func newRouterTestEngine(t *testing.T, cfg *config.Config, permissions ...string) (*gin.Engine, *provider.Provider) {
 	t.Helper()
 	p, err := provider.New(cfg, "api", provider.WithAuth())
 	if err != nil {
 		t.Fatalf("new provider: %v", err)
 	}
 	t.Cleanup(func() { _ = p.Close() })
+	if len(permissions) > 0 {
+		db, err := gorm.Open(sqlite.Open(t.TempDir()+"/api-permission.db"), &gorm.Config{})
+		if err != nil {
+			t.Fatalf("open permission database: %v", err)
+		}
+		attachAPIEnforcer(t, p, db, permissions...)
+	}
 
 	engine := gin.New()
 	engine.Use(appmiddleware.RequestID(), appmiddleware.RequestMeta("api"), appmiddleware.Recovery())
 	New(cfg, p).InstallToEngine(engine)
 	return engine, p
+}
+
+func attachAPIEnforcer(t *testing.T, p *provider.Provider, db *gorm.DB, permissions ...string) {
+	t.Helper()
+	if err := db.Exec(`
+CREATE TABLE IF NOT EXISTS casbin_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ptype TEXT,
+    v0 TEXT,
+    v1 TEXT,
+    v2 TEXT,
+    v3 TEXT,
+    v4 TEXT,
+    v5 TEXT
+);`).Error; err != nil {
+		t.Fatalf("create API casbin table: %v", err)
+	}
+	enforcer, err := rbac.New(db, &rbac.Config{TableName: "casbin_rules"})
+	if err != nil {
+		t.Fatalf("new API enforcer: %v", err)
+	}
+	if _, err := enforcer.AddGroupingPolicy("api-user", "api-role"); err != nil {
+		t.Fatalf("add API role: %v", err)
+	}
+	for _, permission := range permissions {
+		if _, err := enforcer.AddPolicy("api-role", permission); err != nil {
+			t.Fatalf("add API policy %q: %v", permission, err)
+		}
+	}
+	if p.Enforcers == nil {
+		p.Enforcers = make(map[string]*rbac.Enforcer)
+	}
+	p.Enforcers["api"] = enforcer
 }

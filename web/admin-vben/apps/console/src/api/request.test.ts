@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createRequestClient } from './request';
+
 const mocks = vi.hoisted(() => {
   const accessStore = {
     accessToken: 'expired-access' as null | string,
@@ -53,8 +55,6 @@ vi.mock('./core', () => ({
   refreshTokenApi: mocks.refreshTokenApi,
 }));
 
-import { createRequestClient } from './request';
-
 describe('console request client', () => {
   beforeEach(() => {
     mocks.accessStore.accessToken = 'expired-access';
@@ -89,17 +89,15 @@ describe('console request client', () => {
       if (config.headers?.Authorization === 'Bearer fresh-access') {
         return response;
       }
-      return Promise.reject(
-        Object.assign(new Error('expired'), {
-          config,
-          response: {
-            ...response,
-            data: { code: 401, message: 'expired' },
-            status: 401,
-            statusText: 'Unauthorized',
-          },
-        }),
-      );
+      throw Object.assign(new Error('expired'), {
+        config,
+        response: {
+          ...response,
+          data: { code: 401, message: 'expired' },
+          status: 401,
+          statusText: 'Unauthorized',
+        },
+      });
     };
 
     const first = client.get<string>('/protected/a');

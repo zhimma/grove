@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -23,6 +24,8 @@ type Report struct {
 type Checker struct {
 	checks  map[string]Check
 	timeout time.Duration
+	mu      sync.Mutex
+	running map[string]struct{}
 }
 
 func New(checks map[string]Check, timeout time.Duration) *Checker {
@@ -35,7 +38,7 @@ func New(checks map[string]Check, timeout time.Duration) *Checker {
 			cloned[name] = check
 		}
 	}
-	return &Checker{checks: cloned, timeout: timeout}
+	return &Checker{checks: cloned, timeout: timeout, running: make(map[string]struct{}, len(cloned))}
 }
 
 func (c *Checker) Run(ctx context.Context) Report {
@@ -50,30 +53,14 @@ func (c *Checker) Run(ctx context.Context) Report {
 	resultCh := make(chan Dependency, len(c.checks))
 	for name, check := range c.checks {
 		name, check := name, check
-		go func() {
-			checkCtx, cancel := context.WithTimeout(ctx, c.timeout)
-			defer cancel()
-
-			checkResult := make(chan error, 1)
-			go func() {
-				checkResult <- check(checkCtx)
-			}()
-
-			var err error
-			select {
-			case err = <-checkResult:
-			case <-checkCtx.Done():
-				err = checkCtx.Err()
-			}
-			status := "ok"
-			if err != nil {
-				status = "unavailable"
-				if errors.Is(err, context.DeadlineExceeded) {
-					status = "timeout"
-				}
-			}
-			resultCh <- Dependency{Name: name, Status: status, err: err}
-		}()
+		if !c.tryStart(name) {
+			// A previous probe is still executing. This can only happen when a
+			// custom check ignores cancellation; do not start another goroutine
+			// on every readiness request.
+			resultCh <- Dependency{Name: name, Status: "timeout", err: context.DeadlineExceeded}
+			continue
+		}
+		go c.runCheck(ctx, name, check, resultCh)
 	}
 
 	report := Report{Ready: true, Dependencies: results}
@@ -88,6 +75,48 @@ func (c *Checker) Run(ctx context.Context) Report {
 		return report.Dependencies[i].Name < report.Dependencies[j].Name
 	})
 	return report
+}
+
+func (c *Checker) tryStart(name string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, exists := c.running[name]; exists {
+		return false
+	}
+	c.running[name] = struct{}{}
+	return true
+}
+
+func (c *Checker) finish(name string) {
+	c.mu.Lock()
+	delete(c.running, name)
+	c.mu.Unlock()
+}
+
+func (c *Checker) runCheck(ctx context.Context, name string, check Check, resultCh chan<- Dependency) {
+	checkCtx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	checkResult := make(chan error, 1)
+	go func() {
+		defer c.finish(name)
+		checkResult <- check(checkCtx)
+	}()
+
+	var err error
+	select {
+	case err = <-checkResult:
+	case <-checkCtx.Done():
+		err = checkCtx.Err()
+	}
+	status := "ok"
+	if err != nil {
+		status = "unavailable"
+		if errors.Is(err, context.DeadlineExceeded) {
+			status = "timeout"
+		}
+	}
+	resultCh <- Dependency{Name: name, Status: status, err: err}
 }
 
 func (r Report) Errors() map[string]error {

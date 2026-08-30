@@ -219,3 +219,86 @@ func TestBindJSONUsesValidationStatusForCustomValidate(t *testing.T) {
 		t.Fatalf("unexpected custom validation errors: %#v", got)
 	}
 }
+
+func TestBindJSONStrictRejectsUnknownField(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	type payload struct {
+		Name string `json:"name" label:"名称"`
+	}
+	req := httptest.NewRequest(http.MethodPost, "/roles", bytes.NewBufferString(`{"name":"运营","unexpected":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = req
+
+	var input payload
+	err := BindJSONStrict(c, &input)
+	if err == nil {
+		t.Fatal("expected unknown-field validation error")
+	}
+	httpErr := errx.Normalize(err)
+	if httpErr.HTTPStatus != http.StatusBadRequest || httpErr.Code != "invalid_params" {
+		t.Fatalf("unexpected unknown-field error: %#v", httpErr)
+	}
+	errs, ok := httpErr.Data["errors"].(map[string][]string)
+	if !ok || len(errs["_error"]) != 1 || errs["_error"][0] == "" {
+		t.Fatalf("expected stable unknown-field message, got %#v", httpErr.Data["errors"])
+	}
+}
+
+func TestBindJSONAllowsUnknownFieldWhenExplicitlyRequested(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	type payload struct {
+		Name string `json:"name" label:"名称"`
+	}
+	req := httptest.NewRequest(http.MethodPost, "/roles", bytes.NewBufferString(`{"name":"运营","legacy":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = req
+	var input payload
+	if err := BindJSONAllowUnknown(c, &input); err != nil {
+		t.Fatalf("explicit compatibility binding failed: %v", err)
+	}
+	if input.Name != "运营" {
+		t.Fatalf("unexpected decoded payload: %#v", input)
+	}
+}
+
+func TestBindJSONStrictRejectsTrailingValue(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	type payload struct {
+		Name string `json:"name" label:"名称"`
+	}
+	req := httptest.NewRequest(http.MethodPost, "/roles", bytes.NewBufferString(`{"name":"运营"}{"name":"重复"}`))
+	req.Header.Set("Content-Type", "application/json")
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = req
+	var input payload
+	err := BindJSONStrict(c, &input)
+	if err == nil || errx.Normalize(err).HTTPStatus != http.StatusBadRequest {
+		t.Fatalf("expected trailing JSON 400, got %v", err)
+	}
+}
+
+func TestBindURIUsesValidationStatusAndFieldLabel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	type path struct {
+		ID int `uri:"id" binding:"required" label:"资源ID"`
+	}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodGet, "/roles/not-an-int", nil)
+	c.Params = gin.Params{{Key: "id", Value: "not-an-int"}}
+	var input path
+	err := BindURI(c, &input)
+	if err == nil {
+		t.Fatal("expected URI type error")
+	}
+	httpErr := errx.Normalize(err)
+	if httpErr.HTTPStatus != http.StatusBadRequest || httpErr.Code != "invalid_params" {
+		t.Fatalf("unexpected URI error: %#v", httpErr)
+	}
+	errs := httpErr.Data["errors"].(map[string][]string)
+	if got := errs["id"]; len(got) != 1 || got[0] != "资源ID格式不正确" {
+		t.Fatalf("unexpected URI field errors: %#v", errs)
+	}
+}

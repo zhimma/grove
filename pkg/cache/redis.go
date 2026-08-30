@@ -21,6 +21,15 @@ func NewRedisStore(client *redis.Client, prefix string) *RedisStore {
 	}
 }
 
+// Prefix exposes the effective namespace for diagnostics and contract tests;
+// callers should still use Store keys rather than constructing prefixed keys.
+func (r *RedisStore) Prefix() string {
+	if r == nil {
+		return ""
+	}
+	return r.prefix
+}
+
 func (r *RedisStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	if err := r.validate(); err != nil {
 		return nil, false, err

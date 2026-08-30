@@ -1,5 +1,6 @@
 import type { PageParams } from '#/types/common';
 
+import { consoleEndpoint } from '#/api/console-contract';
 import { requestClient } from '#/api/request';
 
 export interface ConsoleListMeta {
@@ -69,70 +70,84 @@ export interface ConsoleSession {
 }
 
 export function getDashboardOverview() {
-  return requestClient.get<DashboardOverview>('/console/v1/dashboard/summary');
+  return requestClient.get<DashboardOverview>(
+    consoleEndpoint('consoleGetDashboardSummary'),
+  );
 }
 
 export function getAdminList(params: PageParams & Record<string, any>) {
   return requestClient.get<ConsoleListResult<ConsoleAdmin>>(
-    '/console/v1/admins',
+    consoleEndpoint('consoleListAdmins'),
     { params },
   );
 }
 
 export function createAdmin(data: Record<string, any>) {
-  return requestClient.post<ConsoleAdmin>('/console/v1/admins', data);
+  return requestClient.post<ConsoleAdmin>(
+    consoleEndpoint('consoleCreateAdmin'),
+    data,
+  );
 }
 
 export function updateAdmin(id: string, data: Record<string, any>) {
-  return requestClient.put<ConsoleAdmin>(`/console/v1/admins/${id}`, data);
+  return requestClient.put<ConsoleAdmin>(
+    consoleEndpoint('consoleUpdateAdmin', { id }),
+    data,
+  );
 }
 
 export function updateAdminStatus(id: string, status: number) {
-  return requestClient.put(`/console/v1/admins/${id}/status`, { status });
+  return requestClient.put(
+    consoleEndpoint('consoleUpdateAdminStatus', { id }),
+    { status },
+  );
 }
 
 export function resetAdminPassword(id: string, password: string) {
-  return requestClient.put(`/console/v1/admins/${id}/reset-password`, {
-    password,
-  });
+  return requestClient.put(
+    consoleEndpoint('consoleResetAdminPassword', { id }),
+    { password },
+  );
 }
 
 export function deleteAdmin(id: string) {
-  return requestClient.delete(`/console/v1/admins/${id}`);
+  return requestClient.delete(consoleEndpoint('consoleDeleteAdmin', { id }));
 }
 
 export function getSessionList(params: PageParams & Record<string, any>) {
   return requestClient.get<ConsoleListResult<ConsoleSession>>(
-    '/console/v1/sessions',
+    consoleEndpoint('consoleListSessions'),
     { params },
   );
 }
 
 export function revokeSession(id: string) {
-  return requestClient.delete(`/console/v1/sessions/${id}`);
+  return requestClient.delete(consoleEndpoint('consoleRevokeSession', { id }));
 }
 
 export function getSystemConfigList(params: PageParams & Record<string, any>) {
   return requestClient.get<ConsoleListResult<SystemConfigRecord>>(
-    '/console/v1/system-configs',
+    consoleEndpoint('consoleListSystemConfigs'),
     { params },
   );
 }
 
 export function updateSystemConfig(id: string, data: Record<string, any>) {
   return requestClient.put<SystemConfigRecord>(
-    `/console/v1/system-configs/${id}`,
+    consoleEndpoint('consoleUpdateSystemConfig', { id }),
     data,
   );
 }
 
 export function createSystemConfig(data: Record<string, any>) {
   return requestClient.post<SystemConfigRecord>(
-    '/console/v1/system-configs',
+    consoleEndpoint('consoleCreateSystemConfig'),
     data,
   );
 }
 
 export function deleteSystemConfig(id: string) {
-  return requestClient.delete(`/console/v1/system-configs/${id}`);
+  return requestClient.delete(
+    consoleEndpoint('consoleDeleteSystemConfig', { id }),
+  );
 }

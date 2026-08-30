@@ -405,7 +405,11 @@ func TestMultipartFilePathOpensAtSendTime(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer form.RemoveAll()
+		defer func() {
+			if err := form.RemoveAll(); err != nil {
+				t.Errorf("remove multipart form: %v", err)
+			}
+		}()
 		if got := form.Value["name"]; len(got) != 1 || got[0] != "grove" {
 			t.Fatalf("fields = %#v", form.Value)
 		}
@@ -413,7 +417,11 @@ func TestMultipartFilePathOpensAtSendTime(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer file.Close()
+		defer func() {
+			if err := file.Close(); err != nil {
+				t.Errorf("close multipart file: %v", err)
+			}
+		}()
 		content, _ := io.ReadAll(file)
 		if string(content) != "hello" {
 			t.Fatalf("content = %q", content)

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestLoadWithOptionsExpandsEnv(t *testing.T) {
@@ -123,6 +125,49 @@ func TestLoadWithOptionsReadsDatabaseDriverOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadWithOptionsReadsDatabaseConnectTimeoutOverride(t *testing.T) {
+	t.Setenv("DB_CONNECT_TIMEOUT", "9")
+	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: filepath.Join(t.TempDir(), "config.yaml"), Service: "api"})
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Databases.Default.ConnectTimeout != 9 {
+		t.Fatalf("expected connect timeout override, got %d", cfg.Databases.Default.ConnectTimeout)
+	}
+}
+
+func TestValidateRejectsNegativeDatabaseConnectTimeout(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.Databases.Default.Enabled = true
+	cfg.Databases.Default.Host = "127.0.0.1"
+	cfg.Databases.Default.Port = "5432"
+	cfg.Databases.Default.User = "grove"
+	cfg.Databases.Default.DBName = "grove"
+	cfg.Databases.Default.ConnectTimeout = -1
+	if err := cfg.Validate("api"); err == nil || !strings.Contains(err.Error(), "connect_timeout") {
+		t.Fatalf("expected negative connect timeout error, got %v", err)
+	}
+}
+
+func TestLoadWithOptionsRejectsExplicitInvalidServerAndPaginationLimits(t *testing.T) {
+	tests := map[string]string{
+		"server zero timeout": "server:\n  idle_timeout: 0\n",
+		"body limit":          "server:\n  max_body_bytes: 0\n",
+		"pagination":          "api:\n  default_per_page: 101\n  max_per_page: 100\n",
+	}
+	for name, body := range tests {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+			if _, err := LoadWithOptions(LoadOptions{ConfigFile: path, Service: "api"}); err == nil {
+				t.Fatal("expected invalid explicit configuration to be rejected")
+			}
+		})
+	}
+}
+
 func TestLoadWithOptionsHonorsExplicitMySQLParseTimeFalse(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(configPath, []byte(`databases:
@@ -234,6 +279,22 @@ func TestConfigExampleDoesNotContainStaticCredentials(t *testing.T) {
 		t.Fatalf("read config example: %v", err)
 	}
 	content := string(raw)
+	var parsed Config
+	if err := yaml.Unmarshal(raw, &parsed); err != nil {
+		t.Fatalf("parse config example: %v", err)
+	}
+	for name, value := range map[string]string{
+		"database password": parsed.Databases.Default.Password,
+		"redis password":    parsed.Redis.Password,
+		"jwt secret":        parsed.JWT.Secret,
+		"root password":     parsed.Security.InitialRootPassword,
+		"s3 access key":     parsed.Storage.Disks["s3"].AccessKey,
+		"s3 secret key":     parsed.Storage.Disks["s3"].SecretKey,
+	} {
+		if strings.TrimSpace(value) != "" {
+			t.Fatalf("config example contains a non-empty %s", name)
+		}
+	}
 	for _, forbidden := range []string{
 		"${DB_PASSWORD:postgres}",
 		"password: postgres",
@@ -243,6 +304,63 @@ func TestConfigExampleDoesNotContainStaticCredentials(t *testing.T) {
 		if strings.Contains(content, forbidden) {
 			t.Fatalf("config example contains static credential pattern %q", forbidden)
 		}
+	}
+}
+
+func TestValidateInitialRootPassword(t *testing.T) {
+	for _, password := range []string{"", "short", "123456789012345", "replace-with-your-password"} {
+		if err := ValidateInitialRootPassword(password); err == nil {
+			t.Errorf("expected weak initial root password %q to be rejected", password)
+		}
+	}
+
+	for _, password := range []string{
+		"correct horse battery staple",
+		"一段足够长的本地环境初始管理员密码",
+		"N7!secure-root-password-2026",
+	} {
+		if err := ValidateInitialRootPassword(password); err != nil {
+			t.Errorf("expected strong initial root password to pass: %v", err)
+		}
+	}
+}
+
+func TestValidateProductionRejectsWeakConfiguredInitialRootPassword(t *testing.T) {
+	cfg := validProductionConfig()
+	cfg.Security.InitialRootPassword = "short"
+	if err := cfg.Validate("api"); err == nil || !strings.Contains(err.Error(), "initial root password") {
+		t.Fatalf("expected weak production root password error, got %v", err)
+	}
+
+	cfg.Security.InitialRootPassword = "correct horse battery staple"
+	if err := cfg.Validate("api"); err != nil {
+		t.Fatalf("expected strong production root password to pass: %v", err)
+	}
+}
+
+func TestValidateRejectsInvalidServerLimits(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*ServerConfig)
+		field  string
+	}{
+		{name: "shutdown timeout", mutate: func(server *ServerConfig) { server.ShutdownTimeout = 0 }, field: "shutdown_timeout"},
+		{name: "read timeout", mutate: func(server *ServerConfig) { server.ReadTimeout = -1 }, field: "read_timeout"},
+		{name: "write timeout", mutate: func(server *ServerConfig) { server.WriteTimeout = 0 }, field: "write_timeout"},
+		{name: "idle timeout", mutate: func(server *ServerConfig) { server.IdleTimeout = 0 }, field: "idle_timeout"},
+		{name: "max header bytes", mutate: func(server *ServerConfig) { server.MaxHeaderBytes = 0 }, field: "max_header_bytes"},
+		{name: "max body bytes", mutate: func(server *ServerConfig) { server.MaxBodyBytes = 0 }, field: "max_body_bytes"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := defaultConfig()
+			tt.mutate(&cfg.Server)
+			err := cfg.Validate("api")
+			if err == nil || !strings.Contains(err.Error(), tt.field) {
+				t.Fatalf("expected %s validation error, got %v", tt.field, err)
+			}
+		})
 	}
 }
 
@@ -385,7 +503,7 @@ app:
 	}
 }
 
-func TestLoadWithOptionsAllowsDebugOverrideInProduction(t *testing.T) {
+func TestLoadWithOptionsRejectsDebugOverrideInProduction(t *testing.T) {
 	t.Setenv("APP_DEBUG", "true")
 
 	dir := t.TempDir()
@@ -402,16 +520,12 @@ cors:
 		t.Fatalf("write config: %v", err)
 	}
 
-	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "api"})
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	if !cfg.App.Debug {
-		t.Fatal("expected APP_DEBUG=true to enable debug in production")
+	if _, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "api"}); err == nil || !strings.Contains(err.Error(), "app.debug") {
+		t.Fatalf("expected production debug override to be rejected, got %v", err)
 	}
 }
 
-func TestLoadWithOptionsAllowsExplicitConfigDebugInProduction(t *testing.T) {
+func TestLoadWithOptionsRejectsExplicitConfigDebugInProduction(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yaml")
 	err := os.WriteFile(configPath, []byte(`
@@ -427,12 +541,8 @@ cors:
 		t.Fatalf("write config: %v", err)
 	}
 
-	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "api"})
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	if !cfg.App.Debug {
-		t.Fatal("expected explicit config debug to enable debug in production")
+	if _, err := LoadWithOptions(LoadOptions{ConfigFile: configPath, Service: "api"}); err == nil || !strings.Contains(err.Error(), "app.debug") {
+		t.Fatalf("expected production debug configuration to be rejected, got %v", err)
 	}
 }
 
@@ -546,6 +656,15 @@ func TestValidateRejectsInvalidPort(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsInvalidPaginationPolicy(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.API.DefaultPerPage = 101
+	cfg.API.MaxPerPage = 100
+	if err := cfg.Validate("api"); err == nil || !strings.Contains(err.Error(), "pagination") {
+		t.Fatalf("expected pagination policy error, got %v", err)
+	}
+}
+
 func TestLoadConfigExampleDefaultsDemoOff(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "config.example.yaml"))
 	if err != nil {
@@ -590,6 +709,7 @@ func TestLoadWithOptionsReadsDemoEnabledOverride(t *testing.T) {
 func TestValidateProductionRejectsWildcardCORSAndBroadTrustedProxies(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.App.Env = "production"
+	cfg.App.Debug = false
 	cfg.JWT.Secret = "0123456789abcdef0123456789abcdef"
 	cfg.CORS.AllowedOrigins = []string{"*"}
 	if err := cfg.Validate("api"); err == nil {
@@ -713,6 +833,7 @@ func TestValidateRejectsInvalidSchedulerTimezone(t *testing.T) {
 func validProductionConfig() Config {
 	cfg := defaultConfig()
 	cfg.App.Env = "production"
+	cfg.App.Debug = false
 	cfg.JWT.Secret = "0123456789abcdef0123456789abcdef"
 	cfg.CORS.AllowedOrigins = []string{"https://console.example.com"}
 	return cfg
@@ -720,13 +841,14 @@ func validProductionConfig() Config {
 
 func validDatabaseConfig() DatabaseConfig {
 	return DatabaseConfig{
-		Enabled:  true,
-		Driver:   "postgres",
-		Host:     "127.0.0.1",
-		Port:     "5432",
-		User:     "grove",
-		Password: "secret",
-		DBName:   "grove",
-		SSLMode:  "disable",
+		Enabled:        true,
+		Driver:         "postgres",
+		Host:           "127.0.0.1",
+		Port:           "5432",
+		User:           "grove",
+		Password:       "secret",
+		DBName:         "grove",
+		SSLMode:        "disable",
+		ConnectTimeout: 5,
 	}
 }

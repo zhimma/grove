@@ -29,3 +29,19 @@ func TestCollectProtectedRoutesSkipsIgnoredAndTechnicalRoutes(t *testing.T) {
 		t.Fatalf("unexpected catalog route: %#v", routes[0])
 	}
 }
+
+func TestCollectProtectedRoutesUsesEngineScopedCatalog(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	catalog := route.NewCatalog()
+	group := route.WrapWithCatalog(engine.Group("/console/v1"), catalog)
+	group.GET("/roles", func(*gin.Context) {}).Name("角色.列表").Scope("tenant")
+
+	items := CollectProtectedRoutesWithCatalog(engine.Routes(), AppConsole, "console", "admin_auth", catalog)
+	if len(items) != 1 || items[0].Scope != "tenant" {
+		t.Fatalf("unexpected catalog routes: %#v", items)
+	}
+	if got := BuildDisplayNameWithCatalog(catalog, items[0].Method, items[0].Path); got != "角色.列表" {
+		t.Fatalf("expected catalog display name, got %q", got)
+	}
+}

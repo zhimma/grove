@@ -5,13 +5,9 @@ import type {
   VxeUIExport,
 } from 'vxe-table';
 
-import type { Ref } from 'vue';
-
 import type { ClassType, DeepPartial } from '@vben/types';
 
 import type { BaseFormComponentType, VbenFormProps } from '@vben-core/form-ui';
-
-import type { VxeGridApi } from './api';
 
 import { useVbenForm } from '@vben-core/form-ui';
 
@@ -77,15 +73,6 @@ export interface VxeGridProps<
    */
   separator?: boolean | SeparatorOptions;
 }
-
-export type ExtendedVxeGridApi<
-  D extends Record<string, any> = any,
-  F extends BaseFormComponentType = BaseFormComponentType,
-> = VxeGridApi<D> & {
-  useStore: <T = NoInfer<VxeGridProps<D, F>>>(
-    selector?: (state: NoInfer<VxeGridProps<any, any>>) => T,
-  ) => Readonly<Ref<T>>;
-};
 
 export interface SetupVxeTable {
   configVxeTable: (ui: VxeUIExport) => void;

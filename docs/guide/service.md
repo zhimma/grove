@@ -24,11 +24,11 @@
 
 ```go
 type ArticleService struct {
-	provider *provider.Provider
+	dbs database.Connections
 }
 
-func NewArticleService(p *provider.Provider) *ArticleService {
-	return &ArticleService{provider: p}
+func NewArticleService(dbs database.Connections) *ArticleService {
+	return &ArticleService{dbs: dbs}
 }
 ```
 
@@ -45,11 +45,14 @@ type CreateArticleInput struct {
 
 ```go
 func (s *ArticleService) Create(ctx context.Context, input CreateArticleInput) (*model.Article, error) {
+	if s.dbs == nil || s.dbs.Default() == nil {
+		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
+	}
 	article := &model.Article{
 		Title:   input.Title,
 		Content: input.Content,
 	}
-	if err := s.provider.DB.Default().Create(article).Error; err != nil {
+	if err := s.dbs.Default().WithContext(ctx).Create(article).Error; err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}
 	return article, nil
@@ -62,6 +65,7 @@ func (s *ArticleService) Create(ctx context.Context, input CreateArticleInput) (
 - 推荐使用 `Input` / `Output` 结构体
 - 事务、缓存、事件、任务都在 service 中协调
 - 业务错误返回 `pkg/errx` 定义的错误类型
+- 依赖在启动或路由装配层从 `Provider` 取出，再通过构造函数传入；service 不持有完整 `Provider`
 
 ## 边界
 

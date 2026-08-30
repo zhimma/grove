@@ -21,9 +21,9 @@ type APIPermissionTreeItem struct {
 	Children   []APIPermissionTreeItem `json:"children,omitempty"`
 }
 
-func RegisterPermissionRoutes(protected *gin.RouterGroup, runtimeCatalog *consoleservice.RuntimePermissionCatalog) {
+func RegisterPermissionRoutes(protected *gin.RouterGroup, runtimeCatalog *consoleservice.RuntimePermissionCatalog, catalogs ...*route.Catalog) {
 	h := &PermissionHandler{runtimeCatalog: runtimeCatalog}
-	permissions := route.Wrap(protected.Group("/permissions"))
+	permissions := wrapRoute(protected.Group("/permissions"), routeCatalog(catalogs))
 	permissions.GET("/apis", h.GetAPIPermissionOptions).Name("权限管理.接口权限选项")
 }
 

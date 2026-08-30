@@ -3,6 +3,7 @@ package response
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
@@ -19,13 +20,46 @@ type Response struct {
 	RequestID string      `json:"request_id,omitempty"`
 }
 
-func Success(c *gin.Context, data interface{}) {
-	c.JSON(http.StatusOK, Response{
+// OK writes a successful response with the framework's canonical 200 status.
+// Success is retained as the original public name for compatibility.
+func OK(c *gin.Context, data interface{}) {
+	write(c, http.StatusOK, Response{
 		Code:      0,
 		Message:   "ok",
 		Data:      data,
-		RequestID: request.GetRequestID(c),
+		RequestID: requestID(c),
 	})
+}
+
+func Success(c *gin.Context, data interface{}) {
+	OK(c, data)
+}
+
+// Created is the success counterpart for resource-creation endpoints. The
+// envelope remains identical to OK so clients only need to inspect HTTP
+// status when they care about creation semantics.
+func Created(c *gin.Context, data interface{}) {
+	write(c, http.StatusCreated, Response{
+		Code:      0,
+		Message:   "ok",
+		Data:      data,
+		RequestID: requestID(c),
+	})
+}
+
+// NoContent emits a standards-compliant 204 response. A 204 response cannot
+// contain the JSON envelope; the request ID is therefore carried by the
+// X-Request-Id header when available.
+func NoContent(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	setRequestIDHeader(c, requestID(c))
+	c.Status(http.StatusNoContent)
+	// Gin delays WriteHeader until the first write. Force the empty status so
+	// httptest and real net/http clients observe 204 rather than the recorder's
+	// default 200.
+	c.Writer.WriteHeaderNow()
 }
 
 func Fail(c *gin.Context, input interface{}) {
@@ -34,42 +68,57 @@ func Fail(c *gin.Context, input interface{}) {
 		return
 	}
 
-	message := responseMessage(httpErr)
+	status := errx.EffectiveStatus(httpErr)
+	code := errx.EffectiveCode(httpErr)
+	message := responseMessage(httpErr, status)
 	request.SetErrorMeta(c, request.ErrorMeta{
-		HTTPStatus:    httpErr.HTTPStatus,
-		Code:          httpErr.Code,
+		HTTPStatus:    status,
+		Code:          code,
 		Message:       message,
-		InternalError: httpErr.HTTPStatus >= http.StatusInternalServerError,
+		InternalError: status >= http.StatusInternalServerError,
 		HasCause:      httpErr.Cause != nil,
 	})
-	logFailure(c, httpErr, message)
+	logFailure(c, httpErr, status, code, message)
 
 	resp := Response{
 		Code:      -1,
 		Message:   message,
-		RequestID: request.GetRequestID(c),
+		RequestID: requestID(c),
 	}
-	if data := buildErrorData(httpErr, request.GetRequestMeta(c).Debug); len(data) > 0 {
+	if data := buildErrorData(httpErr, status, code, request.GetRequestMeta(c).Debug); len(data) > 0 {
 		resp.Data = data
 	}
 
-	c.JSON(httpErr.HTTPStatus, resp)
+	write(c, status, resp)
 }
 
-func responseMessage(httpErr *errx.HTTPError) string {
+// Error is a descriptive alias for Fail for handlers that prefer a
+// status/error-oriented vocabulary. Both functions intentionally share the
+// exact same envelope and logging behavior.
+func Error(c *gin.Context, input interface{}) {
+	Fail(c, input)
+}
+
+func responseMessage(httpErr *errx.HTTPError, status int) string {
 	if httpErr == nil {
 		return ""
 	}
-	if httpErr.HTTPStatus == http.StatusInternalServerError || httpErr.Code == "internal_error" {
+	// InternalError is deliberately generic. Availability and gateway errors
+	// retain their safe, caller-provided messages (for example, "权限控制器未
+	// 配置") so operators and clients can distinguish a 503 from a 500.
+	if status == http.StatusInternalServerError || strings.TrimSpace(httpErr.Code) == "internal_error" {
 		return errx.Internal().Message
 	}
 	if httpErr.Message != "" {
 		return httpErr.Message
 	}
-	return http.StatusText(httpErr.HTTPStatus)
+	if statusText := http.StatusText(status); statusText != "" {
+		return statusText
+	}
+	return "请求处理失败"
 }
 
-func buildErrorData(httpErr *errx.HTTPError, debug bool) map[string]interface{} {
+func buildErrorData(httpErr *errx.HTTPError, status int, code string, debug bool) map[string]interface{} {
 	if httpErr == nil {
 		return nil
 	}
@@ -81,16 +130,25 @@ func buildErrorData(httpErr *errx.HTTPError, debug bool) map[string]interface{} 
 			data[key] = value
 		}
 	}
+	// `debug` is reserved for the response layer. Prevent a service payload
+	// from smuggling diagnostic details into production responses.
+	if data != nil && !debug {
+		delete(data, "debug")
+	}
 
-	if httpErr.Code != "" {
+	if code != "" {
 		if data == nil {
 			data = make(map[string]interface{}, 1)
 		}
-		if _, exists := data["error_code"]; !exists {
-			data["error_code"] = httpErr.Code
-		}
+		// The envelope's machine-readable code is authoritative. Do not let a
+		// stale value embedded in Data disagree with HTTPError.Code.
+		data["error_code"] = code
 	}
-	if debug && httpErr.Cause != nil {
+	// Causes are diagnostic server details. Even when debug is enabled, do not
+	// expose causes attached to client-facing 4xx responses (they may contain
+	// token/parser or storage details). Internal failures are still inspectable
+	// locally through the explicit debug envelope.
+	if debug && status >= http.StatusInternalServerError && httpErr.Cause != nil {
 		if data == nil {
 			data = make(map[string]interface{}, 1)
 		}
@@ -103,7 +161,7 @@ func buildErrorData(httpErr *errx.HTTPError, debug bool) map[string]interface{} 
 	return data
 }
 
-func logFailure(c *gin.Context, httpErr *errx.HTTPError, message string) {
+func logFailure(c *gin.Context, httpErr *errx.HTTPError, status int, code, message string) {
 	if c == nil || httpErr == nil {
 		return
 	}
@@ -118,13 +176,20 @@ func logFailure(c *gin.Context, httpErr *errx.HTTPError, message string) {
 		event = event.Err(httpErr.Cause).Str("cause", httpErr.Cause.Error())
 	}
 	identity := request.GetIdentity(c)
+	method, path := "", ""
+	if c.Request != nil {
+		method = c.Request.Method
+		if c.Request.URL != nil {
+			path = c.Request.URL.Path
+		}
+	}
 	event.
-		Str("request_id", request.GetRequestID(c)).
-		Str("method", c.Request.Method).
-		Str("path", c.Request.URL.Path).
+		Str("request_id", requestID(c)).
+		Str("method", method).
+		Str("path", path).
 		Str("route", c.FullPath()).
-		Int("status", httpErr.HTTPStatus).
-		Str("error_code", httpErr.Code).
+		Int("status", status).
+		Str("error_code", code).
 		Str("message", message).
 		Str("admin_id", identity.AdminID).
 		Str("user_id", identity.UserID).
@@ -132,15 +197,48 @@ func logFailure(c *gin.Context, httpErr *errx.HTTPError, message string) {
 }
 
 func failureLogLevel(httpErr *errx.HTTPError) zerolog.Level {
-	if httpErr.HTTPStatus >= http.StatusInternalServerError {
+	status := errx.EffectiveStatus(httpErr)
+	if status >= http.StatusInternalServerError {
 		return zerolog.ErrorLevel
 	}
-	switch httpErr.HTTPStatus {
+	switch status {
 	case http.StatusUnauthorized, http.StatusForbidden, http.StatusTooManyRequests:
 		return zerolog.WarnLevel
 	default:
 		return zerolog.NoLevel
 	}
+}
+
+func write(c *gin.Context, status int, payload Response) {
+	if c == nil {
+		return
+	}
+	setRequestIDHeader(c, payload.RequestID)
+	if status == http.StatusNoContent {
+		c.Status(status)
+		return
+	}
+	c.JSON(status, payload)
+}
+
+func requestID(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	if id := strings.TrimSpace(request.GetRequestID(c)); id != "" {
+		return id
+	}
+	// Unit handlers and middleware-adjacent code may call response helpers
+	// before RequestID has run. Preserve a validated upstream ID when present;
+	// the normal RequestID middleware remains the source of generated IDs.
+	return strings.TrimSpace(c.GetHeader("X-Request-Id"))
+}
+
+func setRequestIDHeader(c *gin.Context, id string) {
+	if c == nil || strings.TrimSpace(id) == "" {
+		return
+	}
+	c.Header("X-Request-Id", id)
 }
 
 func normalize(input interface{}) *errx.HTTPError {

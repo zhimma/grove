@@ -18,6 +18,7 @@ import (
 type AdminService struct {
 	dbs          database.Connections
 	roleBindings adminRoleBindings
+	pagePolicy   PagePolicy
 }
 
 type adminRoleBindings interface {
@@ -91,8 +92,8 @@ type ResetAdminPasswordInput struct {
 	Password string
 }
 
-func NewAdminService(dbs database.Connections, enforcer *rbac.Enforcer) *AdminService {
-	return &AdminService{dbs: dbs, roleBindings: enforcer}
+func NewAdminService(dbs database.Connections, enforcer *rbac.Enforcer, policies ...PagePolicy) *AdminService {
+	return &AdminService{dbs: dbs, roleBindings: enforcer, pagePolicy: pagePolicyFromArgs(policies)}
 }
 
 func (s *AdminService) ListAdmins(ctx context.Context, in ListAdminsInput) (*ListAdminsResult, error) {
@@ -100,13 +101,13 @@ func (s *AdminService) ListAdmins(ctx context.Context, in ListAdminsInput) (*Lis
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
 
-	page, pageSize := resolvePage(ListRequest{
+	page, pageSize := resolvePageWithPolicy(ListRequest{
 		Page:     in.Page,
 		PageSize: in.PageSize,
 		Offset:   in.Offset,
 		Limit:    in.Limit,
 		ListAll:  in.ListAll,
-	})
+	}, s.pagePolicy)
 
 	query := s.dbs.Default().WithContext(ctx).Model(&model.ConsoleAdmin{}).Preload("Role")
 	if keyword := strings.TrimSpace(in.Keyword); keyword != "" {

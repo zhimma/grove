@@ -2,7 +2,7 @@
 import { ref } from 'vue';
 
 interface Props {
-  visible: boolean;
+  visible?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -10,8 +10,8 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
+  submit: [data: { new_password: string; old_password: string }];
   'update:visible': [value: boolean];
-  submit: [data: { old_password: string; new_password: string }];
 }>();
 
 // 表单数据
@@ -34,7 +34,7 @@ function handleCancel() {
 // 确认密码验证
 function validateConfirmPassword(_rule: any, value: string) {
   if (value !== formData.value.new_password) {
-    return Promise.reject('两次输入的密码不一致');
+    return Promise.reject(new Error('两次输入的密码不一致'));
   }
   return Promise.resolve();
 }
@@ -47,7 +47,7 @@ async function handleSubmit() {
       old_password: formData.value.old_password,
       new_password: formData.value.new_password,
     });
-  } catch (error) {
+  } catch {
     // 表单验证错误
   }
 }
@@ -61,17 +61,11 @@ async function handleSubmit() {
     @ok="handleSubmit"
     @cancel="handleCancel"
   >
-    <a-form
-      ref="formRef"
-      :model="formData"
-      layout="vertical"
-    >
+    <a-form ref="formRef" :model="formData" layout="vertical">
       <a-form-item
         label="当前密码"
         name="old_password"
-        :rules="[
-          { required: true, message: '请输入当前密码' },
-        ]"
+        :rules="[{ required: true, message: '请输入当前密码' }]"
       >
         <a-input-password
           v-model:value="formData.old_password"

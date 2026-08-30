@@ -2,13 +2,18 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go/format"
 	"os"
 	"path/filepath"
+	"time"
 )
 
-const routeMarker = "\t// grove:register-routes\n"
+const (
+	routeMarker           = "\t// grove:register-routes\n"
+	generatorLockFilename = ".grove-generate.lock"
+)
 
 type generatedSource struct {
 	path    string
@@ -27,18 +32,8 @@ func generateConsoleModule(input string) ([]string, error) {
 		{path: filepath.Join("app/console/internal/service", snake+".go"), content: []byte(consoleServiceTemplate(name, snake))},
 		{path: filepath.Join("app/console/internal/handler", snake+".go"), content: []byte(consoleHandlerTemplate(name, snake))},
 	}
-	for _, source := range sources {
-		if err := ensureFileAbsent(source.path); err != nil {
-			return nil, err
-		}
-	}
-
 	routerPath := filepath.Join("app/console/internal/router", "router.go")
-	line := fmt.Sprintf("\thandler.Register%sRoutes(protected, r.p)\n", name)
-	routerContent, err := prepareRouteRegistration(routerPath, line)
-	if err != nil {
-		return nil, err
-	}
+	line := fmt.Sprintf("\thandler.Register%sRoutes(protected, r.p.DB, r.p.RouteCatalog)\n", name)
 
 	for i := range sources {
 		formatted, err := format.Source(sources[i].content)
@@ -48,7 +43,18 @@ func generateConsoleModule(input string) ([]string, error) {
 		sources[i].content = formatted
 	}
 
-	if err := commitGeneratedModule(sources, routerPath, routerContent); err != nil {
+	if err := withGeneratorLock(routerPath, func() error {
+		for _, source := range sources {
+			if err := ensureFileAbsent(source.path); err != nil {
+				return err
+			}
+		}
+		routerContent, err := prepareRouteRegistration(routerPath, line)
+		if err != nil {
+			return err
+		}
+		return commitGeneratedModule(sources, routerPath, routerContent)
+	}); err != nil {
 		return nil, err
 	}
 	paths := make([]string, 0, len(sources))
@@ -56,6 +62,28 @@ func generateConsoleModule(input string) ([]string, error) {
 		paths = append(paths, source.path)
 	}
 	return paths, nil
+}
+
+// withGeneratorLock serializes the read-modify-write of router.go across CLI
+// processes. Without it, two different module generations can both read the
+// same marker and the later atomic rename silently drops the earlier route.
+func withGeneratorLock(routerPath string, action func() error) error {
+	lockPath := filepath.Join(filepath.Dir(routerPath), generatorLockFilename)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		err := os.Mkdir(lockPath, 0o700)
+		if err == nil {
+			defer func() { _ = os.Remove(lockPath) }()
+			return action()
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("create generator lock: %w", err)
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out waiting for generator lock %s", lockPath)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func ensureFileAbsent(path string) error {
@@ -115,7 +143,7 @@ func writeNewFileAtomic(path string, content []byte, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tempPath)
+	defer func() { _ = os.Remove(tempPath) }()
 	if err := os.Link(tempPath, path); err != nil {
 		if os.IsExist(err) {
 			return fmt.Errorf("文件已存在: %s", path)
@@ -134,7 +162,7 @@ func replaceFileAtomic(path string, content []byte) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tempPath)
+	defer func() { _ = os.Remove(tempPath) }()
 	return os.Rename(tempPath, path)
 }
 

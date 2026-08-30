@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -157,6 +158,31 @@ func TestRunReturnsJobError(t *testing.T) {
 	}
 	if err := s.Run("failing"); !errors.Is(err, jobErr) {
 		t.Fatalf("run error = %v", err)
+	}
+}
+
+func TestRunIsolatesJobPanicAndReleasesMutex(t *testing.T) {
+	s, _ := NewDefault()
+	var calls atomic.Int64
+	if err := s.Register(&Task{
+		Name:     "panic",
+		Schedule: "0 0 0 * * *",
+		Mutex:    true,
+		Job: JobFunc(func(context.Context) error {
+			calls.Add(1)
+			panic("boom")
+		}),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Run("panic"); err == nil || !strings.Contains(err.Error(), "panicked") {
+		t.Fatalf("expected isolated panic error, got %v", err)
+	}
+	if err := s.Run("panic"); err == nil || !strings.Contains(err.Error(), "panicked") {
+		t.Fatalf("mutex should be released after panic, got %v", err)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("expected both runs to execute, got %d", calls.Load())
 	}
 }
 

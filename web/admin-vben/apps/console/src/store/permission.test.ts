@@ -1,6 +1,8 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { usePermissionStore } from './permission';
+
 const mocks = vi.hoisted(() => ({
   getAuthorizationOverviewApi: vi.fn(),
 }));
@@ -8,8 +10,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('#/api/core/auth', () => ({
   getAuthorizationOverviewApi: mocks.getAuthorizationOverviewApi,
 }));
-
-import { usePermissionStore } from './permission';
 
 describe('permission store', () => {
   beforeEach(() => {

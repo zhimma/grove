@@ -24,7 +24,7 @@ go version
 cp config.example.yaml config.yaml
 ```
 
-编辑 `config.yaml`，开发环境至少填写：
+编辑 `config.yaml`（不要把凭据提交到 Git），开发环境至少填写：
 
 ```yaml
 app:

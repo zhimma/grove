@@ -1,5 +1,6 @@
 import type { UserInfo } from '@vben/types';
 
+import { consoleEndpoint } from '#/api/console-contract';
 import { requestClient } from '#/api/request';
 
 /**
@@ -7,7 +8,7 @@ import { requestClient } from '#/api/request';
  */
 export async function getUserInfoApi() {
   const data = await requestClient.get<Record<string, any>>(
-    '/console/v1/auth/me',
+    consoleEndpoint('consoleGetCurrentAdmin'),
   );
   return {
     account: data.account || '',
@@ -37,12 +38,15 @@ export async function getUserInfoApi() {
 }
 
 export function updateCurrentUserApi(data: Record<string, any>) {
-  return requestClient.put<Record<string, any>>('/console/v1/auth/me', data);
+  return requestClient.put<Record<string, any>>(
+    consoleEndpoint('consoleUpdateCurrentAdmin'),
+    data,
+  );
 }
 
 export function changePasswordApi(data: {
   new_password: string;
   old_password: string;
 }) {
-  return requestClient.put('/console/v1/auth/password', data);
+  return requestClient.put(consoleEndpoint('consoleChangePassword'), data);
 }

@@ -3,17 +3,12 @@ package storage
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -21,13 +16,11 @@ import (
 type LocalConfig struct {
 	Root    string
 	BaseURL string
-	Secret  string
 }
 
 type LocalDriver struct {
 	root    string
 	baseURL string
-	secret  string
 }
 
 func NewLocalDriver(cfg LocalConfig) (*LocalDriver, error) {
@@ -38,14 +31,9 @@ func NewLocalDriver(cfg LocalConfig) (*LocalDriver, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return nil, fmt.Errorf("create local storage root: %w", err)
 	}
-	secret := strings.TrimSpace(cfg.Secret)
-	if secret == "" {
-		secret = "grove-local-storage"
-	}
 	return &LocalDriver{
 		root:    root,
 		baseURL: strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/"),
-		secret:  secret,
 	}, nil
 }
 
@@ -140,6 +128,24 @@ func (d *LocalDriver) Exists(_ context.Context, objectPath string) (bool, error)
 	return false, fmt.Errorf("stat local object: %w", statErr)
 }
 
+// Open returns a read-only stream for an object. The manager validates the
+// public object key before calling this method; the driver repeats its root
+// containment check as a defense in depth for direct callers.
+func (d *LocalDriver) Open(_ context.Context, objectPath string) (io.ReadCloser, error) {
+	fullPath, err := d.fullPath(objectPath)
+	if err != nil {
+		return nil, err
+	}
+	file, err := os.Open(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrObjectNotFound
+		}
+		return nil, fmt.Errorf("open local object: %w", err)
+	}
+	return file, nil
+}
+
 func (d *LocalDriver) URL(objectPath string) string {
 	base := d.baseURL
 	if base == "" {
@@ -148,20 +154,12 @@ func (d *LocalDriver) URL(objectPath string) string {
 	return strings.TrimRight(base, "/") + "/" + escapeObjectPath(objectPath)
 }
 
-func (d *LocalDriver) TemporaryURL(objectPath string, expiry time.Duration) string {
-	expiresAt := time.Now().Add(expiry).Unix()
-	mac := hmac.New(sha256.New, []byte(d.secret))
-	_, _ = mac.Write([]byte(fmt.Sprintf("%s:%d", objectPath, expiresAt)))
-	signature := hex.EncodeToString(mac.Sum(nil))
-	return fmt.Sprintf("%s?expires=%d&signature=%s", d.URL(objectPath), expiresAt, signature)
-}
-
 func (d *LocalDriver) fullPath(objectPath string) (string, error) {
-	cleanPath := path.Clean("/" + strings.TrimSpace(objectPath))
-	if strings.Contains(cleanPath, "..") {
+	cleanPath, err := validateObjectPath(objectPath)
+	if err != nil {
 		return "", fmt.Errorf("invalid local storage path")
 	}
-	fullPath := filepath.Join(d.root, strings.TrimPrefix(cleanPath, "/"))
+	fullPath := filepath.Join(d.root, cleanPath)
 	absRoot, err := filepath.Abs(d.root)
 	if err != nil {
 		return "", fmt.Errorf("resolve local root: %w", err)

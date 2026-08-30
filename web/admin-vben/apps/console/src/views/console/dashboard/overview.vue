@@ -65,7 +65,9 @@ onMounted(loadDashboard);
         <Card title="运行状态">
           <div class="space-y-3">
             <div class="text-sm text-gray-500">当前状态消息</div>
-            <Tag color="blue">{{ overview.message || 'admin template ready' }}</Tag>
+            <Tag color="blue">
+              {{ overview.message || 'admin template ready' }}
+            </Tag>
             <div class="text-sm text-gray-500">
               当前后台已收缩为通用模板，仅保留登录鉴权、工作台、系统配置、管理员与角色权限。
             </div>

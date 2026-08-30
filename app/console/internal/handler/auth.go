@@ -1,13 +1,13 @@
 package handler
 
 import (
-	"time"
-
 	"github.com/gin-gonic/gin"
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
-	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/auth"
+	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/ratelimit"
+	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
@@ -68,28 +68,19 @@ type AuthorizationOverviewResponse struct {
 	MenuKeys       []string `json:"menu_keys"`
 }
 
-func RegisterAuthRoutes(public, authed *gin.RouterGroup, p *provider.Provider) {
-	var loginGuard ratelimit.LoginGuard
-	if p.Config != nil && p.Config.Security.Login.Enabled {
-		loginCfg := p.Config.Security.Login
-		loginGuard = ratelimit.NewLoginGuard(ratelimit.LoginConfig{
-			AttemptsPerMinute: loginCfg.AttemptsPerMinute,
-			Burst:             loginCfg.Burst,
-			FailureLimit:      loginCfg.FailureLimit,
-			LockDuration:      time.Duration(loginCfg.LockSeconds) * time.Second,
-		}, p.RedisClient)
-	}
+func RegisterAuthRoutesWithDeps(public, authed *gin.RouterGroup, dbs database.Connections, enforcer *rbac.Enforcer, tokenManager *auth.Manager, loginGuard ratelimit.LoginGuard, catalogs ...*route.Catalog) {
 	h := &AuthHandler{
-		authSvc: consoleservice.NewAuthService(p.DB, p.GetEnforcer("console"), p.TokenManager, loginGuard),
+		authSvc: consoleservice.NewAuthService(dbs, enforcer, tokenManager, loginGuard),
 	}
 
-	publicAuth := route.Wrap(public.Group("/auth"))
+	catalog := routeCatalog(catalogs)
+	publicAuth := wrapRoute(public.Group("/auth"), catalog)
 	{
 		publicAuth.POST("/login", h.Login).Ignore()
 		publicAuth.POST("/refresh", h.RefreshToken).Ignore()
 	}
 
-	authedAuth := route.Wrap(authed.Group("/auth"))
+	authedAuth := wrapRoute(authed.Group("/auth"), catalog)
 	{
 		authedAuth.POST("/logout", h.Logout).Ignore()
 		authedAuth.GET("/me", h.Me).Ignore()

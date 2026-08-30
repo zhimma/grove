@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/zhimma/grove/internal/config"
@@ -324,12 +325,12 @@ func register() {
 	handler := mustRead(t, filepath.Join(root, "app/console/internal/handler/product_category.go"))
 	assertContains(t, handler, "package handler")
 	assertContains(t, handler, "RegisterProductCategoryRoutes")
-	assertContains(t, handler, "route.Wrap(protected.Group(\"/product-categories\"))")
+	assertContains(t, handler, "route.WrapWithCatalog(protected.Group(\"/product-categories\"), catalog)")
 	assertContains(t, handler, ".Name(\"ProductCategory.列表\")")
 	assertContains(t, handler, "response.Success")
 
 	router := mustRead(t, filepath.Join(root, "app/console/internal/router/router.go"))
-	assertContains(t, router, "\thandler.RegisterProductCategoryRoutes(protected, r.p)\n")
+	assertContains(t, router, "\thandler.RegisterProductCategoryRoutes(protected, r.p.DB, r.p.RouteCatalog)\n")
 }
 
 func TestMakeModuleGeneratedPackagesCompile(t *testing.T) {
@@ -454,6 +455,63 @@ func register() {
 	}
 }
 
+func TestMakeModuleConcurrentGenerationsPreserveBothRouteRegistrations(t *testing.T) {
+	root := prepareModuleWorkspace(t, `package router
+
+func register() {
+	// grove:register-routes
+}
+`)
+
+	previousWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get wd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir temp root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(previousWD) })
+
+	inputs := []string{"ProductCategory", "OrderItem"}
+	errs := make(chan error, len(inputs))
+	var wg sync.WaitGroup
+	for _, input := range inputs {
+		wg.Add(1)
+		go func(input string) {
+			defer wg.Done()
+			_, err := generateConsoleModule(input)
+			errs <- err
+		}(input)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent module generation failed: %v", err)
+		}
+	}
+
+	router := mustRead(t, filepath.Join(root, "app/console/internal/router/router.go"))
+	for _, line := range []string{
+		"handler.RegisterProductCategoryRoutes(protected, r.p.DB, r.p.RouteCatalog)",
+		"handler.RegisterOrderItemRoutes(protected, r.p.DB, r.p.RouteCatalog)",
+	} {
+		assertContains(t, router, line)
+	}
+	for _, path := range []string{
+		"internal/model/product_category.go",
+		"app/console/internal/service/product_category.go",
+		"app/console/internal/handler/product_category.go",
+		"internal/model/order_item.go",
+		"app/console/internal/service/order_item.go",
+		"app/console/internal/handler/order_item.go",
+	} {
+		if _, err := os.Stat(filepath.Join(root, path)); err != nil {
+			t.Fatalf("expected generated file %s: %v", path, err)
+		}
+	}
+}
+
 func TestCommitGeneratedModuleRollsBackFilesWhenRouterWriteFails(t *testing.T) {
 	root := t.TempDir()
 	routerPath := filepath.Join(root, "router")
@@ -482,8 +540,12 @@ func prepareModuleWorkspace(t *testing.T, router string) string {
 	}
 	mustMkdir(t, filepath.Join(root, "app/console/internal/router"))
 	mustWrite(t, filepath.Join(root, "app/console/internal/router/router.go"), router)
-	copyFile(t, filepath.Join(repoRoot, "go.mod"), filepath.Join(root, "go.mod"))
-	copyFile(t, filepath.Join(repoRoot, "go.sum"), filepath.Join(root, "go.sum"))
+	if err := copyFile(t, filepath.Join(repoRoot, "go.mod"), filepath.Join(root, "go.mod")); err != nil {
+		t.Fatalf("copy go.mod: %v", err)
+	}
+	if err := copyFile(t, filepath.Join(repoRoot, "go.sum"), filepath.Join(root, "go.sum")); err != nil {
+		t.Fatalf("copy go.sum: %v", err)
+	}
 	return root
 }
 
@@ -538,12 +600,20 @@ func copyFile(t *testing.T, source, target string) error {
 	if err != nil {
 		t.Fatalf("open source %s: %v", source, err)
 	}
-	defer in.Close()
+	t.Cleanup(func() {
+		if err := in.Close(); err != nil {
+			t.Errorf("close source: %v", err)
+		}
+	})
 	out, err := os.OpenFile(filepath.Clean(target), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		t.Fatalf("create target %s: %v", target, err)
 	}
-	defer out.Close()
+	t.Cleanup(func() {
+		if err := out.Close(); err != nil {
+			t.Errorf("close target: %v", err)
+		}
+	})
 	if _, err := io.Copy(out, in); err != nil {
 		t.Fatalf("copy %s: %v", source, err)
 	}

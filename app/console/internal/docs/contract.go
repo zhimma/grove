@@ -138,6 +138,9 @@ func spec(cfg *config.Config) docsui.Document {
 		nil, nil, allStorageConfigsResponse)
 	addConsoleOperation(&doc, "文件存储", "/storage/upload", http.MethodPost, "consoleUploadFile", "上传文件", true,
 		nil, docsui.MultipartBody("上传文件", uploadRequestSchema(), true), uploadResponse)
+	addConsoleOperation(&doc, "文件存储", "/storage/download", http.MethodGet, "consoleDownloadFile", "下载文件", true,
+		docsui.ParametersFor(handler.StorageDownloadRequest{}, "form", "query"), nil,
+		docsui.Schema{Type: "string", Format: "binary"})
 
 	operationLogPath := docsui.ParametersFor(handler.OperationLogPathRequest{}, "uri", "path")
 	addConsoleOperation(&doc, "系统日志", "/logs/operations", http.MethodGet, "consoleListOperationLogs", "获取操作日志列表", true,

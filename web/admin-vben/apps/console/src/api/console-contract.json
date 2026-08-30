@@ -1,0 +1,175 @@
+{
+  "basePath": "/console/v1",
+  "operations": [
+    {
+      "operationId": "consoleLogin",
+      "method": "POST",
+      "path": "/auth/login"
+    },
+    {
+      "operationId": "consoleRefreshToken",
+      "method": "POST",
+      "path": "/auth/refresh"
+    },
+    {
+      "operationId": "consoleLogout",
+      "method": "POST",
+      "path": "/auth/logout"
+    },
+    {
+      "operationId": "consoleGetCurrentAdmin",
+      "method": "GET",
+      "path": "/auth/me"
+    },
+    {
+      "operationId": "consoleUpdateCurrentAdmin",
+      "method": "PUT",
+      "path": "/auth/me"
+    },
+    {
+      "operationId": "consoleChangePassword",
+      "method": "PUT",
+      "path": "/auth/password"
+    },
+    {
+      "operationId": "consoleGetAuthorizationOverview",
+      "method": "GET",
+      "path": "/auth/permissions"
+    },
+    {
+      "operationId": "consoleListAPIPermissions",
+      "method": "GET",
+      "path": "/permissions/apis"
+    },
+    {
+      "operationId": "consoleGetDashboardSummary",
+      "method": "GET",
+      "path": "/dashboard/summary"
+    },
+    {
+      "operationId": "consoleListSessions",
+      "method": "GET",
+      "path": "/sessions"
+    },
+    {
+      "operationId": "consoleRevokeSession",
+      "method": "DELETE",
+      "path": "/sessions/{id}"
+    },
+    {
+      "operationId": "consoleListRoles",
+      "method": "GET",
+      "path": "/roles"
+    },
+    {
+      "operationId": "consoleCreateRole",
+      "method": "POST",
+      "path": "/roles"
+    },
+    {
+      "operationId": "consoleUpdateRole",
+      "method": "PUT",
+      "path": "/roles/{id}"
+    },
+    {
+      "operationId": "consoleDeleteRole",
+      "method": "DELETE",
+      "path": "/roles/{id}"
+    },
+    {
+      "operationId": "consoleGetRolePermissions",
+      "method": "GET",
+      "path": "/roles/{id}/permissions"
+    },
+    {
+      "operationId": "consoleAssignRolePermissions",
+      "method": "POST",
+      "path": "/roles/{id}/permissions"
+    },
+    {
+      "operationId": "consoleGetRoleMenus",
+      "method": "GET",
+      "path": "/roles/{id}/menus"
+    },
+    {
+      "operationId": "consoleAssignRoleMenus",
+      "method": "POST",
+      "path": "/roles/{id}/menus"
+    },
+    {
+      "operationId": "consoleListAdmins",
+      "method": "GET",
+      "path": "/admins"
+    },
+    {
+      "operationId": "consoleCreateAdmin",
+      "method": "POST",
+      "path": "/admins"
+    },
+    {
+      "operationId": "consoleUpdateAdmin",
+      "method": "PUT",
+      "path": "/admins/{id}"
+    },
+    {
+      "operationId": "consoleUpdateAdminStatus",
+      "method": "PUT",
+      "path": "/admins/{id}/status"
+    },
+    {
+      "operationId": "consoleResetAdminPassword",
+      "method": "PUT",
+      "path": "/admins/{id}/reset-password"
+    },
+    {
+      "operationId": "consoleDeleteAdmin",
+      "method": "DELETE",
+      "path": "/admins/{id}"
+    },
+    {
+      "operationId": "consoleListSystemConfigs",
+      "method": "GET",
+      "path": "/system-configs"
+    },
+    {
+      "operationId": "consoleCreateSystemConfig",
+      "method": "POST",
+      "path": "/system-configs"
+    },
+    {
+      "operationId": "consoleUpdateSystemConfig",
+      "method": "PUT",
+      "path": "/system-configs/{id}"
+    },
+    {
+      "operationId": "consoleDeleteSystemConfig",
+      "method": "DELETE",
+      "path": "/system-configs/{id}"
+    },
+    {
+      "operationId": "consoleGetStorageConfig",
+      "method": "GET",
+      "path": "/storage/config"
+    },
+    {
+      "operationId": "consoleUploadFile",
+      "method": "POST",
+      "path": "/storage/upload"
+    },
+    {
+      "operationId": "consoleListOperationLogs",
+      "method": "GET",
+      "path": "/logs/operations"
+    },
+    {
+      "operationId": "consoleGetOperationLog",
+      "method": "GET",
+      "path": "/logs/operations/{id}"
+    },
+    {
+      "operationId": "consoleListLoginLogs",
+      "method": "GET",
+      "path": "/logs/logins"
+    }
+  ]
+}

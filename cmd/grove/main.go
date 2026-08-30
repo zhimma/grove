@@ -3,7 +3,9 @@ package main
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,12 +72,18 @@ func newAboutCmd() *cobra.Command {
 		Short: "显示当前框架约定与可用能力",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
-			fmt.Fprintln(out, "Grove 基础框架")
-			fmt.Fprintln(out, "- 单仓服务：api / console / worker")
-			fmt.Fprintln(out, "- CLI 入口：grove")
-			fmt.Fprintln(out, "- 默认日志：pkg/logger + zerolog")
-			fmt.Fprintln(out, "- 默认校验：make verify")
-			fmt.Fprintln(out, "- make:module 仅生成 console 后台后端模板，不生成迁移和前端页面")
+			for _, line := range []string{
+				"Grove 基础框架",
+				"- 单仓服务：api / console / worker",
+				"- CLI 入口：grove",
+				"- 默认日志：pkg/logger + zerolog",
+				"- 默认校验：make verify",
+				"- make:module 仅生成 console 后台后端模板，不生成迁移和前端页面",
+			} {
+				if err := writeLine(out, line); err != nil {
+					return err
+				}
+			}
 			return nil
 		},
 	}
@@ -94,20 +102,32 @@ func newDoctorCmd() *cobra.Command {
 			}
 
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "应用名称: %s\n", cfg.App.Name)
-			fmt.Fprintf(out, "运行环境: %s\n", cfg.App.Env)
-			fmt.Fprintf(out, "API 端口: %s\n", cfg.Port)
-			fmt.Fprintf(out, "Console 端口: %s\n", cfg.ConsolePort)
-			fmt.Fprintf(out, "默认数据库: %s (%s)\n", statusText(cfg.Databases.Default.Enabled), cfg.Databases.Default.Driver)
-			fmt.Fprintf(out, "Redis: %s\n", statusText(cfg.Redis.Enabled))
-			fmt.Fprintf(out, "任务队列: %s\n", statusText(cfg.Job.Enabled))
-			fmt.Fprintf(out, "API 权限控制: %s\n", statusText(cfg.Casbin.Enforcers["api"].Enabled))
-			fmt.Fprintf(out, "Console 权限控制: %s\n", statusText(cfg.Casbin.Enforcers["console"].Enabled))
-			fmt.Fprintf(out, "默认存储磁盘: %s\n", cfg.Storage.Default)
-			fmt.Fprintf(out, "文档服务: %s\n", statusText(cfg.Docs.Enabled))
+			lines := []string{
+				fmt.Sprintf("应用名称: %s", cfg.App.Name),
+				fmt.Sprintf("运行环境: %s", cfg.App.Env),
+				fmt.Sprintf("API 端口: %s", cfg.Port),
+				fmt.Sprintf("Console 端口: %s", cfg.ConsolePort),
+				fmt.Sprintf("默认数据库: %s (%s)", statusText(cfg.Databases.Default.Enabled), cfg.Databases.Default.Driver),
+				fmt.Sprintf("Redis: %s", statusText(cfg.Redis.Enabled)),
+				fmt.Sprintf("任务队列: %s", statusText(cfg.Job.Enabled)),
+				fmt.Sprintf("API 权限控制: %s", statusText(cfg.Casbin.Enforcers["api"].Enabled)),
+				fmt.Sprintf("Console 权限控制: %s", statusText(cfg.Casbin.Enforcers["console"].Enabled)),
+				fmt.Sprintf("默认存储磁盘: %s", cfg.Storage.Default),
+				fmt.Sprintf("文档服务: %s", statusText(cfg.Docs.Enabled)),
+			}
+			for _, line := range lines {
+				if err := writeLine(out, line); err != nil {
+					return err
+				}
+			}
 			return nil
 		},
 	}
+}
+
+func writeLine(out io.Writer, line string) error {
+	_, err := fmt.Fprintln(out, line)
+	return err
 }
 
 func newMigrateCmd() *cobra.Command {
@@ -260,7 +280,9 @@ func newSeedCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "已执行 %d 个 demo seed 文件\n", count)
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "已执行 %d 个 demo seed 文件\n", count); err != nil {
+				return err
+			}
 			return nil
 		},
 	})
@@ -277,6 +299,9 @@ func runBootstrapSeeds(cmd *cobra.Command, seedBasePath string) error {
 	password, generated, err := resolveRootPassword(cfg)
 	if err != nil {
 		return err
+	}
+	if err := config.ValidateInitialRootPassword(password); err != nil {
+		return fmt.Errorf("root 初始密码不符合要求: %w", err)
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -295,6 +320,9 @@ func runBootstrapSeeds(cmd *cobra.Command, seedBasePath string) error {
 	}
 	seedDir, err := resolveSeedDir(seedBasePath, cfg.Databases.Default.Driver, "bootstrap")
 	if err != nil {
+		if rollbackErr := tx.Rollback().Error; rollbackErr != nil {
+			return errors.Join(err, fmt.Errorf("rollback bootstrap transaction: %w", rollbackErr))
+		}
 		return err
 	}
 	count, err := migrate.RunSQLDirWithReplacements(tx, seedDir, map[string]string{
@@ -321,10 +349,16 @@ func runBootstrapSeeds(cmd *cobra.Command, seedBasePath string) error {
 	}
 
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "已执行 %d 个 bootstrap seed 文件\n", count)
+	if _, err := fmt.Fprintf(out, "已执行 %d 个 bootstrap seed 文件\n", count); err != nil {
+		return err
+	}
 	if generated && createdWithCurrentPassword {
-		fmt.Fprintln(out, "Root 一次性初始密码（仅显示本次，请立即保存并登录修改）：")
-		fmt.Fprintln(out, password)
+		if err := writeLine(out, "Root 一次性初始密码（仅显示本次，请立即保存并登录修改）："); err != nil {
+			return err
+		}
+		if err := writeLine(out, password); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -489,6 +523,7 @@ func openDefaultDBWithConfig(cfg *config.Config) (*gorm.DB, func(), error) {
 		MaxConnections:  cfg.Databases.Default.MaxConnections,
 		MaxIdleConns:    cfg.Databases.Default.MaxIdleConns,
 		ConnMaxLifetime: cfg.Databases.Default.ConnMaxLifetime,
+		ConnectTimeout:  cfg.Databases.Default.ConnectTimeout,
 	}, nil)
 	if err != nil {
 		return nil, nil, err

@@ -35,7 +35,7 @@ Grove 是 Go 单体脚手架，不是 Java 企业框架的 Go 翻译版。它借
 - API 权限规则：Console Casbin
 - 菜单目录：前端本地路由
 - 菜单授权结果：角色 `menu_keys`
-- 配置：`config.yaml`；默认值直接写入 YAML，不使用环境变量占位符
+- 配置：`config.yaml`；默认值直接写入 YAML；后端不自动读取 `.env`，环境覆盖仅使用代码支持的变量/展开语法
 - migration/seed：按数据库 driver 选择对应方言子目录，版本号保持一致
 - readiness：Provider 实际成功装配的依赖集合
 

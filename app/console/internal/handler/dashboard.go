@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
-	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
 )
@@ -13,11 +13,11 @@ type DashboardHandler struct {
 	dashboardSvc *consoleservice.DashboardService
 }
 
-func RegisterDashboardRoutes(protected *gin.RouterGroup, p *provider.Provider) {
+func RegisterDashboardRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, catalogs ...*route.Catalog) {
 	h := &DashboardHandler{
-		dashboardSvc: consoleservice.NewDashboardService(p.DB),
+		dashboardSvc: consoleservice.NewDashboardService(dbs),
 	}
-	dashboard := route.Wrap(protected.Group("/dashboard"))
+	dashboard := wrapRoute(protected.Group("/dashboard"), routeCatalog(catalogs))
 	dashboard.GET("/summary", h.Summary).Name("工作台.概览")
 }
 

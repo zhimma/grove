@@ -104,7 +104,8 @@ allowed, err := enforcer.Can(adminID, "GET /console/v1/roles")
 接口展示名优先来自：
 
 ```go
-route.Wrap(group).GET(...).Name("角色权限.角色列表")
+catalog := route.NewCatalog() // 生产环境复用当前 HTTP engine 的 catalog
+route.WrapWithCatalog(group, catalog).GET(...).Name("角色权限.角色列表")
 ```
 
 `Name(...)` 只影响展示，不影响实际鉴权。
@@ -132,7 +133,8 @@ route.Wrap(group).GET(...).Name("角色权限.角色列表")
 示例：
 
 ```go
-roles := route.Wrap(protected.Group("/roles"))
+catalog := route.NewCatalog()
+roles := route.WrapWithCatalog(protected.Group("/roles"), catalog)
 roles.GET("", h.List).Name("角色权限.角色列表")
 roles.POST("", h.Create).Name("角色权限.创建角色")
 roles.PUT("/:id", h.Update).Name("角色权限.更新角色")

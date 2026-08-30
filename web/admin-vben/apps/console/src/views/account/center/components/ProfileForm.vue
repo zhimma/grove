@@ -2,12 +2,13 @@
 import { ref, watch } from 'vue';
 
 interface Props {
-  visible: boolean;
-  initialValues?: {
+  visible?: boolean;
+  initialValues?: null | {
+    account?: string;
+    avatar?: string;
     email?: string;
     phone?: string;
-    avatar?: string;
-  } | null;
+  };
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -16,13 +17,16 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
+  submit: [
+    data: { account: string; avatar?: string; email?: string; phone?: string },
+  ];
   'update:visible': [value: boolean];
-  submit: [data: { email?: string; phone?: string; avatar?: string }];
 }>();
 
 // 表单数据
 const formRef = ref();
 const formData = ref({
+  account: '',
   email: '',
   phone: '',
   avatar: '',
@@ -37,13 +41,14 @@ watch(
   (val) => {
     if (val) {
       formData.value = {
+        account: val.account || '',
         email: val.email || '',
         phone: val.phone || '',
         avatar: val.avatar || '',
       };
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 // 关闭弹窗
@@ -57,7 +62,7 @@ async function handleSubmit() {
   try {
     await formRef.value?.validate();
     emit('submit', { ...formData.value });
-  } catch (error) {
+  } catch {
     // 表单验证错误
   }
 }
@@ -71,45 +76,32 @@ async function handleSubmit() {
     @ok="handleSubmit"
     @cancel="handleCancel"
   >
-    <a-form
-      ref="formRef"
-      :model="formData"
-      layout="vertical"
-    >
+    <a-form ref="formRef" :model="formData" layout="vertical">
+      <a-form-item
+        label="账号"
+        name="account"
+        :rules="[{ required: true, message: '账号不能为空' }]"
+      >
+        <a-input v-model:value="formData.account" disabled />
+      </a-form-item>
       <a-form-item
         label="邮箱"
         name="email"
-        :rules="[
-          { type: 'email', message: '请输入有效的邮箱地址' },
-        ]"
+        :rules="[{ type: 'email', message: '请输入有效的邮箱地址' }]"
       >
-        <a-input
-          v-model:value="formData.email"
-          placeholder="请输入邮箱"
-        />
+        <a-input v-model:value="formData.email" placeholder="请输入邮箱" />
       </a-form-item>
 
       <a-form-item
         label="手机号"
         name="phone"
-        :rules="[
-          { pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号' },
-        ]"
+        :rules="[{ pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号' }]"
       >
-        <a-input
-          v-model:value="formData.phone"
-          placeholder="请输入手机号"
-        />
+        <a-input v-model:value="formData.phone" placeholder="请输入手机号" />
       </a-form-item>
 
-      <a-form-item
-        label="头像URL"
-        name="avatar"
-      >
-        <a-input
-          v-model:value="formData.avatar"
-          placeholder="请输入头像URL"
-        />
+      <a-form-item label="头像URL" name="avatar">
+        <a-input v-model:value="formData.avatar" placeholder="请输入头像URL" />
       </a-form-item>
     </a-form>
   </a-modal>

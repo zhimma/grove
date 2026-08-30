@@ -128,6 +128,19 @@ func TestInstrumentGORMRecordsOperationWithoutSQL(t *testing.T) {
 	}
 }
 
+func TestDatabaseSystemUsesActualDialector(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if got := databaseSystem(db); got != "sqlite" {
+		t.Fatalf("expected sqlite system, got %q", got)
+	}
+	if got := databaseSystem(nil); got != "unknown" {
+		t.Fatalf("expected unknown system for nil db, got %q", got)
+	}
+}
+
 func TestObserveDBPoolExportsConnectionStats(t *testing.T) {
 	runtime, err := New(context.Background(), Config{
 		ServiceName:      "api",

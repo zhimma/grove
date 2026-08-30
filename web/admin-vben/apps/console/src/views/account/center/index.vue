@@ -1,16 +1,24 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import type {
+  ChangePasswordParams,
+  Profile,
+  UpdateProfileParams,
+} from '#/api/profile';
+
+import { onMounted, ref } from 'vue';
+
 import { message } from 'ant-design-vue';
-import { getProfile, updateProfile, changePassword } from '#/api/profile';
+
+import { changePassword, getProfile, updateProfile } from '#/api/profile';
 import { useAuthStore } from '#/store';
-import type { Profile, UpdateProfileParams, ChangePasswordParams } from '#/api/profile';
-import ProfileForm from './components/ProfileForm.vue';
+
 import PasswordForm from './components/PasswordForm.vue';
+import ProfileForm from './components/ProfileForm.vue';
 
 // 状态
 const loading = ref(false);
 const authStore = useAuthStore();
-const profile = ref<Profile | null>(null);
+const profile = ref<null | Profile>(null);
 
 // 表单弹窗
 const profileFormVisible = ref(false);
@@ -34,7 +42,7 @@ async function handleUpdateProfile(data: UpdateProfileParams) {
     profile.value = res;
     message.success('更新成功');
     profileFormVisible.value = false;
-  } catch (error) {
+  } catch {
     // 错误已在拦截器处理
   }
 }
@@ -46,7 +54,7 @@ async function handleChangePassword(data: ChangePasswordParams) {
     message.success('密码修改成功，请重新登录');
     passwordFormVisible.value = false;
     await authStore.logout(true, false);
-  } catch (error) {
+  } catch {
     // 错误已在拦截器处理
   }
 }
@@ -70,9 +78,9 @@ onMounted(() => {
             >
               {{ profile?.username?.charAt(0)?.toUpperCase() }}
             </a-avatar>
-            <h2 class="mt-4 mb-2">{{ profile?.username }}</h2>
+            <h2 class="mb-2 mt-4">{{ profile?.username }}</h2>
             <p class="text-gray-500">{{ profile?.role_name }}</p>
-            <a-tag v-if="profile?.is_super_admin" color="red">超级管理员</a-tag>
+            <a-tag v-if="profile?.is_super" color="red">超级管理员</a-tag>
           </div>
 
           <a-divider />
@@ -152,7 +160,9 @@ onMounted(() => {
             <a-list-item>
               <a-list-item-meta
                 title="绑定手机"
-                :description="profile?.phone ? '已绑定：' + profile.phone : '未绑定手机号'"
+                :description="
+                  profile?.phone ? `已绑定：${profile.phone}` : '未绑定手机号'
+                "
               />
               <template #actions>
                 <a-button type="link" @click="profileFormVisible = true">
@@ -163,7 +173,9 @@ onMounted(() => {
             <a-list-item>
               <a-list-item-meta
                 title="绑定邮箱"
-                :description="profile?.email ? '已绑定：' + profile.email : '未绑定邮箱'"
+                :description="
+                  profile?.email ? `已绑定：${profile.email}` : '未绑定邮箱'
+                "
               />
               <template #actions>
                 <a-button type="link" @click="profileFormVisible = true">
@@ -212,8 +224,8 @@ onMounted(() => {
     }
 
     .value {
-      color: #333;
       font-weight: 500;
+      color: #333;
     }
   }
 }

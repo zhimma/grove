@@ -2,6 +2,8 @@
 
 本文档说明 Grove 的基础部署方式。示例以 `console` 服务为主，`api` 与 `worker` 的部署方式相同。
 
+本文档严格区分三种证据：本地 `make build` 或 Dockerfile 静态检查只证明源代码和构建脚本可执行；GitLab CI 证明受管 runner 上的质量门禁；PostgreSQL/MySQL/Redis、迁移、浏览器和对象存储只有在真实 staging 环境逐项验收后才算通过。不要把其中任一层的成功表述为已上线。
+
 ## 部署前提
 
 ### 运行环境
@@ -34,21 +36,33 @@ databases:
 发布前应至少执行：
 
 ```bash
+make admin.install
 make verify
+make quality
 ```
 
 该命令会运行：
 
 - Go 测试
-- 三个后端二进制构建
+- API、Console、Worker 与 `grove` CLI 二进制构建
 - 管理后台前端类型检查
+- Go 格式与 `go vet`、前端 lint 与循环依赖、当前工作树空白检查
+
+`golangci-lint` 与 `govulncheck` 是显式可选的本地依赖，避免把“本机恰好装了工具”当成框架前提：
+
+```bash
+make quality.go.lint
+make quality.govuln
+```
+
+GitLab CI 会安装并强制执行这两个检查；具备相同工具和前端依赖时，可用 `make ci` 在本地复现完整门禁。
 
 ## 二进制部署
 
 ### 1. 获取代码并构建
 
 ```bash
-git clone https://github.com/zhimma/grove.git
+git clone ssh://git@gitlab.hulumibao.com:10022/huluxiaobao/apis/grove.git
 cd grove
 go mod download
 make build
@@ -60,6 +74,7 @@ make build
 bin/api
 bin/console
 bin/worker
+bin/grove
 ```
 
 ### 2. 准备配置
@@ -129,9 +144,10 @@ observability:
 ### 3. 初始化数据库
 
 ```bash
-go run ./cmd/grove migrate up
-# 在受保护的 config.yaml 中填写 security.initial_root_password
-go run ./cmd/grove seed bootstrap
+bin/grove --config /opt/grove/config.yaml migrate status
+bin/grove --config /opt/grove/config.yaml migrate up
+# 仅在全新环境、并在受保护的 config.yaml 中填写 security.initial_root_password 时执行
+bin/grove --config /opt/grove/config.yaml seed bootstrap
 ```
 
 生产环境上线前必须在受保护的 `config.yaml` 中填写强 JWT secret 和强 root 初始密码。CLI 只把该密码的 bcrypt 哈希写入数据库；首次登录后立即修改。已有 root 账号不会被重复 bootstrap 覆盖。
@@ -172,9 +188,11 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/grove
-ExecStart=/opt/grove/bin/console
+ExecStart=/opt/grove/bin/console -c /opt/grove/config.yaml
 Restart=always
 RestartSec=5
+# 必须大于 config.yaml 中的 server.shutdown_timeout，给 SIGTERM 优雅退出留出时间。
+TimeoutStopSec=45
 Environment="APP_ENV=production"
 
 [Install]
@@ -204,32 +222,39 @@ journalctl -u grove-console -f
 
 ### 构建镜像
 
-```dockerfile
-FROM golang:1.25-alpine AS builder
-
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/console ./app/console/cmd/main.go
-
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates
-WORKDIR /app
-COPY --from=builder /out/console ./console
-COPY config.example.yaml ./config.yaml
-CMD ["./console"]
+```bash
+docker build --build-arg SERVICE=console -t grove-console:local .
 ```
 
-### 运行容器
+根目录 `Dockerfile` 支持 `api`、`console`、`worker` 三个服务，并使用固定版本的 Go/Debian 基础镜像和非 root 用户运行。不要在镜像中复制 `config.example.yaml` 作为生产配置，也不要通过 build arg 传递 secret。更多说明见 [`docker/README.md`](../../docker/README.md)。
+
+### 受限方式运行容器
 
 ```bash
-docker build -t grove-console .
-docker run --rm -p 8081:8081 grove-console
+install -o 10001 -g 10001 -m 0400 config.yaml /opt/grove/config.yaml
+
+docker run --rm --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+  --security-opt no-new-privileges:true \
+  --cap-drop ALL \
+  --mount type=bind,src=/opt/grove/config.yaml,dst=/app/config.yaml,readonly \
+  --mount type=volume,src=grove-console-logs,dst=/app/logs \
+  --mount type=volume,src=grove-console-storage,dst=/app/storage \
+  -p 127.0.0.1:8081:8081 \
+  grove-console:local
 ```
 
-容器部署时挂载已经填写完成的 `config.yaml`，不要依赖环境变量拼装后端配置。
+容器部署时挂载已经填写完成且权限受控的 `config.yaml`；镜像的 `.dockerignore` 会排除本地配置、日志、存储和前端依赖。`--read-only` 把根文件系统设为只读，只有 `/tmp`、日志和本地存储显式可写；如使用外部对象存储，可删除本地 storage volume。不要为了使容器启动而移除只读、非 root 或 capability drop 约束。
+
+`api` 应由反向代理或负载均衡器暴露，`console` 默认只绑定受控网络，`worker` 的 `:8082` health/metrics 端口只对内部监控网络开放。三个进程均会处理 `SIGTERM`；编排系统的终止宽限期必须大于 `server.shutdown_timeout`，不能过早发送 `SIGKILL`。
+
+secret 不进入镜像、命令行、日志或 Git。优先由 secret manager 在发布时生成仅容器 UID 可读的配置文件并只读挂载；仅当现有支持的环境变量覆盖确有必要时才由运行平台注入，且不要把值打印到 CI 日志、shell history 或 `docker inspect` 可见的命令参数中。
+
+镜像构建和漏洞扫描的约束与命令见 [`docker/README.md`](../../docker/README.md)。
+
+## Staging 验收
+
+发布到 staging 前先完成 CI，并按 [staging smoke 清单](staging-checklist.md)逐项记录 PostgreSQL、MySQL、Redis、迁移状态、readiness、队列、静态文件和浏览器结果。该清单是外部环境验收步骤，不代表当前本地 checkout 已完成这些验证。
 
 ## 健康检查与可观测性
 
@@ -272,9 +297,12 @@ Prometheus 默认从 `/metrics` 采集 HTTP 请求量、延迟、错误、数据
 - 日志统一由 `pkg/logger` 输出，生产环境建议落盘并接入集中日志系统
 - 访问日志包含 `trace_id` 和 `span_id`，可与 OTLP trace 关联
 - Prometheus `/metrics` 应通过网络策略、反向代理 allowlist 或独立内部入口限制访问
+- Local storage 默认 private，只有同时明确 `storage.disks.<name>.public: true` 与 `serve_static: true` 才会注册静态路由；私有对象必须经鉴权下载接口或对象存储的受控签名 URL 访问
+- 共享 staging/production 数据库禁止用 `migrate down` 做回滚；先停止或回滚应用版本，确认迁移兼容性后另行制定数据回退方案
 
 ## 相关文档
 
 - [快速上手](../guide/quickstart.md)
 - [配置说明](../guide/configuration.md)
 - [测试策略](../development/testing.md)
+- [Staging smoke 清单](staging-checklist.md)

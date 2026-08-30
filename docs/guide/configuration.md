@@ -6,7 +6,7 @@
 
 Grove 只维护一个本地配置文件：`config.yaml`。
 
-`config.example.yaml` 是模板，不参与运行。复制后直接编辑 `config.yaml`；Grove 不会自动读取 `.env` 文件，配置模板也不使用环境变量占位符。
+`config.example.yaml` 是模板，不参与运行。复制后直接编辑 `config.yaml`。Grove 不会自动读取 `.env` 文件；如需在受控启动环境覆盖配置，可使用代码支持的 `${ENV}` / `${ENV:default}` 语法或对应的显式环境变量覆盖项。模板本身不放环境变量占位符或可用凭据。
 
 YAML 使用严格字段校验：未知字段、字段拼写错误和多个 YAML document 都会导致启动失败。
 
@@ -72,6 +72,7 @@ HTTP 服务级限制：
 - `shutdown_timeout`
 - `read_timeout`
 - `write_timeout`
+- `idle_timeout`
 - `max_header_bytes`
 - `max_body_bytes`
 
@@ -87,6 +88,8 @@ HTTP 服务级限制：
 默认数据库连接。PostgreSQL 是默认驱动，也支持 MySQL 8.0.16+。
 
 MySQL 使用 `driver: mysql`，并建议配置 `charset: utf8mb4`、`parse_time: true`、`loc: Local`。
+
+`connect_timeout` 控制启动时数据库连接探测的秒数，默认 5；已启用数据库必须配置为正数，`0` 不会被静默回退。
 
 ### `databases.resources`
 
@@ -112,7 +115,7 @@ Redis 连接配置。启用缓存、队列或 worker 时需要。
 ### `jwt`
 
 - `secret`：签名密钥
-- `issuer`：签发者
+- `issuer`：签发者基名。运行时会为实际 `api` / `console` 服务追加 `:api` / `:console`，使两类 access token 不能互换使用。
 - `access_expiry_hours`
 - `refresh_expiry_hours`
 
@@ -123,6 +126,8 @@ Redis 连接配置。启用缓存、队列或 worker 时需要。
 ### `storage`
 
 定义默认存储磁盘与各磁盘配置。
+
+本地磁盘不提供“只靠 query 参数”的临时签名 URL，私有对象必须通过已授权的下载接口读取。`public` 只表示可返回直链；对于 `local` 磁盘，还必须同时设置 `serve_static: true`，应用才会注册静态目录并在上传结果中返回 URL。S3 等对象存储的公开端点由存储服务自身负责。
 
 ### `observability`
 
@@ -146,7 +151,7 @@ Redis 连接配置。启用缓存、队列或 worker 时需要。
 ### `cors`、`api`、`demo`、`security`
 
 - `cors`：跨域开关、来源、方法、请求头和凭据策略
-- `api`：API 前缀、默认分页和最大分页大小
+- `api`：API 前缀、默认分页和最大分页大小；所有 Console 列表服务都会使用这两个值，超出上限时服务端截断
 - `demo`：开发/测试演示接口；production 始终忽略
 - `security.trusted_proxies`：显式信任的代理地址或 CIDR
 - `security.hsts_enabled`：是否启用 HSTS

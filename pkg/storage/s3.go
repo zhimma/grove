@@ -103,6 +103,24 @@ func (d *S3Driver) Exists(ctx context.Context, objectPath string) (bool, error) 
 	return false, fmt.Errorf("stat s3 object: %w", err)
 }
 
+func (d *S3Driver) Open(ctx context.Context, objectPath string) (io.ReadCloser, error) {
+	object, err := d.client.GetObject(ctx, d.bucket, objectPath, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("get s3 object: %w", err)
+	}
+	// GetObject is lazy in minio-go; Stat makes missing objects fail before the
+	// HTTP response is committed by a download handler.
+	if _, err := object.Stat(); err != nil {
+		_ = object.Close()
+		resp := minio.ToErrorResponse(err)
+		if resp.Code == "NoSuchKey" || resp.Code == "NoSuchObject" || resp.Code == "NotFound" {
+			return nil, ErrObjectNotFound
+		}
+		return nil, fmt.Errorf("stat s3 object: %w", err)
+	}
+	return object, nil
+}
+
 func (d *S3Driver) URL(objectPath string) string {
 	return strings.TrimRight(d.baseURL, "/") + "/" + escapeObjectPath(objectPath)
 }

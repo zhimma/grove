@@ -1,9 +1,11 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -31,6 +33,7 @@ type Config struct {
 	MaxConnections  int
 	MaxIdleConns    int
 	ConnMaxLifetime int
+	ConnectTimeout  int
 }
 
 type Connections interface {
@@ -185,16 +188,7 @@ func open(cfg Config) (*gorm.DB, error) {
 	var dialector gorm.Dialector
 	switch driver {
 	case "postgres", "postgresql":
-		dsn := fmt.Sprintf(
-			"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-			cfg.Host,
-			cfg.Port,
-			cfg.User,
-			cfg.Password,
-			cfg.DBName,
-			cfg.SSLMode,
-		)
-		dialector = postgres.Open(dsn)
+		dialector = postgres.Open(buildPostgresDSN(cfg))
 	case "mysql":
 		dialector = mysql.Open(buildMySQLDSN(cfg))
 	default:
@@ -202,15 +196,26 @@ func open(cfg Config) (*gorm.DB, error) {
 	}
 
 	db, err := gorm.Open(dialector, &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Warn),
+		Logger:               logger.Default.LogMode(logger.Warn),
+		DisableAutomaticPing: true,
 	})
 	if err != nil {
 		return nil, err
 	}
-
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, err
+	}
+	connectTimeout := time.Duration(cfg.ConnectTimeout) * time.Second
+	if connectTimeout <= 0 {
+		connectTimeout = 5 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+	err = sqlDB.PingContext(ctx)
+	cancel()
+	if err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("ping %s database: %w", driver, err)
 	}
 
 	if cfg.MaxConnections > 0 {
@@ -224,6 +229,22 @@ func open(cfg Config) (*gorm.DB, error) {
 	}
 
 	return db, nil
+}
+
+func buildPostgresDSN(cfg Config) string {
+	dsn := &url.URL{
+		Scheme: "postgres",
+		Host:   net.JoinHostPort(cfg.Host, cfg.Port),
+		Path:   "/",
+	}
+	dsn.User = url.UserPassword(cfg.User, cfg.Password)
+	query := url.Values{}
+	query.Set("dbname", cfg.DBName)
+	if strings.TrimSpace(cfg.SSLMode) != "" {
+		query.Set("sslmode", cfg.SSLMode)
+	}
+	dsn.RawQuery = query.Encode()
+	return dsn.String()
 }
 
 func buildMySQLDSN(cfg Config) string {

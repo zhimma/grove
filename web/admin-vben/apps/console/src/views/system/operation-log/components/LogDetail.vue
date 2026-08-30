@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { LoginLog, OperationLog } from '#/api/log';
+
 import { computed, ref, watch } from 'vue';
-import type { OperationLog, LoginLog } from '#/api/log';
 
 interface Props {
   visible: boolean;
-  log: OperationLog | LoginLog | null;
-  type: 'operation' | 'login';
+  log: LoginLog | null | OperationLog;
+  type: 'login' | 'operation';
 }
 
 const props = defineProps<Props>();
@@ -16,23 +17,33 @@ const emit = defineEmits<{
 
 const localVisible = ref(props.visible);
 
-watch(() => props.visible, (val) => {
-  localVisible.value = val;
-});
+watch(
+  () => props.visible,
+  (val) => {
+    localVisible.value = val;
+  },
+);
 
-watch(() => localVisible.value, (val) => {
-  emit('update:visible', val);
-});
+watch(
+  () => localVisible.value,
+  (val) => {
+    emit('update:visible', val);
+  },
+);
 
 function handleCancel() {
   localVisible.value = false;
 }
 
 // 判断是否为操作日志
-const isOperationLog = computed(() => props.type === 'operation' && props.log && 'method' in props.log);
+const isOperationLog = computed(
+  () => props.type === 'operation' && props.log && 'method' in props.log,
+);
 
 // 判断是否为登录日志
-const isLoginLog = computed(() => props.type === 'login' && props.log && 'account' in props.log);
+const isLoginLog = computed(
+  () => props.type === 'login' && props.log && 'account' in props.log,
+);
 </script>
 
 <template>
@@ -54,7 +65,7 @@ const isLoginLog = computed(() => props.type === 'login' && props.log && 'accoun
       <a-descriptions-item label="管理员账号">
         {{ log.admin_account || log.admin_name }}
       </a-descriptions-item>
-      
+
       <!-- 操作日志特有字段 -->
       <template v-if="isOperationLog">
         <a-descriptions-item label="操作动作">
@@ -82,7 +93,11 @@ const isLoginLog = computed(() => props.type === 'login' && props.log && 'accoun
           {{ (log as OperationLog).request_id }}
         </a-descriptions-item>
         <a-descriptions-item label="状态码">
-          <a-tag :color="(log as OperationLog).status_code === 200 ? 'success' : 'error'">
+          <a-tag
+            :color="
+              (log as OperationLog).status_code === 200 ? 'success' : 'error'
+            "
+          >
             {{ (log as OperationLog).status_code }}
           </a-tag>
         </a-descriptions-item>
@@ -90,13 +105,20 @@ const isLoginLog = computed(() => props.type === 'login' && props.log && 'accoun
           {{ (log as OperationLog).duration_ms }}ms
         </a-descriptions-item>
         <a-descriptions-item label="请求参数">
-          <pre style="max-height: 200px; overflow: auto;">{{ (log as OperationLog).request_query || '-' }}</pre>
+          <pre style="max-height: 200px; overflow: auto">{{
+            (log as OperationLog).request_query || '-'
+          }}</pre>
         </a-descriptions-item>
-        <a-descriptions-item label="错误信息" v-if="!(log as OperationLog).success">
-          <span style="color: red;">{{ (log as OperationLog).error_message || '-' }}</span>
+        <a-descriptions-item
+          label="错误信息"
+          v-if="!(log as OperationLog).success"
+        >
+          <span style="color: red">{{
+            (log as OperationLog).error_message || '-'
+          }}</span>
         </a-descriptions-item>
       </template>
-      
+
       <!-- 登录日志特有字段 -->
       <template v-if="isLoginLog">
         <a-descriptions-item label="登录账号">
@@ -108,19 +130,21 @@ const isLoginLog = computed(() => props.type === 'login' && props.log && 'accoun
           </a-tag>
         </a-descriptions-item>
         <a-descriptions-item label="失败原因" v-if="!(log as LoginLog).success">
-          <span style="color: red;">{{ (log as LoginLog).failure_reason || '-' }}</span>
+          <span style="color: red">{{
+            (log as LoginLog).failure_reason || '-'
+          }}</span>
         </a-descriptions-item>
         <a-descriptions-item label="请求ID">
           {{ (log as LoginLog).request_id }}
         </a-descriptions-item>
       </template>
-      
+
       <!-- 通用字段 -->
       <a-descriptions-item label="IP地址">
         {{ log.client_ip }}
       </a-descriptions-item>
       <a-descriptions-item label="User Agent">
-        <div style="max-height: 100px; overflow: auto; word-break: break-all;">
+        <div style="max-height: 100px; overflow: auto; word-break: break-all">
           {{ log.user_agent }}
         </div>
       </a-descriptions-item>

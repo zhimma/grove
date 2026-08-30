@@ -7,7 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
-	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/auth"
+	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"
@@ -53,9 +54,9 @@ type ListSessionsResponse struct {
 	Meta ListMeta          `json:"meta"`
 }
 
-func RegisterSessionRoutes(protected *gin.RouterGroup, p *provider.Provider) {
-	h := &SessionHandler{sessions: consoleservice.NewSessionService(p.DB, p.TokenManager)}
-	sessions := route.Wrap(protected.Group("/sessions"))
+func RegisterSessionRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, tokens *auth.Manager, policies []consoleservice.PagePolicy, catalogs ...*route.Catalog) {
+	h := &SessionHandler{sessions: consoleservice.NewSessionService(dbs, tokens, policies...)}
+	sessions := wrapRoute(protected.Group("/sessions"), routeCatalog(catalogs))
 	sessions.GET("", h.List).Name("系统管理.会话列表")
 	sessions.DELETE("/:id", h.Revoke).Name("系统管理.强制下线")
 }

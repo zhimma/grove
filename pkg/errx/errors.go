@@ -3,6 +3,7 @@ package errx
 import (
 	stderrors "errors"
 	"net/http"
+	"strings"
 )
 
 type HTTPError struct {
@@ -23,6 +24,17 @@ func (e *HTTPError) Error() string {
 	return http.StatusText(e.HTTPStatus)
 }
 
+// Unwrap exposes the internal cause to errors.Is/errors.As callers while the
+// response package remains responsible for deciding whether that cause may be
+// shown to a client. Keeping the cause in the error chain also means service
+// code can use standard Go error matching without depending on HTTPError.
+func (e *HTTPError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
 func (e *HTTPError) Clone() *HTTPError {
 	if e == nil {
 		return nil
@@ -39,31 +51,72 @@ func (e *HTTPError) Clone() *HTTPError {
 
 func (e *HTTPError) WithMessage(message string) *HTTPError {
 	cloned := e.Clone()
+	if cloned == nil {
+		return nil
+	}
 	cloned.Message = message
 	return cloned
 }
 
 func (e *HTTPError) WithCode(code string) *HTTPError {
 	cloned := e.Clone()
+	if cloned == nil {
+		return nil
+	}
 	cloned.Code = code
 	return cloned
 }
 
 func (e *HTTPError) WithHTTPStatus(httpStatus int) *HTTPError {
 	cloned := e.Clone()
+	if cloned == nil {
+		return nil
+	}
 	cloned.HTTPStatus = httpStatus
 	return cloned
 }
 
 func (e *HTTPError) WithData(data map[string]interface{}) *HTTPError {
 	cloned := e.Clone()
-	cloned.Data = data
+	if cloned == nil {
+		return nil
+	}
+	cloned.Data = cloneData(data)
 	return cloned
 }
 
 func (e *HTTPError) WithCause(err error) *HTTPError {
 	cloned := e.Clone()
+	if cloned == nil {
+		return nil
+	}
 	cloned.Cause = err
+	return cloned
+}
+
+// WithDataValue is a small convenience for adding one response-safe field
+// without mutating the source error's data map. It is intentionally limited to
+// a single level; nested values are treated as caller-owned payloads.
+func (e *HTTPError) WithDataValue(key string, value interface{}) *HTTPError {
+	cloned := e.Clone()
+	if cloned == nil {
+		return nil
+	}
+	if cloned.Data == nil {
+		cloned.Data = make(map[string]interface{}, 1)
+	}
+	cloned.Data[key] = value
+	return cloned
+}
+
+func cloneData(data map[string]interface{}) map[string]interface{} {
+	if data == nil {
+		return nil
+	}
+	cloned := make(map[string]interface{}, len(data))
+	for key, value := range data {
+		cloned[key] = value
+	}
 	return cloned
 }
 
@@ -128,7 +181,81 @@ func Normalize(err error) *HTTPError {
 	}
 	var httpErr *HTTPError
 	if stderrors.As(err, &httpErr) {
-		return httpErr
+		// An interface can contain a typed nil *HTTPError. Treat it as an
+		// unknown failure instead of returning nil and silently dropping the
+		// response.
+		if httpErr != nil {
+			return httpErr
+		}
 	}
 	return Internal().WithCause(err)
+}
+
+// CodeForStatus returns the framework's stable fallback error code for a
+// status when a custom HTTPError did not provide one. Constructors already set
+// their own codes; this helper closes the contract for errors created with New
+// or by third-party services.
+func CodeForStatus(status int) string {
+	switch status {
+	case http.StatusBadRequest, http.StatusUnprocessableEntity:
+		return "invalid_params"
+	case http.StatusUnauthorized:
+		return "unauthorized"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusConflict:
+		return "conflict"
+	case http.StatusRequestEntityTooLarge:
+		return "request_body_too_large"
+	case http.StatusTooManyRequests:
+		return "too_many_requests"
+	case http.StatusServiceUnavailable:
+		return "service_unavailable"
+	case http.StatusInternalServerError:
+		return "internal_error"
+	default:
+		return "http_error"
+	}
+}
+
+// EffectiveCode trims accidental whitespace and returns a non-empty stable
+// code for every HTTPError. It does not mutate the error, so callers may safely
+// reuse package-level sentinel values.
+func EffectiveCode(err *HTTPError) string {
+	if err == nil {
+		return ""
+	}
+	if code := strings.TrimSpace(err.Code); code != "" {
+		return code
+	}
+	return CodeForStatus(effectiveStatus(err.HTTPStatus))
+}
+
+// EffectiveStatus keeps malformed custom status values from reaching
+// net/http, which otherwise emits an invalid response or panics in tests.
+func EffectiveStatus(err *HTTPError) int {
+	if err == nil {
+		return http.StatusInternalServerError
+	}
+	return effectiveStatus(err.HTTPStatus)
+}
+
+func effectiveStatus(status int) int {
+	if status < 100 || status > 599 {
+		return http.StatusInternalServerError
+	}
+	return status
+}
+
+// BadRequest and UnprocessableEntity are explicit aliases for callers that
+// prefer status-oriented names. InvalidParams remains the compatibility
+// constructor used by existing handlers.
+func BadRequest() *HTTPError {
+	return InvalidParams()
+}
+
+func UnprocessableEntity() *HTTPError {
+	return InvalidParams().WithHTTPStatus(http.StatusUnprocessableEntity).WithMessage("请求参数校验失败")
 }

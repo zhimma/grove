@@ -3,6 +3,7 @@ package rbac
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	rawcasbin "github.com/casbin/casbin/v3"
 	casbinmodel "github.com/casbin/casbin/v3/model"
@@ -28,6 +29,7 @@ type Enforcer struct {
 	*rawcasbin.SyncedEnforcer
 	mode      Mode
 	tableName string
+	version   atomic.Uint64
 }
 
 func New(db *gorm.DB, cfg *Config) (*Enforcer, error) {
@@ -93,11 +95,41 @@ func (e *Enforcer) TableName() string {
 }
 
 func (e *Enforcer) Can(subject, permission string) (bool, error) {
+	if e == nil || e.SyncedEnforcer == nil {
+		return false, fmt.Errorf("casbin enforcer is not configured")
+	}
 	return e.Enforce(subject, permission)
 }
 
 func (e *Enforcer) CanInDomain(domain, subject, permission string) (bool, error) {
+	if e == nil || e.SyncedEnforcer == nil {
+		return false, fmt.Errorf("casbin enforcer is not configured")
+	}
 	return e.Enforce(domain, subject, permission)
+}
+
+// RefreshPolicy reloads the adapter state for this process. Callers can use
+// the monotonically increasing version to observe that a refresh occurred;
+// cross-process propagation remains an explicit deployment concern.
+func (e *Enforcer) RefreshPolicy() error {
+	if e == nil || e.SyncedEnforcer == nil {
+		return fmt.Errorf("casbin enforcer is not configured")
+	}
+	lock := e.GetLock()
+	lock.Lock()
+	defer lock.Unlock()
+	if err := e.SyncedEnforcer.Enforcer.LoadPolicy(); err != nil {
+		return fmt.Errorf("reload casbin policy: %w", err)
+	}
+	e.version.Add(1)
+	return nil
+}
+
+func (e *Enforcer) PolicyVersion() uint64 {
+	if e == nil {
+		return 0
+	}
+	return e.version.Load()
 }
 
 // Deprecated: Use Can instead.

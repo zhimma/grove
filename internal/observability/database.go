@@ -118,13 +118,29 @@ func (r *Runtime) gormBefore(databaseName, operation string) func(*gorm.DB) {
 			"gorm."+operation,
 			trace.WithSpanKind(trace.SpanKindClient),
 			trace.WithAttributes(
-				attribute.String("db.system", "postgresql"),
+				attribute.String("db.system", databaseSystem(db)),
 				attribute.String("db.namespace", databaseName),
 				attribute.String("db.operation.name", operation),
 			),
 		)
 		db.Statement.Context = ctx
 		db.Statement.Settings.Store(gormSpanStateKey+":"+operation, gormSpanState{span: span})
+	}
+}
+
+func databaseSystem(db *gorm.DB) string {
+	if db == nil || db.Dialector == nil {
+		return "unknown"
+	}
+	switch strings.ToLower(strings.TrimSpace(db.Dialector.Name())) {
+	case "postgres", "postgresql":
+		return "postgresql"
+	case "mysql":
+		return "mysql"
+	case "sqlite":
+		return "sqlite"
+	default:
+		return strings.ToLower(strings.TrimSpace(db.Dialector.Name()))
 	}
 }
 

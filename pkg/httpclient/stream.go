@@ -120,7 +120,7 @@ func (c *Client) Stream(ctx context.Context, method, path string, body any, hand
 	return c.NewRequest(method, path).Body(body).Stream(ctx, handler)
 }
 
-func (rb *RequestBuilder) Stream(ctx context.Context, handler func(chunk []byte) error) error {
+func (rb *RequestBuilder) Stream(ctx context.Context, handler func(chunk []byte) error) (err error) {
 	if rb == nil {
 		return fmt.Errorf("http request is nil")
 	}
@@ -136,7 +136,11 @@ func (rb *RequestBuilder) Stream(ctx context.Context, handler func(chunk []byte)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close stream response: %w", closeErr)
+		}
+	}()
 	buffer := make([]byte, 32<<10)
 	for {
 		count, readErr := resp.Body.Read(buffer)
@@ -158,7 +162,7 @@ func (c *Client) DownloadToFile(path, localPath string) error {
 	return c.NewRequest(http.MethodGet, path).DownloadToFile(context.Background(), localPath)
 }
 
-func (rb *RequestBuilder) DownloadToFile(ctx context.Context, localPath string) error {
+func (rb *RequestBuilder) DownloadToFile(ctx context.Context, localPath string) (err error) {
 	if rb == nil {
 		return fmt.Errorf("http request is nil")
 	}
@@ -175,7 +179,11 @@ func (rb *RequestBuilder) DownloadToFile(ctx context.Context, localPath string) 
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close download response: %w", closeErr)
+		}
+	}()
 
 	tempFile, err := os.CreateTemp(dir, "."+filepath.Base(localPath)+".tmp-*")
 	if err != nil {

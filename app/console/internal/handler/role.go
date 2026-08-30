@@ -4,7 +4,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
-	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
 	"github.com/zhimma/grove/pkg/validation"
@@ -54,12 +55,15 @@ type RolePathRequest struct {
 	ID string `uri:"id" binding:"required" label:"角色ID"`
 }
 
-func RegisterRoleRoutes(protected *gin.RouterGroup, p *provider.Provider, runtimeCatalog *consoleservice.RuntimePermissionCatalog) {
+func RegisterRoleRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, enforcer *rbac.Enforcer, runtimeCatalog *consoleservice.RuntimePermissionCatalog, policies []consoleservice.PagePolicy, catalogs ...*route.Catalog) {
 	h := &RoleHandler{
-		roleSvc: consoleservice.NewRoleService(p.DB, p.GetEnforcer("console"), runtimeCatalog),
+		roleSvc: consoleservice.NewRoleService(dbs, enforcer, runtimeCatalog),
+	}
+	if len(policies) > 0 {
+		h.roleSvc = consoleservice.NewRoleServiceWithPolicy(dbs, enforcer, runtimeCatalog, policies[0])
 	}
 
-	roles := route.Wrap(protected.Group("/roles"))
+	roles := wrapRoute(protected.Group("/roles"), routeCatalog(catalogs))
 	roles.GET("", h.List).Name("角色权限.角色列表")
 	roles.GET("/:id", h.Detail).Name("角色权限.角色详情")
 	roles.POST("", h.Create).Name("角色权限.创建角色")

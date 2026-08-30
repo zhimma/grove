@@ -274,7 +274,7 @@ watch(
 </script>
 
 <template>
-  <Form ref="formRef" :model="localModel" layout="vertical">
+  <Form :model="localModel" layout="vertical">
     <Form.Item
       label="配置分组"
       name="config_group"

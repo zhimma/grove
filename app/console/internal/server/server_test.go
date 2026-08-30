@@ -54,9 +54,11 @@ func TestRegisterLocalStorageRoutesServesLocalDisk(t *testing.T) {
 		Storage: config.StorageConfig{
 			Disks: map[string]config.StorageDiskConfig{
 				"local": {
-					Driver:  "local",
-					BaseURL: "/storage",
-					Root:    root,
+					Driver:      "local",
+					BaseURL:     "/storage",
+					Root:        root,
+					Public:      true,
+					ServeStatic: true,
 				},
 			},
 		},
@@ -74,5 +76,66 @@ func TestRegisterLocalStorageRoutesServesLocalDisk(t *testing.T) {
 	}
 	if got := resp.Header().Get("X-Content-Type-Options"); got != "nosniff" {
 		t.Fatalf("expected nosniff header, got %q", got)
+	}
+}
+
+func TestRegisterLocalStorageRoutesDefaultsToPrivate(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "secret.txt"), []byte("secret"), 0o600); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	engine := gin.New()
+	registerLocalStorageRoutes(engine, &config.Config{
+		Storage: config.StorageConfig{
+			Disks: map[string]config.StorageDiskConfig{
+				"local": {
+					Driver:  "local",
+					BaseURL: "/storage",
+					Root:    root,
+				},
+			},
+		},
+	})
+
+	resp := httptest.NewRecorder()
+	engine.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/storage/secret.txt", nil))
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("private disk must not be served statically, got %d", resp.Code)
+	}
+}
+
+func TestRegisterLocalStorageRoutesRequiresPublicAndServeStatic(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "hello.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	for name, disk := range map[string]config.StorageDiskConfig{
+		"public-without-static": {
+			Driver:  "local",
+			BaseURL: "/storage-public",
+			Root:    root,
+			Public:  true,
+		},
+		"static-without-public": {
+			Driver:      "local",
+			BaseURL:     "/storage-private",
+			Root:        root,
+			ServeStatic: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			engine := gin.New()
+			registerLocalStorageRoutes(engine, &config.Config{Storage: config.StorageConfig{Disks: map[string]config.StorageDiskConfig{"local": disk}}})
+			resp := httptest.NewRecorder()
+			engine.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, disk.BaseURL+"/hello.txt", nil))
+			if resp.Code != http.StatusNotFound {
+				t.Fatalf("disk must require both public and serve_static, got %d", resp.Code)
+			}
+		})
 	}
 }

@@ -28,7 +28,7 @@
 - [ ] 跨模块修改跑 `make test`、`go test -race ./...`、`go vet ./...`。
 - [ ] 后端构建跑 `make build`；前端修改跑 typecheck/build。
 - [ ] 路由/权限/OpenAPI 修改跑 contract tests。
-- [ ] 文档修改运行 `git diff --check`，并用 `rg` 检查旧命令和旧路径。
+- [ ] 文档修改运行 `make docs.check` 和 `git diff --check`；必要时再用 `rg` 检查旧命令和旧路径。
 
 ## 交付时
 

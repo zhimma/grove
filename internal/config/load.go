@@ -72,6 +72,7 @@ func defaultConfig() Config {
 			ShutdownTimeout: 30,
 			ReadTimeout:     30,
 			WriteTimeout:    30,
+			IdleTimeout:     60,
 			MaxHeaderBytes:  1 << 20,
 			MaxBodyBytes:    32 * 1024 * 1024,
 		},
@@ -91,6 +92,7 @@ func defaultConfig() Config {
 				MaxConnections:  20,
 				MaxIdleConns:    10,
 				ConnMaxLifetime: 3600,
+				ConnectTimeout:  5,
 			},
 		},
 		JWT: JWTConfig{
@@ -229,6 +231,9 @@ func applyEnvironmentOverrides(cfg *Config) {
 	if value := os.Getenv("SERVER_MAX_BODY_BYTES"); value != "" {
 		cfg.Server.MaxBodyBytes = parseInt64(value, cfg.Server.MaxBodyBytes)
 	}
+	if value := os.Getenv("SERVER_IDLE_TIMEOUT"); value != "" {
+		cfg.Server.IdleTimeout = parseInt(value, cfg.Server.IdleTimeout)
+	}
 	if value := os.Getenv("JWT_SECRET"); value != "" {
 		cfg.JWT.Secret = value
 	}
@@ -264,6 +269,9 @@ func applyEnvironmentOverrides(cfg *Config) {
 	}
 	if value := os.Getenv("DB_TLS"); value != "" {
 		cfg.Databases.Default.TLS = parseBool(value)
+	}
+	if value := os.Getenv("DB_CONNECT_TIMEOUT"); value != "" {
+		cfg.Databases.Default.ConnectTimeout = parseInt(value, cfg.Databases.Default.ConnectTimeout)
 	}
 	if value := os.Getenv("DB_ENABLED"); value != "" {
 		cfg.Databases.Default.Enabled = parseBool(value)
@@ -358,9 +366,6 @@ func (c *Config) normalize(service string, debugConfigured bool) {
 	}
 	if strings.TrimSpace(c.ConsolePort) == "" {
 		c.ConsolePort = "8081"
-	}
-	if c.Server.MaxBodyBytes <= 0 {
-		c.Server.MaxBodyBytes = 32 * 1024 * 1024
 	}
 	if strings.TrimSpace(c.Log.Path) == "" {
 		c.Log.Path = "./logs"
@@ -525,10 +530,24 @@ func (c Config) Validate(service string) error {
 	if err := validatePort("worker_port", c.WorkerPort); err != nil {
 		return err
 	}
+	if err := validateServerConfig(c.Server); err != nil {
+		return err
+	}
+	if c.API.DefaultPerPage <= 0 || c.API.MaxPerPage <= 0 || c.API.DefaultPerPage > c.API.MaxPerPage {
+		return fmt.Errorf("api pagination defaults must be positive and default_per_page cannot exceed max_per_page")
+	}
 	if strings.EqualFold(strings.TrimSpace(c.App.Env), "production") {
+		if c.App.Debug {
+			return fmt.Errorf("production app.debug must be false")
+		}
 		secret := strings.TrimSpace(c.JWT.Secret)
 		if secret == "" || secret == "change-me" || len(secret) < 32 {
 			return fmt.Errorf("jwt secret must be set to a strong value in production")
+		}
+		if password := strings.TrimSpace(c.Security.InitialRootPassword); password != "" {
+			if err := ValidateInitialRootPassword(password); err != nil {
+				return fmt.Errorf("production %w", err)
+			}
 		}
 		if containsString(c.CORS.AllowedOrigins, "*") {
 			return fmt.Errorf("production cors allowed_origins cannot contain wildcard")
@@ -705,6 +724,9 @@ func validateDatabaseConfig(name string, cfg DatabaseConfig) error {
 			return fmt.Errorf("database %q loc is required for mysql", name)
 		}
 	}
+	if cfg.ConnectTimeout <= 0 {
+		return fmt.Errorf("database %q connect_timeout must be positive", name)
+	}
 	return nil
 }
 
@@ -736,6 +758,28 @@ func validatePort(name, value string) error {
 	port, err := strconv.Atoi(strings.TrimSpace(value))
 	if err != nil || port < 1 || port > 65535 {
 		return fmt.Errorf("%s must be a valid port", name)
+	}
+	return nil
+}
+
+func validateServerConfig(cfg ServerConfig) error {
+	if cfg.ShutdownTimeout <= 0 {
+		return fmt.Errorf("server.shutdown_timeout must be positive")
+	}
+	if cfg.ReadTimeout <= 0 {
+		return fmt.Errorf("server.read_timeout must be positive")
+	}
+	if cfg.WriteTimeout <= 0 {
+		return fmt.Errorf("server.write_timeout must be positive")
+	}
+	if cfg.IdleTimeout <= 0 {
+		return fmt.Errorf("server.idle_timeout must be positive")
+	}
+	if cfg.MaxHeaderBytes <= 0 {
+		return fmt.Errorf("server.max_header_bytes must be positive")
+	}
+	if cfg.MaxBodyBytes <= 0 {
+		return fmt.Errorf("server.max_body_bytes must be positive")
 	}
 	return nil
 }

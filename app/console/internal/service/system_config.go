@@ -16,8 +16,9 @@ import (
 const SecretMask = "********"
 
 type SystemConfigService struct {
-	dbs       database.Connections
-	secretBox *secretbox.Box
+	dbs        database.Connections
+	secretBox  *secretbox.Box
+	pagePolicy PagePolicy
 }
 
 type ListSystemConfigsInput struct {
@@ -63,10 +64,9 @@ type GetGroupConfigsInput struct {
 	Group string
 }
 
-func NewSystemConfigService(dbs database.Connections, secretBox *secretbox.Box) *SystemConfigService {
+func NewSystemConfigService(dbs database.Connections, secretBox *secretbox.Box, policies ...PagePolicy) *SystemConfigService {
 	return &SystemConfigService{
-		dbs:       dbs,
-		secretBox: secretBox,
+		dbs: dbs, secretBox: secretBox, pagePolicy: pagePolicyFromArgs(policies),
 	}
 }
 
@@ -93,13 +93,13 @@ func (s *SystemConfigService) ListConfigs(ctx context.Context, in ListSystemConf
 		return nil, errx.InvalidParams().WithMessage("时间范围格式不正确")
 	}
 
-	page, pageSize := resolvePage(ListRequest{
+	page, pageSize := resolvePageWithPolicy(ListRequest{
 		Page:     in.Page,
 		PageSize: in.PageSize,
 		Offset:   in.Offset,
 		Limit:    in.Limit,
 		ListAll:  in.ListAll,
-	})
+	}, s.pagePolicy)
 
 	var total int64
 	if err := query.Count(&total).Error; err != nil {

@@ -390,9 +390,9 @@ func (rb *RequestBuilder) readResponse(req *http.Request, httpResp *http.Respons
 	if httpResp.Body == nil {
 		httpResp.Body = http.NoBody
 	}
-	defer httpResp.Body.Close()
 	limit := rb.maxResponseBytes
 	body, err := io.ReadAll(io.LimitReader(httpResp.Body, limit+1))
+	closeErr := httpResp.Body.Close()
 	resp := &Response{
 		StatusCode: httpResp.StatusCode,
 		Status:     httpResp.Status,
@@ -406,6 +406,9 @@ func (rb *RequestBuilder) readResponse(req *http.Request, httpResp *http.Respons
 	resp.Body = append([]byte(nil), body...)
 	if err != nil {
 		return resp, fmt.Errorf("read response body: %w", err)
+	}
+	if closeErr != nil {
+		return resp, fmt.Errorf("close response body: %w", closeErr)
 	}
 	return resp, nil
 }

@@ -3,7 +3,6 @@ import type { Pinia } from 'pinia';
 import type { App } from 'vue';
 
 import { createPinia } from 'pinia';
-import SecureLS from 'secure-ls';
 
 let pinia: Pinia;
 
@@ -21,27 +20,15 @@ export async function initStores(app: App, options: InitStoreOptions) {
   const { createPersistedState } = await import('pinia-plugin-persistedstate');
   pinia = createPinia();
   const { namespace } = options;
-  const ls = new SecureLS({
-    encodingType: 'aes',
-    encryptionSecret: import.meta.env.VITE_APP_STORE_SECURE_KEY,
-    isCompression: true,
-    // @ts-ignore secure-ls does not have a type definition for this
-    metaKey: `${namespace}-secure-meta`,
-  });
   pinia.use(
     createPersistedState({
       // key $appName-$store.id
       key: (storeKey) => `${namespace}-${storeKey}`,
-      storage: import.meta.env.DEV
-        ? localStorage
-        : {
-            getItem(key) {
-              return ls.get(key);
-            },
-            setItem(key, value) {
-              ls.set(key, value);
-            },
-          },
+      // Console follows an explicit SPA-token strategy: auth state survives a
+      // page refresh but is cleared with the browser session. Browser-side
+      // encryption cannot protect an XSS-compromised application, so do not
+      // present it as a security boundary.
+      storage: sessionStorage,
     }),
   );
   app.use(pinia);
