@@ -103,10 +103,11 @@ Grove 的切法：
   - postgres + mysql 双份迁移，含 down
   - 验收：`pkg/migrate` 配对/方言/「schedule-only」守卫测试通过；集成测试断言已补但**本机 Docker 不可用，未真实执行 up/down**
 
-- [ ] **S2 Worker 任务注册表**
-  - `app/worker/internal/task`：`name → scheduler.Job` 的显式注册表，编译期确定
-  - 至少一个真实任务（不是 echo demo）
-  - 验收：注册表单测覆盖「未知任务名返回错误」
+- [x] **S2 Worker 任务注册表** — `app/worker/internal/task`
+  - `Definitions(dbs) map[string]Definition`，编译期确定；名称重复、无 Job、非法 cron 均在构建时报错
+  - 真实任务：`console.purge-expired-sessions` 清理过期后台会话（分批删除，保留已吊销但未过期的行）
+  - 顺带：`scheduler.ValidateSchedule` 抽为共用校验器，Console 保存前用同一个解析器，避免"后台存得进、Worker 跑不了"
+  - 验收：5 个单测通过（注册表可运行性、缺数据库报错、只删过期、跨批清空、取消 context 中止）
 
 - [ ] **S3 Worker reconcile 循环**
   - 启动时按注册表 upsert DB 行（缺行补默认调度，已有行不覆盖运维改动）

@@ -143,13 +143,36 @@ func New(config Config) (*Scheduler, error) {
 	}
 	s.cron = cron.New(
 		cron.WithLocation(location),
-		cron.WithSeconds(),
+		cron.WithParser(scheduleParser),
 		cron.WithLogger(cron.VerbosePrintfLogger(&cronLogger{})),
 		// robfig/cron's default chain is empty in v3.0.1. Keep an explicit
 		// recovery wrapper so a panic in a scheduled job cannot kill the worker.
 		cron.WithChain(cron.Recover(cron.VerbosePrintfLogger(&cronLogger{}))),
 	)
 	return s, nil
+}
+
+// scheduleParser is the single definition of what a Grove schedule looks like:
+// six fields, seconds first, plus @every / @daily style descriptors. Both the
+// running cron and ValidateSchedule use it, so a spec Console accepts is
+// exactly a spec the Worker can run.
+var scheduleParser = cron.NewParser(
+	cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
+)
+
+// ValidateSchedule reports whether spec is a schedule this scheduler can run.
+// Callers that persist a schedule should use it before writing, so an invalid
+// expression is rejected at the edit rather than silently dropping a task at
+// the next reconcile.
+func ValidateSchedule(spec string) error {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return fmt.Errorf("schedule is required")
+	}
+	if _, err := scheduleParser.Parse(spec); err != nil {
+		return fmt.Errorf("invalid schedule %q: %w", spec, err)
+	}
+	return nil
 }
 
 func NewDefault() (*Scheduler, error) {
