@@ -21,6 +21,10 @@ type generatedSource struct {
 }
 
 func generateConsoleModule(input string) ([]string, error) {
+	module, err := modulePath()
+	if err != nil {
+		return nil, err
+	}
 	name := toPascal(input)
 	snake := toSnake(input)
 	if !isValidGoIdentifier(name) || snake == "" {
@@ -29,8 +33,8 @@ func generateConsoleModule(input string) ([]string, error) {
 
 	sources := []generatedSource{
 		{path: filepath.Join("internal/model", snake+".go"), content: []byte(modelTemplate(name, snake))},
-		{path: filepath.Join("app/console/internal/service", snake+".go"), content: []byte(consoleServiceTemplate(name, snake))},
-		{path: filepath.Join("app/console/internal/handler", snake+".go"), content: []byte(consoleHandlerTemplate(name, snake))},
+		{path: filepath.Join("app/console/internal/service", snake+".go"), content: []byte(consoleServiceTemplate(module, name, snake))},
+		{path: filepath.Join("app/console/internal/handler", snake+".go"), content: []byte(consoleHandlerTemplate(module, name, snake))},
 	}
 	routerPath := filepath.Join("app/console/internal/router", "router.go")
 	line := fmt.Sprintf("\thandler.Register%sRoutes(protected, r.p.DB, r.p.RouteCatalog)\n", name)

@@ -437,10 +437,14 @@ func newMakeServiceCmd() *cobra.Command {
 		Short: "生成 console service 模板",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			module, err := modulePath()
+			if err != nil {
+				return err
+			}
 			name := toPascal(args[0])
 			snake := toSnake(args[0])
 			path := filepath.Join("app/console/internal/service", snake+".go")
-			return writeFile(path, consoleServiceTemplate(name, snake))
+			return writeFile(path, consoleServiceTemplate(module, name, snake))
 		},
 	}
 }
@@ -451,10 +455,14 @@ func newMakeHandlerCmd() *cobra.Command {
 		Short: "生成 console handler 模板",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			module, err := modulePath()
+			if err != nil {
+				return err
+			}
 			name := toPascal(args[0])
 			snake := toSnake(args[0])
 			path := filepath.Join("app/console/internal/handler", snake+".go")
-			return writeFile(path, consoleHandlerTemplate(name, snake))
+			return writeFile(path, consoleHandlerTemplate(module, name, snake))
 		},
 	}
 }

@@ -15,14 +15,14 @@ func (%s) TableName() string {
 `, name, name, toSnakePlural(snake))
 }
 
-func consoleServiceTemplate(name, snake string) string {
+func consoleServiceTemplate(module, name, snake string) string {
 	return fmt.Sprintf(`package service
 
 import (
 	"context"
 
-	"github.com/zhimma/grove/pkg/database"
-	"github.com/zhimma/grove/pkg/errx"
+	"%[1]s/pkg/database"
+	"%[1]s/pkg/errx"
 )
 
 type %sService struct {
@@ -45,20 +45,20 @@ func (s *%sService) List(_ context.Context, _ %sListInput) (*%sListOutput, error
 	}
 	return &%sListOutput{Message: "%s 模块已就绪"}, nil
 }
-`, name, name, name, name, name, name, name, name, name, name, name)
+`, module, name, name, name, name, name, name, name, name, name, name, name)
 }
 
-func consoleHandlerTemplate(name, snake string) string {
+func consoleHandlerTemplate(module, name, snake string) string {
 	routePath := "/" + toKebabPlural(snake)
 	return fmt.Sprintf(`package handler
 
 import (
 	"github.com/gin-gonic/gin"
 
-	consoleservice "github.com/zhimma/grove/app/console/internal/service"
-	"github.com/zhimma/grove/pkg/database"
-	"github.com/zhimma/grove/pkg/response"
-	"github.com/zhimma/grove/pkg/route"
+	consoleservice "%[1]s/app/console/internal/service"
+	"%[1]s/pkg/database"
+	"%[1]s/pkg/response"
+	"%[1]s/pkg/route"
 )
 
 type %sHandler struct {
@@ -82,5 +82,5 @@ func (h *%sHandler) List(c *gin.Context) {
 	}
 	response.Success(c, out)
 }
-`, name, snake, name, name, name, snake, name, routePath, name, name, snake, name)
+`, module, name, snake, name, name, name, snake, name, routePath, name, name, snake, name)
 }

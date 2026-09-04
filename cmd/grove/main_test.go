@@ -293,6 +293,9 @@ func register() {
 	// grove:register-routes
 }
 `)
+	// Generated imports come from the go.mod of the repository being written
+	// into, so a fixture without one is not a valid target.
+	mustWrite(t, filepath.Join(root, "go.mod"), "module example.com/forked\n\ngo 1.25.0\n")
 
 	previousWD, err := os.Getwd()
 	if err != nil {
@@ -654,5 +657,74 @@ func assertNotContains(t *testing.T, haystack string, needle string) {
 	t.Helper()
 	if strings.Contains(haystack, needle) {
 		t.Fatalf("expected content not to contain %q\ncontent:\n%s", needle, haystack)
+	}
+}
+
+// This repository is meant to be forked, and a fork renames its module. The
+// generator must therefore take the import path from the target repository's
+// go.mod — baking Grove's own path into the templates would emit code that
+// does not compile anywhere but here.
+func TestGeneratedCodeImportsTheTargetModulePath(t *testing.T) {
+	root := t.TempDir()
+	mustMkdir(t, filepath.Join(root, "app/console/internal/router"))
+	mustMkdir(t, filepath.Join(root, "app/console/internal/service"))
+	mustMkdir(t, filepath.Join(root, "app/console/internal/handler"))
+	mustMkdir(t, filepath.Join(root, "internal/model"))
+	mustWrite(t, filepath.Join(root, "app/console/internal/router/router.go"), `package router
+
+func register() {
+	// grove:register-routes
+}
+`)
+	mustWrite(t, filepath.Join(root, "go.mod"), "module example.com/renamed-fork\n\ngo 1.25.0\n")
+
+	previousWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get wd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir temp root: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(previousWD); err != nil {
+			t.Fatalf("restore wd: %v", err)
+		}
+	}()
+
+	cmd := newMakeModuleCmd()
+	cmd.SetArgs([]string{"Invoice"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("make:module failed: %v", err)
+	}
+
+	for _, generated := range []string{
+		"app/console/internal/service/invoice.go",
+		"app/console/internal/handler/invoice.go",
+	} {
+		content := mustRead(t, filepath.Join(root, generated))
+		assertContains(t, content, `"example.com/renamed-fork/pkg/database"`)
+		if strings.Contains(content, "github.com/zhimma/grove") {
+			t.Fatalf("%s still imports Grove's own module path:\n%s", generated, content)
+		}
+	}
+}
+
+func TestModulePathReportsAMissingGoMod(t *testing.T) {
+	root := t.TempDir()
+	previousWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get wd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir temp root: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(previousWD); err != nil {
+			t.Fatalf("restore wd: %v", err)
+		}
+	}()
+
+	if _, err := modulePath(); err == nil {
+		t.Fatal("modulePath must fail outside a module rather than emit uncompilable imports")
 	}
 }
