@@ -106,15 +106,7 @@ func AdminAuthn(tokenManager *auth.Manager, sessions *consoleservice.SessionServ
 	}
 }
 
-func AdminPermission(enforcer *rbac.Enforcer, env ...string) gin.HandlerFunc {
-	return adminPermission(enforcer, nil)
-}
-
-func AdminPermissionWithCatalog(enforcer *rbac.Enforcer, catalog *pkgroute.Catalog) gin.HandlerFunc {
-	return adminPermission(enforcer, catalog)
-}
-
-func adminPermission(enforcer *rbac.Enforcer, catalog *pkgroute.Catalog) gin.HandlerFunc {
+func AdminPermission(enforcer *rbac.Enforcer, catalog *pkgroute.Catalog) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if request.IsSuper(c) {
 			c.Next()
@@ -132,13 +124,7 @@ func adminPermission(enforcer *rbac.Enforcer, catalog *pkgroute.Catalog) gin.Han
 		if resource == "" {
 			resource = c.Request.URL.Path
 		}
-		ignored := false
-		if catalog != nil {
-			ignored = catalog.IsIgnored(c.Request.Method, resource)
-		} else {
-			ignored = pkgroute.IsIgnored(c.Request.Method, resource)
-		}
-		if ignored {
+		if catalog.IsIgnored(c.Request.Method, resource) {
 			c.Next()
 			return
 		}

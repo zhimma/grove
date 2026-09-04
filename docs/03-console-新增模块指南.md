@@ -70,16 +70,12 @@ handler 只负责：
 `app/console/internal/router/router.go` 统一调用。新增模块应保持同样结构：
 
 ```go
-func RegisterArticleRoutes(protected *gin.RouterGroup, dbs database.Connections, catalogs ...*route.Catalog) {
+func RegisterArticleRoutes(protected *gin.RouterGroup, dbs database.Connections, catalog *route.Catalog) {
 	h := &ArticleHandler{
 		articleSvc: service.NewArticleService(dbs),
 	}
 
-	var catalog *route.Catalog
-	if len(catalogs) > 0 {
-		catalog = catalogs[0]
-	}
-	articles := route.WrapWithCatalog(protected.Group("/articles"), catalog)
+	articles := route.Wrap(protected.Group("/articles"), catalog)
 	articles.GET("", h.List).Name("内容管理.文章列表")
 	articles.POST("", h.Create).Name("内容管理.创建文章")
 	articles.PUT("/:id", h.Update).Name("内容管理.更新文章")

@@ -52,7 +52,7 @@ func (r *Router) InstallToEngine(engine *gin.Engine) {
 	protected.Use(
 		consolemiddleware.AdminAuthn(r.p.TokenManager, sessions, authStateResolver),
 		consolemiddleware.AuditOperation(auditDB),
-		consolemiddleware.AdminPermissionWithCatalog(r.p.GetEnforcer("console"), r.p.RouteCatalog),
+		consolemiddleware.AdminPermission(r.p.GetEnforcer("console"), r.p.RouteCatalog),
 	)
 
 	catalog := r.p.RouteCatalog

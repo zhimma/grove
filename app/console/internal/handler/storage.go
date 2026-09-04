@@ -30,12 +30,12 @@ type StorageDownloadRequest struct {
 	Path string `form:"path" label:"文件路径"`
 }
 
-func RegisterStorageRoutesWithDeps(protected *gin.RouterGroup, manager *storage.Manager, catalogs ...*route.Catalog) {
+func RegisterStorageRoutesWithDeps(protected *gin.RouterGroup, manager *storage.Manager, catalog *route.Catalog) {
 	h := &StorageHandler{
 		service: consoleservice.NewStorageService(manager),
 	}
 
-	group := wrapRoute(protected.Group("/storage"), routeCatalog(catalogs))
+	group := wrapRoute(protected.Group("/storage"), catalog)
 	group.GET("/config", h.Config).Name("文件存储.获取存储配置")
 	group.GET("/all-configs", h.AllConfigs).Name("文件存储.获取全部存储配置")
 	group.POST("/upload", h.Upload).Name("文件存储.上传文件")

@@ -65,16 +65,12 @@ type %sHandler struct {
 	%sSvc *consoleservice.%sService
 }
 
-func Register%sRoutes(protected *gin.RouterGroup, dbs database.Connections, catalogs ...*route.Catalog) {
+func Register%sRoutes(protected *gin.RouterGroup, dbs database.Connections, catalog *route.Catalog) {
 	h := &%sHandler{
 		%sSvc: consoleservice.New%sService(dbs),
 	}
 
-	var catalog *route.Catalog
-	if len(catalogs) > 0 {
-		catalog = catalogs[0]
-	}
-	group := route.WrapWithCatalog(protected.Group("%s"), catalog)
+	group := route.Wrap(protected.Group("%s"), catalog)
 	group.GET("", h.List).Name("%s.列表")
 }
 

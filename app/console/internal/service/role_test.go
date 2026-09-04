@@ -13,6 +13,7 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/rbac"
+	"github.com/zhimma/grove/pkg/route"
 )
 
 type recordingRolePolicies struct {
@@ -87,7 +88,7 @@ func TestRoleServiceValidatesRuntimeAPIPermissions(t *testing.T) {
 	engine.GET("/console/v1/roles", func(*gin.Context) {})
 
 	catalog := NewRuntimePermissionCatalog()
-	catalog.LoadRoutes(engine.Routes())
+	catalog.LoadRoutes(engine.Routes(), route.NewCatalog())
 
 	service := NewRoleService(dbs, enforcer, catalog)
 	if err := service.SetRolePermissions(context.Background(), SetRolePermissionsInput{
@@ -105,7 +106,7 @@ func TestRoleServiceSetPermissionsUsesSingleAtomicReplacement(t *testing.T) {
 	engine.GET("/console/v1/roles", func(*gin.Context) {})
 
 	catalog := NewRuntimePermissionCatalog()
-	catalog.LoadRoutes(engine.Routes())
+	catalog.LoadRoutes(engine.Routes(), route.NewCatalog())
 
 	policies := &recordingRolePolicies{}
 	service := &RoleService{dbs: dbs, rolePolicies: policies, runtimePermission: catalog}
@@ -125,7 +126,7 @@ func TestRoleServiceSetPermissionsReturnsReplacementFailure(t *testing.T) {
 	engine := gin.New()
 	engine.GET("/console/v1/roles", func(*gin.Context) {})
 	catalog := NewRuntimePermissionCatalog()
-	catalog.LoadRoutes(engine.Routes())
+	catalog.LoadRoutes(engine.Routes(), route.NewCatalog())
 	policies := &recordingRolePolicies{replaceErr: errors.New("injected policy failure")}
 	service := &RoleService{dbs: dbs, rolePolicies: policies, runtimePermission: catalog}
 	if err := service.SetRolePermissions(context.Background(), SetRolePermissionsInput{

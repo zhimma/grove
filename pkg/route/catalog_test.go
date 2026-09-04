@@ -13,8 +13,8 @@ func TestCatalogIsolatesRouteMetadata(t *testing.T) {
 	second := NewCatalog()
 
 	engine := gin.New()
-	a := WrapWithCatalog(engine.Group("/one"), first)
-	b := WrapWithCatalog(engine.Group("/two"), second)
+	a := Wrap(engine.Group("/one"), first)
+	b := Wrap(engine.Group("/two"), second)
 	a.GET("/items", func(*gin.Context) {}).Name("first").Scope("tenant-a")
 	b.GET("/items", func(*gin.Context) {}).Name("second").Scope("tenant-b").Ignore()
 

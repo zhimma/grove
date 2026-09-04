@@ -120,7 +120,7 @@ API 权限清单不是数据库真相源，而是运行时从已注册路由扫�
 
 ```go
 catalog := route.NewCatalog() // 生产环境复用当前 HTTP engine 的 catalog
-roles := route.WrapWithCatalog(group, catalog)
+roles := route.Wrap(group, catalog)
 roles.GET(...).Name("角色权限.角色列表")
 ```
 

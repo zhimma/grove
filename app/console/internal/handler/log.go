@@ -42,11 +42,11 @@ type ListLoginLogsResponse struct {
 	Meta ListMeta       `json:"meta"`
 }
 
-func RegisterLogRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, policies []consoleservice.PagePolicy, catalogs ...*route.Catalog) {
+func RegisterLogRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
 	h := &LogHandler{
 		logSvc: consoleservice.NewLogService(dbs, policies...),
 	}
-	group := wrapRoute(protected.Group("/logs"), routeCatalog(catalogs))
+	group := wrapRoute(protected.Group("/logs"), catalog)
 	group.GET("/operations", h.OperationLogs).Name("系统日志.操作日志列表")
 	group.GET("/operations/:id", h.OperationLogDetail).Name("系统日志.操作日志详情")
 	group.GET("/logins", h.LoginLogs).Name("系统日志.登录日志列表")

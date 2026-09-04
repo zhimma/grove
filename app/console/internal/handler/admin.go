@@ -71,12 +71,12 @@ type AdminPathRequest struct {
 	ID string `uri:"id" binding:"required" label:"管理员ID"`
 }
 
-func RegisterAdminRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, enforcer *rbac.Enforcer, policies []consoleservice.PagePolicy, catalogs ...*route.Catalog) {
+func RegisterAdminRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, enforcer *rbac.Enforcer, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
 	h := &AdminHandler{
 		adminSvc: consoleservice.NewAdminService(dbs, enforcer, policies...),
 	}
 
-	admins := wrapRoute(protected.Group("/admins"), routeCatalog(catalogs))
+	admins := wrapRoute(protected.Group("/admins"), catalog)
 	admins.GET("", h.List).Name("系统管理.管理员列表")
 	admins.GET("/:id", h.Detail).Name("系统管理.管理员详情")
 	admins.POST("", h.Create).Name("系统管理.创建管理员")

@@ -55,7 +55,7 @@ type RolePathRequest struct {
 	ID string `uri:"id" binding:"required" label:"角色ID"`
 }
 
-func RegisterRoleRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, enforcer *rbac.Enforcer, runtimeCatalog *consoleservice.RuntimePermissionCatalog, policies []consoleservice.PagePolicy, catalogs ...*route.Catalog) {
+func RegisterRoleRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, enforcer *rbac.Enforcer, runtimeCatalog *consoleservice.RuntimePermissionCatalog, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
 	h := &RoleHandler{
 		roleSvc: consoleservice.NewRoleService(dbs, enforcer, runtimeCatalog),
 	}
@@ -63,7 +63,7 @@ func RegisterRoleRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connect
 		h.roleSvc = consoleservice.NewRoleServiceWithPolicy(dbs, enforcer, runtimeCatalog, policies[0])
 	}
 
-	roles := wrapRoute(protected.Group("/roles"), routeCatalog(catalogs))
+	roles := wrapRoute(protected.Group("/roles"), catalog)
 	roles.GET("", h.List).Name("角色权限.角色列表")
 	roles.GET("/:id", h.Detail).Name("角色权限.角色详情")
 	roles.POST("", h.Create).Name("角色权限.创建角色")

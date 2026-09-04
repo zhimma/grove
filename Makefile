@@ -65,11 +65,12 @@ docs.check: ## 检查 canonical 文档中的架构示例是否与当前代码一
 	if rg -n -F \
 		-e 'provider *provider.Provider' \
 		-e 'RegisterArticleRoutes(protected, p)' \
-		-e 'route.Wrap(' \
+		-e 'route.WrapWithCatalog(' \
+		-e 'catalogs ...*route.Catalog' \
 		-e '业务代码优先通过 `internal/provider.Provider`' \
 		-e '数据库通过 `provider.DB` 的命名资源访问' \
 		$$files; then \
-		echo '文档架构示例已过期：请使用显式依赖和 route.WrapWithCatalog。'; \
+		echo '文档架构示例已过期：请使用显式依赖和 route.Wrap(group, catalog)。'; \
 		exit 1; \
 	fi
 

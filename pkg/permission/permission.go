@@ -40,12 +40,8 @@ func BuildAPIIdentifier(method, fullPath string) string {
 	return strings.ToUpper(strings.TrimSpace(method)) + " " + strings.TrimSpace(fullPath)
 }
 
-func BuildDisplayName(method, fullPath string) string {
-	return BuildDisplayNameWithCatalog(nil, method, fullPath)
-}
-
-func BuildDisplayNameWithCatalog(catalog *route.Catalog, method, fullPath string) string {
-	if name, ok := routeName(catalog, method, fullPath); ok {
+func BuildDisplayName(catalog *route.Catalog, method, fullPath string) string {
+	if name, ok := catalog.GetName(method, fullPath); ok {
 		return name
 	}
 	module := BuildModuleCode(fullPath)
@@ -68,29 +64,17 @@ func BuildModuleCodeFromDisplayName(displayName string) (string, bool) {
 	return segments[0], true
 }
 
-func CollectProtectedRoutes(routes gin.RoutesInfo, appCode, serviceCode, authScope string) []CatalogRoute {
-	return CollectProtectedRoutesWithCatalog(routes, appCode, serviceCode, authScope, nil)
-}
-
-func CollectProtectedRoutesWithCatalog(routes gin.RoutesInfo, appCode, serviceCode, authScope string, catalog *route.Catalog) []CatalogRoute {
+func CollectProtectedRoutes(routes gin.RoutesInfo, appCode, serviceCode, authScope string, catalog *route.Catalog) []CatalogRoute {
 	items := make([]CatalogRoute, 0, len(routes))
 	for _, r := range routes {
-		skip := shouldSkipRouteWithCatalog(appCode, r.Method, r.Path, catalog)
-		if catalog == nil {
-			skip = shouldSkipRoute(appCode, r.Method, r.Path)
-		}
-		if skip {
+		if shouldSkipRoute(appCode, r.Method, r.Path, catalog) {
 			continue
-		}
-		scope := resolveCatalogRouteScopeWithCatalog(r.Method, r.Path, catalog)
-		if catalog == nil {
-			scope = resolveCatalogRouteScope(r.Method, r.Path)
 		}
 		items = append(items, CatalogRoute{
 			AppCode:     appCode,
 			ServiceCode: serviceCode,
 			AuthScope:   authScope,
-			Scope:       scope,
+			Scope:       resolveRouteScope(catalog, r.Method, r.Path),
 			Method:      r.Method,
 			Path:        r.Path,
 		})
@@ -98,16 +82,12 @@ func CollectProtectedRoutesWithCatalog(routes gin.RoutesInfo, appCode, serviceCo
 	return items
 }
 
-func shouldSkipRoute(appCode, method, routePath string) bool {
-	return shouldSkipRouteWithCatalog(appCode, method, routePath, nil)
-}
-
-func shouldSkipRouteWithCatalog(appCode, method, routePath string, catalog *route.Catalog) bool {
+func shouldSkipRoute(appCode, method, routePath string, catalog *route.Catalog) bool {
 	switch strings.ToUpper(strings.TrimSpace(method)) {
 	case "HEAD", "OPTIONS":
 		return true
 	}
-	if isIgnored(catalog, method, routePath) {
+	if catalog.IsIgnored(method, routePath) {
 		return true
 	}
 	switch appCode {
@@ -118,36 +98,11 @@ func shouldSkipRouteWithCatalog(appCode, method, routePath string, catalog *rout
 	}
 }
 
-func resolveCatalogRouteScope(method, routePath string) string {
-	return resolveCatalogRouteScopeWithCatalog(method, routePath, nil)
-}
-
-func resolveCatalogRouteScopeWithCatalog(method, routePath string, catalog *route.Catalog) string {
-	if scope, ok := routeScope(catalog, method, routePath); ok {
+func resolveRouteScope(catalog *route.Catalog, method, routePath string) string {
+	if scope, ok := catalog.GetScope(method, routePath); ok {
 		return NormalizeScope(scope)
 	}
 	return ScopeGlobal
-}
-
-func routeName(catalog *route.Catalog, method, routePath string) (string, bool) {
-	if catalog != nil {
-		return catalog.GetName(method, routePath)
-	}
-	return route.GetName(method, routePath)
-}
-
-func routeScope(catalog *route.Catalog, method, routePath string) (string, bool) {
-	if catalog != nil {
-		return catalog.GetScope(method, routePath)
-	}
-	return route.GetScope(method, routePath)
-}
-
-func isIgnored(catalog *route.Catalog, method, routePath string) bool {
-	if catalog != nil {
-		return catalog.IsIgnored(method, routePath)
-	}
-	return route.IsIgnored(method, routePath)
 }
 
 func splitPermissionSegments(fullPath string) []string {

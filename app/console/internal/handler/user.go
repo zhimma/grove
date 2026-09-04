@@ -51,11 +51,11 @@ type UserPathRequest struct {
 	ID string `uri:"id" binding:"required" label:"用户ID"`
 }
 
-func RegisterUserRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, catalogs ...*route.Catalog) {
+func RegisterUserRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, catalog *route.Catalog) {
 	h := &UserHandler{
 		userSvc: consoleservice.NewUserService(dbs),
 	}
-	users := wrapRoute(protected.Group("/users"), routeCatalog(catalogs))
+	users := wrapRoute(protected.Group("/users"), catalog)
 	users.GET("", h.List).Name("用户管理.用户列表")
 	users.GET("/:id", h.Detail).Name("用户管理.用户详情")
 	users.POST("", h.Create).Name("用户管理.创建用户")

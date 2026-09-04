@@ -54,9 +54,9 @@ type ListSessionsResponse struct {
 	Meta ListMeta          `json:"meta"`
 }
 
-func RegisterSessionRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, tokens *auth.Manager, policies []consoleservice.PagePolicy, catalogs ...*route.Catalog) {
+func RegisterSessionRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, tokens *auth.Manager, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
 	h := &SessionHandler{sessions: consoleservice.NewSessionService(dbs, tokens, policies...)}
-	sessions := wrapRoute(protected.Group("/sessions"), routeCatalog(catalogs))
+	sessions := wrapRoute(protected.Group("/sessions"), catalog)
 	sessions.GET("", h.List).Name("系统管理.会话列表")
 	sessions.DELETE("/:id", h.Revoke).Name("系统管理.强制下线")
 }

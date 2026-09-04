@@ -325,7 +325,7 @@ func register() {
 	handler := mustRead(t, filepath.Join(root, "app/console/internal/handler/product_category.go"))
 	assertContains(t, handler, "package handler")
 	assertContains(t, handler, "RegisterProductCategoryRoutes")
-	assertContains(t, handler, "route.WrapWithCatalog(protected.Group(\"/product-categories\"), catalog)")
+	assertContains(t, handler, "route.Wrap(protected.Group(\"/product-categories\"), catalog)")
 	assertContains(t, handler, ".Name(\"ProductCategory.列表\")")
 	assertContains(t, handler, "response.Success")
 

@@ -13,11 +13,11 @@ type DashboardHandler struct {
 	dashboardSvc *consoleservice.DashboardService
 }
 
-func RegisterDashboardRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, catalogs ...*route.Catalog) {
+func RegisterDashboardRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, catalog *route.Catalog) {
 	h := &DashboardHandler{
 		dashboardSvc: consoleservice.NewDashboardService(dbs),
 	}
-	dashboard := wrapRoute(protected.Group("/dashboard"), routeCatalog(catalogs))
+	dashboard := wrapRoute(protected.Group("/dashboard"), catalog)
 	dashboard.GET("/summary", h.Summary).Name("工作台.概览")
 }
 

@@ -73,11 +73,7 @@ func (r *Route) Name(displayName string) *Route {
 	if r == nil {
 		return r
 	}
-	if r.catalog != nil {
-		r.catalog.Name(r.method, r.path, displayName)
-	} else {
-		routeNameStore.Store(routeKey(r.method, r.path), strings.TrimSpace(displayName))
-	}
+	r.catalog.Name(r.method, r.path, displayName)
 	return r
 }
 
@@ -85,11 +81,7 @@ func (r *Route) Scope(scope string) *Route {
 	if r == nil {
 		return r
 	}
-	if r.catalog != nil {
-		r.catalog.Scope(r.method, r.path, scope)
-	} else {
-		routeScopeStore.Store(routeKey(r.method, r.path), strings.TrimSpace(scope))
-	}
+	r.catalog.Scope(r.method, r.path, scope)
 	return r
 }
 
@@ -97,45 +89,8 @@ func (r *Route) Ignore() *Route {
 	if r == nil {
 		return r
 	}
-	if r.catalog != nil {
-		r.catalog.Ignore(r.method, r.path)
-	} else {
-		ignoredRouteStore.Store(routeKey(r.method, r.path), true)
-	}
+	r.catalog.Ignore(r.method, r.path)
 	return r
-}
-
-var (
-	routeNameStore    sync.Map
-	routeScopeStore   sync.Map
-	ignoredRouteStore sync.Map
-)
-
-func GetName(method, routePath string) (string, bool) {
-	value, ok := routeNameStore.Load(routeKey(method, routePath))
-	if !ok {
-		return "", false
-	}
-	name, ok := value.(string)
-	return name, ok && name != ""
-}
-
-func GetScope(method, routePath string) (string, bool) {
-	value, ok := routeScopeStore.Load(routeKey(method, routePath))
-	if !ok {
-		return "", false
-	}
-	scope, ok := value.(string)
-	return scope, ok && scope != ""
-}
-
-func IsIgnored(method, routePath string) bool {
-	value, ok := ignoredRouteStore.Load(routeKey(method, routePath))
-	if !ok {
-		return false
-	}
-	ignored, _ := value.(bool)
-	return ignored
 }
 
 type Group struct {
@@ -144,13 +99,13 @@ type Group struct {
 	catalog      *Catalog
 }
 
-func Wrap(g *gin.RouterGroup) *Group {
-	return &Group{group: g}
-}
-
-// WrapWithCatalog is the preferred constructor for application routers.
-// Wrap remains available for legacy callers and tests.
-func WrapWithCatalog(g *gin.RouterGroup, catalog *Catalog) *Group {
+// Wrap binds a Gin group to the catalog that owns its route metadata.
+// The catalog is required: metadata with no owner used to land in package
+// globals, which leaked between engines and between parallel tests.
+func Wrap(g *gin.RouterGroup, catalog *Catalog) *Group {
+	if catalog == nil {
+		catalog = NewCatalog()
+	}
 	return &Group{group: g, catalog: catalog}
 }
 
@@ -252,10 +207,4 @@ func normalizeRoutePath(routePath string) string {
 		return "/"
 	}
 	return cleaned
-}
-
-func ResetForTest() {
-	routeNameStore = sync.Map{}
-	routeScopeStore = sync.Map{}
-	ignoredRouteStore = sync.Map{}
 }
