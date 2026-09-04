@@ -47,7 +47,7 @@ func TestPostgresConcurrentRefreshOnlySucceedsOnce(t *testing.T) {
 	if err := db.Create(&admin).Error; err != nil {
 		t.Fatalf("create admin: %v", err)
 	}
-	manager, err := auth.NewManager("test-secret", "test-issuer", time.Hour, 24*time.Hour)
+	manager, err := auth.NewManager(auth.Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour, RefreshExpiry: 24 * time.Hour})
 	if err != nil {
 		t.Fatalf("new token manager: %v", err)
 	}

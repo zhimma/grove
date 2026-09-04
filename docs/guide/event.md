@@ -70,7 +70,7 @@ if errors.Is(err, event.ErrQueueFull) {
 异步 listener 的执行错误无法通过入队调用返回。需要指标、告警或测试观察时，创建 Dispatcher 时配置 ErrorHandler：
 
 ```go
-dispatcher := event.NewDispatcher(event.Config{
+dispatcher := event.New(event.Config{
     QueueSize: 500,
     WorkerNum: 8,
     ErrorHandler: func(ctx context.Context, raw event.Event, err error) {

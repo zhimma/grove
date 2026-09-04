@@ -309,12 +309,12 @@ func WithRedis() Option {
 
 func WithAuth() Option {
 	return func(p *Provider) error {
-		manager, err := auth.NewManager(
-			p.Config.JWT.Secret,
-			serviceTokenIssuer(p.Config.JWT.Issuer, p.serviceName),
-			time.Duration(p.Config.JWT.AccessExpiryHours)*time.Hour,
-			time.Duration(p.Config.JWT.RefreshExpiryHours)*time.Hour,
-		)
+		manager, err := auth.NewManager(auth.Config{
+			Secret:        p.Config.JWT.Secret,
+			Issuer:        serviceTokenIssuer(p.Config.JWT.Issuer, p.serviceName),
+			AccessExpiry:  time.Duration(p.Config.JWT.AccessExpiryHours) * time.Hour,
+			RefreshExpiry: time.Duration(p.Config.JWT.RefreshExpiryHours) * time.Hour,
+		})
 		if err != nil {
 			return err
 		}
@@ -497,7 +497,7 @@ func WithCache() Option {
 
 func WithHTTPClient() Option {
 	return func(p *Provider) error {
-		p.HTTPClient = httpclient.New()
+		p.HTTPClient = httpclient.New(httpclient.DefaultConfig())
 		if p.Observability != nil {
 			p.HTTPClient = p.HTTPClient.WithTracing()
 		}
@@ -507,7 +507,7 @@ func WithHTTPClient() Option {
 
 func WithEvent() Option {
 	return func(p *Provider) error {
-		dispatcher := event.New()
+		dispatcher := event.New(event.DefaultConfig())
 		p.Event = dispatcher
 		p.AddCloser("event", dispatcher.Close)
 		return nil

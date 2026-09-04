@@ -30,7 +30,7 @@ func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func newTestClient(t *testing.T, handler func(*http.Request) (*http.Response, error)) *Client {
 	t.Helper()
-	return NewWithConfig(Config{
+	return New(Config{
 		BaseURL:   "https://example.test",
 		Timeout:   time.Second,
 		Transport: roundTripFunc(handler),
@@ -51,7 +51,7 @@ func jsonResponse(status int, body string) *http.Response {
 }
 
 func TestNewUsesSafeDefaults(t *testing.T) {
-	client := New()
+	client := New(DefaultConfig())
 	if client.timeout != 30*time.Second {
 		t.Fatalf("timeout = %v", client.timeout)
 	}
@@ -68,7 +68,7 @@ func TestNewUsesSafeDefaults(t *testing.T) {
 }
 
 func TestClientConfigurationReturnsCopies(t *testing.T) {
-	original := New()
+	original := New(DefaultConfig())
 	transport := &http.Transport{}
 	configured := original.
 		BaseURL("https://api.example.com/").

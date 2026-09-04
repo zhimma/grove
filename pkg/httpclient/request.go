@@ -84,7 +84,7 @@ func (b *readerBody) Open() (io.ReadCloser, string, int64, error) {
 
 func (c *Client) NewRequest(method, path string) *RequestBuilder {
 	if c == nil {
-		c = New()
+		c = New(DefaultConfig())
 	}
 	return &RequestBuilder{
 		client:  c,

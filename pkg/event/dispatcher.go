@@ -77,7 +77,7 @@ func DefaultConfig() Config {
 	}
 }
 
-func NewDispatcher(config Config) *Dispatcher {
+func New(config Config) *Dispatcher {
 	defaults := DefaultConfig()
 	if config.QueueSize <= 0 {
 		config.QueueSize = defaults.QueueSize
@@ -98,14 +98,6 @@ func NewDispatcher(config Config) *Dispatcher {
 		go d.worker()
 	}
 	return d
-}
-
-func New() *Dispatcher {
-	return NewDispatcher(DefaultConfig())
-}
-
-func NewAsync(queueSize, workerNum int) *Dispatcher {
-	return NewDispatcher(Config{QueueSize: queueSize, WorkerNum: workerNum})
 }
 
 func (d *Dispatcher) Close() error {

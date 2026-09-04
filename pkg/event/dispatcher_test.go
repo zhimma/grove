@@ -29,7 +29,7 @@ type pointerListener struct{}
 func (*pointerListener) Handle(context.Context, Event) error { return nil }
 
 func TestListenValidatesAndCopiesListeners(t *testing.T) {
-	d := New()
+	d := New(DefaultConfig())
 	t.Cleanup(func() { _ = d.Close() })
 	var nilListener *pointerListener
 	if err := d.Listen("", ListenerFunc(func(context.Context, Event) error { return nil })); err == nil {
@@ -55,7 +55,7 @@ func TestListenValidatesAndCopiesListeners(t *testing.T) {
 }
 
 func TestDispatchAggregatesErrorsAndPanic(t *testing.T) {
-	d := New()
+	d := New(DefaultConfig())
 	t.Cleanup(func() { _ = d.Close() })
 	firstErr := errors.New("first failed")
 	var normalCalled atomic.Bool
@@ -80,7 +80,7 @@ func TestDispatchAggregatesErrorsAndPanic(t *testing.T) {
 }
 
 func TestDispatchValidatesEventAndAllowsNoListeners(t *testing.T) {
-	d := New()
+	d := New(DefaultConfig())
 	t.Cleanup(func() { _ = d.Close() })
 	if err := d.Dispatch(context.Background(), anotherEvent{}); err != nil {
 		t.Fatalf("no-listener dispatch: %v", err)
@@ -92,7 +92,7 @@ func TestDispatchValidatesEventAndAllowsNoListeners(t *testing.T) {
 }
 
 func TestDispatchAsyncWaitsForQueueOrContext(t *testing.T) {
-	d := NewDispatcher(Config{QueueSize: 1, WorkerNum: 1})
+	d := New(Config{QueueSize: 1, WorkerNum: 1})
 	t.Cleanup(func() { _ = d.Close() })
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -121,7 +121,7 @@ func TestDispatchAsyncWaitsForQueueOrContext(t *testing.T) {
 }
 
 func TestTryDispatchAsyncReturnsQueueFull(t *testing.T) {
-	d := NewDispatcher(Config{QueueSize: 1, WorkerNum: 1})
+	d := New(Config{QueueSize: 1, WorkerNum: 1})
 	t.Cleanup(func() { _ = d.Close() })
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -150,7 +150,7 @@ func TestTryDispatchAsyncReturnsQueueFull(t *testing.T) {
 func TestAsyncContextKeepsValuesWithoutCancellation(t *testing.T) {
 	type contextKey string
 	const requestIDKey contextKey = "request_id"
-	d := NewDispatcher(Config{QueueSize: 1, WorkerNum: 1})
+	d := New(Config{QueueSize: 1, WorkerNum: 1})
 	t.Cleanup(func() { _ = d.Close() })
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -183,7 +183,7 @@ func TestAsyncContextKeepsValuesWithoutCancellation(t *testing.T) {
 }
 
 func TestAsyncDispatchUsesListenerSnapshot(t *testing.T) {
-	d := NewDispatcher(Config{QueueSize: 2, WorkerNum: 1})
+	d := New(Config{QueueSize: 2, WorkerNum: 1})
 	t.Cleanup(func() { _ = d.Close() })
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -229,7 +229,7 @@ func TestAsyncDispatchUsesListenerSnapshot(t *testing.T) {
 func TestAsyncErrorsAreReported(t *testing.T) {
 	listenerErr := errors.New("listener failed")
 	reported := make(chan error, 1)
-	d := NewDispatcher(Config{
+	d := New(Config{
 		QueueSize: 1,
 		WorkerNum: 1,
 		ErrorHandler: func(_ context.Context, _ Event, err error) {
@@ -260,7 +260,7 @@ func TestAsyncErrorsAreReported(t *testing.T) {
 func TestErrorHandlerPanicDoesNotStopWorker(t *testing.T) {
 	var reports atomic.Int64
 	processed := make(chan struct{}, 2)
-	d := NewDispatcher(Config{
+	d := New(Config{
 		QueueSize: 2,
 		WorkerNum: 1,
 		ErrorHandler: func(context.Context, Event, error) {
@@ -295,7 +295,7 @@ func TestErrorHandlerPanicDoesNotStopWorker(t *testing.T) {
 }
 
 func TestCloseDrainsAcceptedWorkAndRejectsNewEvents(t *testing.T) {
-	d := NewDispatcher(Config{QueueSize: 4, WorkerNum: 1})
+	d := New(Config{QueueSize: 4, WorkerNum: 1})
 	var calls atomic.Int64
 	_ = d.ListenFunc("test.event", func(context.Context, Event) error {
 		calls.Add(1)
@@ -335,7 +335,7 @@ func TestCloseDrainsAcceptedWorkAndRejectsNewEvents(t *testing.T) {
 }
 
 func TestCloseWaitsForActiveSynchronousDispatch(t *testing.T) {
-	d := NewDispatcher(Config{QueueSize: 1, WorkerNum: 1})
+	d := New(Config{QueueSize: 1, WorkerNum: 1})
 	started := make(chan struct{})
 	release := make(chan struct{})
 	dispatchDone := make(chan error, 1)
@@ -363,7 +363,7 @@ func TestCloseWaitsForActiveSynchronousDispatch(t *testing.T) {
 }
 
 func TestForgetFlushAndHasListeners(t *testing.T) {
-	d := New()
+	d := New(DefaultConfig())
 	t.Cleanup(func() { _ = d.Close() })
 	_ = d.ListenFunc("test.event", func(context.Context, Event) error { return nil })
 	_ = d.ListenFunc("another.event", func(context.Context, Event) error { return nil })
@@ -381,7 +381,7 @@ func TestForgetFlushAndHasListeners(t *testing.T) {
 }
 
 func TestSubscribe(t *testing.T) {
-	d := New()
+	d := New(DefaultConfig())
 	t.Cleanup(func() { _ = d.Close() })
 	var received testEvent
 	if err := Subscribe[testEvent](d, func(_ context.Context, event testEvent) error {
@@ -412,7 +412,7 @@ func TestSubscribe(t *testing.T) {
 }
 
 func BenchmarkDispatcherDispatch(b *testing.B) {
-	d := New()
+	d := New(DefaultConfig())
 	b.Cleanup(func() { _ = d.Close() })
 	_ = d.ListenFunc("test.event", func(context.Context, Event) error { return nil })
 	for i := 0; i < b.N; i++ {

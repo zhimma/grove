@@ -14,7 +14,7 @@ import (
 
 func TestUserAuthRejectsConsoleTokenOnAPISurface(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	manager, err := auth.NewManager("test-secret", "test-issuer", time.Hour)
+	manager, err := auth.NewManager(auth.Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestUserAuthRejectsConsoleTokenOnAPISurface(t *testing.T) {
 
 func TestUserAuthOptionalDoesNotAuthenticateInvalidSurfaceToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	manager, err := auth.NewManager("test-secret", "test-issuer", time.Hour)
+	manager, err := auth.NewManager(auth.Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}

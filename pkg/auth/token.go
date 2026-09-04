@@ -74,27 +74,46 @@ type Manager struct {
 	refreshExpiry time.Duration
 }
 
-func NewManager(secret, issuer string, accessExpiry time.Duration, refreshExpiry ...time.Duration) (*Manager, error) {
-	if strings.TrimSpace(secret) == "" {
+// Config describes how tokens are signed and how long they live. Zero-valued
+// expiries fall back to DefaultConfig.
+type Config struct {
+	Secret        string
+	Issuer        string
+	AccessExpiry  time.Duration
+	RefreshExpiry time.Duration
+}
+
+// DefaultConfig supplies everything except the secret, which has no safe
+// default and must always be provided.
+func DefaultConfig() Config {
+	return Config{
+		Issuer:        "grove",
+		AccessExpiry:  24 * time.Hour,
+		RefreshExpiry: 7 * 24 * time.Hour,
+	}
+}
+
+func NewManager(config Config) (*Manager, error) {
+	if strings.TrimSpace(config.Secret) == "" {
 		return nil, errors.New("jwt secret is required")
 	}
-	if strings.TrimSpace(issuer) == "" {
-		issuer = "grove"
-	}
-	if accessExpiry <= 0 {
-		accessExpiry = 24 * time.Hour
-	}
 
-	resolvedRefreshExpiry := 7 * 24 * time.Hour
-	if len(refreshExpiry) > 0 && refreshExpiry[0] > 0 {
-		resolvedRefreshExpiry = refreshExpiry[0]
+	defaults := DefaultConfig()
+	if strings.TrimSpace(config.Issuer) == "" {
+		config.Issuer = defaults.Issuer
+	}
+	if config.AccessExpiry <= 0 {
+		config.AccessExpiry = defaults.AccessExpiry
+	}
+	if config.RefreshExpiry <= 0 {
+		config.RefreshExpiry = defaults.RefreshExpiry
 	}
 
 	return &Manager{
-		secret:        []byte(secret),
-		issuer:        issuer,
-		accessExpiry:  accessExpiry,
-		refreshExpiry: resolvedRefreshExpiry,
+		secret:        []byte(config.Secret),
+		issuer:        config.Issuer,
+		accessExpiry:  config.AccessExpiry,
+		refreshExpiry: config.RefreshExpiry,
 	}, nil
 }
 

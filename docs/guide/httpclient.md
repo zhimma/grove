@@ -158,7 +158,7 @@ resp, err := client.NewRequest(http.MethodGet, "/users").
 测试第三方调用时注入自定义 `http.RoundTripper`，不要依赖真实网络：
 
 ```go
-client := httpclient.NewWithConfig(httpclient.Config{
+client := httpclient.New(httpclient.Config{
     BaseURL:  "https://example.test",
     Timeout:  time.Second,
     Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {

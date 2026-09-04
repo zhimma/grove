@@ -235,7 +235,7 @@ func TestProviderCloseClosesCacheManager(t *testing.T) {
 }
 
 func TestProviderCloseClosesEventDispatcher(t *testing.T) {
-	dispatcher := event.New()
+	dispatcher := event.New(event.DefaultConfig())
 	p := &Provider{Event: dispatcher}
 	p.AddCloser("event", dispatcher.Close)
 	if err := p.Close(); err != nil {

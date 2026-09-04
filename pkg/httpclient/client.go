@@ -39,11 +39,7 @@ type Response struct {
 	Request    *http.Request
 }
 
-func New() *Client {
-	return NewWithConfig(DefaultConfig())
-}
-
-func NewWithConfig(config Config) *Client {
+func New(config Config) *Client {
 	if config.Timeout <= 0 {
 		config.Timeout = DefaultTimeout
 	}
@@ -116,7 +112,7 @@ func (c *Client) WithTracing() *Client {
 
 func (c *Client) Clone() *Client {
 	if c == nil {
-		return New()
+		return New(DefaultConfig())
 	}
 	cloned := *c
 	return &cloned
