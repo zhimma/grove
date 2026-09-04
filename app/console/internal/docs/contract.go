@@ -68,6 +68,11 @@ func spec(cfg *config.Config) docsui.Document {
 	operationLogDetailResponse := doc.AddSchema("ConsoleOperationLogDetailResponse", handler.OperationLogDetailResponse{})
 	listLoginLogsResponse := doc.AddSchema("ConsoleListLoginLogsResponse", handler.ListLoginLogsResponse{})
 
+	listScheduledTasksResponse := doc.AddSchema("ConsoleListScheduledTasksResponse", handler.ListScheduledTasksResponse{})
+	scheduledTaskResponse := doc.AddSchema("ConsoleScheduledTask", handler.ScheduledTaskItem{})
+	updateScheduledTaskRequest := doc.AddSchema("ConsoleUpdateScheduledTaskRequest", handler.UpdateScheduledTaskRequest{})
+	setScheduledTaskStatusRequest := doc.AddSchema("ConsoleSetScheduledTaskStatusRequest", handler.SetScheduledTaskStatusRequest{})
+
 	addConsoleOperation(&doc, "认证", "/auth/login", http.MethodPost, "consoleLogin", "管理员登录", false,
 		nil, docsui.JSONBody("登录凭据", loginRequest, true), loginResponse)
 	addConsoleOperation(&doc, "认证", "/auth/refresh", http.MethodPost, "consoleRefreshToken", "刷新访问令牌", false,
@@ -187,6 +192,16 @@ func spec(cfg *config.Config) docsui.Document {
 		operationLogPath, nil, operationLogDetailResponse)
 	addConsoleOperation(&doc, "系统日志", "/logs/logins", http.MethodGet, "consoleListLoginLogs", "获取登录日志列表", true,
 		docsui.ParametersFor(handler.ListLoginLogsRequest{}, "form", "query"), nil, listLoginLogsResponse)
+
+	scheduledTaskPath := docsui.ParametersFor(handler.ScheduledTaskPathRequest{}, "uri", "path")
+	addConsoleOperation(&doc, "计划任务", "/scheduled-tasks", http.MethodGet, "consoleListScheduledTasks", "获取计划任务列表", true,
+		docsui.ParametersFor(handler.ListScheduledTasksRequest{}, "form", "query"), nil, listScheduledTasksResponse)
+	addConsoleOperation(&doc, "计划任务", "/scheduled-tasks/{id}", http.MethodPut, "consoleUpdateScheduledTask", "更新计划任务调度", true,
+		scheduledTaskPath, docsui.JSONBody("调度参数", updateScheduledTaskRequest, true), scheduledTaskResponse)
+	addConsoleOperation(&doc, "计划任务", "/scheduled-tasks/{id}/status", http.MethodPut, "consoleSetScheduledTaskStatus", "启用或停用计划任务", true,
+		scheduledTaskPath, docsui.JSONBody("启停状态", setScheduledTaskStatusRequest, true), scheduledTaskResponse)
+	addConsoleOperation(&doc, "计划任务", "/scheduled-tasks/{id}/run", http.MethodPost, "consoleRunScheduledTask", "请求立即执行计划任务", true,
+		scheduledTaskPath, nil, scheduledTaskResponse)
 
 	return doc
 }

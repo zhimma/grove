@@ -126,14 +126,13 @@ Grove 的切法：
   - 验收：17 个单测通过；抢占逻辑做过变异验证（去掉 `RowsAffected` 检查后 4 个 worker 全部抢到，测试变红）
   - 上限：触发延迟最多一个对账周期（30s）。要即时需改走 asynq，Console 得加 `WithJob()`
 
-- [ ] **S5 Console 接口**
-  - `GET /console/v1/scheduled-tasks`（列表）
-  - `PUT /console/v1/scheduled-tasks/:id`（改 schedule / timeout / mutex）
-  - `PUT /console/v1/scheduled-tasks/:id/status`（启停）
-  - `POST /console/v1/scheduled-tasks/:id/run`（手动触发）
-  - 保存前校验 cron 表达式为 6 段（`pkg/scheduler` 开了 `WithSeconds()`）
-  - 权限走 route catalog `.Name("计划任务.xxx")`
-  - 验收：`make contracts` 通过；OpenAPI 与前端契约同步
+- [x] **S5 Console 接口** — `handler/scheduled_task.go` + `service/scheduled_task.go`
+  - 4 个接口：列表 / 改调度 / 启停 / 手动触发。**没有新建和删除**，行由 Worker 按代码注册表补齐
+  - 保存前用 `scheduler.ValidateSchedule` 校验，与 Worker 的 cron 同一个解析器
+  - 停用的任务拒绝手动触发；已有待执行请求时拒绝重复提交
+  - 权限走 route catalog `.Name("计划任务.xxx")`；OpenAPI 已登记
+  - 验收：8 个 service 单测 + `make contracts` 通过
+  - 修掉一个模型缺陷：`gorm:"default:true"` 会让 `false` 在 INSERT 时被省略，`Mutex: false` 的任务定义会被静默存成 `true`。已去掉标签并加回归测试（把标签加回去测试会红）
 
 - [ ] **S6 前端页面**
   - `web/admin-vben/apps/console/src/views/system/scheduled-task/`

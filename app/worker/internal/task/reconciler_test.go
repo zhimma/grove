@@ -416,3 +416,18 @@ func waitUntil(t *testing.T, cond func() bool, message string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// A GORM `default:true` tag makes the driver omit a false value from the
+// INSERT, so the column default turns Mutex back on behind the seeder's back.
+func TestSeedPreservesAMutexFalseDefinition(t *testing.T) {
+	fixture := newReconcilerFixture(t, Definition{
+		Name: "report", DisplayName: "报表", Schedule: "0 0 * * * *", Mutex: false,
+		Job: scheduler.JobFunc(func(context.Context) error { return nil }),
+	})
+
+	mustReconcile(t, fixture.reconciler)
+
+	if fixture.row(t, "report").Mutex {
+		t.Fatal("seeded row must keep Mutex false as the definition declared it")
+	}
+}

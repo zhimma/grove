@@ -67,6 +67,7 @@ func (r *Router) InstallToEngine(engine *gin.Engine) {
 	handler.RegisterSystemConfigRoutes(protected, r.p.DB, r.p.ConfigSecrets, pagePolicies, catalog)
 	handler.RegisterStorageRoutes(protected, r.p.Storage, catalog)
 	handler.RegisterLogRoutes(protected, r.p.DB, pagePolicies, catalog)
+	handler.RegisterScheduledTaskRoutes(protected, r.p.DB, pagePolicies, catalog)
 	// grove:register-routes
 
 	runtimeCatalog.LoadRoutes(engine.Routes(), catalog)
