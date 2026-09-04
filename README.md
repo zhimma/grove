@@ -33,6 +33,8 @@ Grove 是一个面向中大型项目的 console-first Go 单体脚手架。它�
 4. [项目结构](docs/guide/structure.md)
 5. [开发规范](docs/01-开发规范.md)
 
+基于 Grove 建立新项目：[fork 指南](docs/guide/fork.md)。
+
 AI 或自动化工具先读取仓库根目录的 [AGENTS.md](AGENTS.md) 和 [AI 项目上下文](docs/ai/project-context.md)。
 
 ## 最短启动路径

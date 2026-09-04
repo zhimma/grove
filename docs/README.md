@@ -12,7 +12,11 @@ Grove 文档按“先理解项目，再开发功能，最后运行验证”的�
 4. [项目结构](guide/structure.md)
 5. [开发规范](01-开发规范.md)
 
-升级审查与实施记录：[Grove Web 框架组件与工程规范升级计划](plans/2026-08-29-grove-framework-upgrade-plan.md)
+### 基于 Grove 建立新项目
+
+[fork 指南](guide/fork.md)：改 module path、示例代码去留、必改配置。
+
+Grove 自身的演进记录在 [plans/](plans/)，那是本仓库的决策归档，不是下游项目的升级指南。
 
 ### 开发 Console 模块
 
