@@ -26,7 +26,6 @@ import (
 	"github.com/zhimma/grove/pkg/scheduler"
 	"github.com/zhimma/grove/pkg/secretbox"
 	"github.com/zhimma/grove/pkg/storage"
-	"github.com/zhimma/grove/pkg/transaction"
 )
 
 type Provider struct {
@@ -38,7 +37,6 @@ type Provider struct {
 	JobServer     *job.Server
 	Enforcers     map[string]*rbac.Enforcer
 	Storage       *storage.Manager
-	TxManager     transaction.Manager
 	Cache         *cache.Manager
 	HTTPClient    *httpclient.Client
 	Event         *event.Dispatcher
@@ -70,7 +68,6 @@ func APIOptions() []Option {
 		WithJob(),
 		WithCasbin(),
 		WithStorage(),
-		WithTransaction(),
 		WithCache(),
 		WithHTTPClient(),
 		WithEvent(),
@@ -86,7 +83,6 @@ func ConsoleOptions() []Option {
 		WithConfigSecrets(),
 		WithCasbin(),
 		WithStorage(),
-		WithTransaction(),
 		WithCache(),
 		WithHTTPClient(),
 		WithEvent(),
@@ -470,16 +466,6 @@ func WithStorage() Option {
 			return err
 		}
 		p.Storage = manager
-		return nil
-	}
-}
-
-func WithTransaction() Option {
-	return func(p *Provider) error {
-		if p.DB == nil || p.DB.Default() == nil {
-			return nil
-		}
-		p.TxManager = transaction.NewManager(p.DB.Default())
 		return nil
 	}
 }

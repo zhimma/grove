@@ -2,6 +2,7 @@ package transaction
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -11,44 +12,6 @@ import (
 type txTestUser struct {
 	ID   uint   `gorm:"primaryKey"`
 	Name string `gorm:"size:64"`
-}
-
-func TestNewManagerRejectsNilDB(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected panic when creating transaction manager with nil db")
-		}
-	}()
-
-	_ = NewManager(nil)
-}
-
-func TestExecuteReusesExistingTransaction(t *testing.T) {
-	db := openTransactionTestDB(t)
-	manager := NewManager(db)
-
-	var nestedCount int
-	err := manager.Execute(context.Background(), func(ctx context.Context) error {
-		return manager.Execute(ctx, func(inner context.Context) error {
-			nestedCount++
-			return GetDB(inner, db).Create(&txTestUser{Name: "nested"}).Error
-		})
-	})
-	if err != nil {
-		t.Fatalf("execute failed: %v", err)
-	}
-
-	if nestedCount != 1 {
-		t.Fatalf("expected nested callback once, got %d", nestedCount)
-	}
-
-	var count int64
-	if err := db.Model(&txTestUser{}).Count(&count).Error; err != nil {
-		t.Fatalf("count users failed: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected 1 created row, got %d", count)
-	}
 }
 
 func TestGetDBHandlesNilDefault(t *testing.T) {
@@ -62,6 +25,34 @@ func TestGetDBHandlesNilDefault(t *testing.T) {
 
 	if db := GetDB(ctx, defaultDB); db == nil || db.Statement.ConnPool != overrideDB.Statement.ConnPool {
 		t.Fatal("expected override database from context")
+	}
+}
+
+// This is how services actually use the package: the caller opens a gorm
+// transaction and hands the handle down through context, and the callee joins
+// it via GetDB. If GetDB returned the default connection instead, the callee's
+// writes would land outside the transaction and survive a rollback.
+func TestGetDBJoinsTheCallersTransaction(t *testing.T) {
+	db := openTransactionTestDB(t)
+	wantErr := errors.New("caller aborted")
+
+	err := db.Transaction(func(tx *gorm.DB) error {
+		ctx := WithDB(context.Background(), tx)
+		if err := GetDB(ctx, db).Create(&txTestUser{Name: "joined"}).Error; err != nil {
+			return err
+		}
+		return wantErr
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("transaction error = %v, want %v", err, wantErr)
+	}
+
+	var count int64
+	if err := db.Model(&txTestUser{}).Count(&count).Error; err != nil {
+		t.Fatalf("count users: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("callee wrote outside the caller's transaction: %d rows survived the rollback", count)
 	}
 }
 
