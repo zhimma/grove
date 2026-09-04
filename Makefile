@@ -67,6 +67,8 @@ docs.check: ## 检查 canonical 文档中的架构示例是否与当前代码一
 		-e 'RegisterArticleRoutes(protected, p)' \
 		-e 'route.WrapWithCatalog(' \
 		-e 'catalogs ...*route.Catalog' \
+		-e 'response.OK(' \
+		-e 'response.Error(' \
 		-e '业务代码优先通过 `internal/provider.Provider`' \
 		-e '数据库通过 `provider.DB` 的命名资源访问' \
 		$$files; then \

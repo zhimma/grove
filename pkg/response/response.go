@@ -14,15 +14,14 @@ import (
 )
 
 type Response struct {
-	Code      int         `json:"code"`
-	Message   string      `json:"message"`
-	Data      interface{} `json:"data,omitempty"`
-	RequestID string      `json:"request_id,omitempty"`
+	Code      int    `json:"code"`
+	Message   string `json:"message"`
+	Data      any    `json:"data,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
 }
 
-// OK writes a successful response with the framework's canonical 200 status.
-// Success is retained as the original public name for compatibility.
-func OK(c *gin.Context, data interface{}) {
+// Success writes a successful response with the canonical 200 envelope.
+func Success(c *gin.Context, data any) {
 	write(c, http.StatusOK, Response{
 		Code:      0,
 		Message:   "ok",
@@ -31,14 +30,10 @@ func OK(c *gin.Context, data interface{}) {
 	})
 }
 
-func Success(c *gin.Context, data interface{}) {
-	OK(c, data)
-}
-
 // Created is the success counterpart for resource-creation endpoints. The
-// envelope remains identical to OK so clients only need to inspect HTTP
+// envelope remains identical to Success so clients only need to inspect HTTP
 // status when they care about creation semantics.
-func Created(c *gin.Context, data interface{}) {
+func Created(c *gin.Context, data any) {
 	write(c, http.StatusCreated, Response{
 		Code:      0,
 		Message:   "ok",
@@ -62,8 +57,8 @@ func NoContent(c *gin.Context) {
 	c.Writer.WriteHeaderNow()
 }
 
-func Fail(c *gin.Context, input interface{}) {
-	httpErr := normalize(input)
+func Fail(c *gin.Context, err error) {
+	httpErr := errx.Normalize(err)
 	if httpErr == nil {
 		return
 	}
@@ -92,13 +87,6 @@ func Fail(c *gin.Context, input interface{}) {
 	write(c, status, resp)
 }
 
-// Error is a descriptive alias for Fail for handlers that prefer a
-// status/error-oriented vocabulary. Both functions intentionally share the
-// exact same envelope and logging behavior.
-func Error(c *gin.Context, input interface{}) {
-	Fail(c, input)
-}
-
 func responseMessage(httpErr *errx.HTTPError, status int) string {
 	if httpErr == nil {
 		return ""
@@ -118,14 +106,14 @@ func responseMessage(httpErr *errx.HTTPError, status int) string {
 	return "请求处理失败"
 }
 
-func buildErrorData(httpErr *errx.HTTPError, status int, code string, debug bool) map[string]interface{} {
+func buildErrorData(httpErr *errx.HTTPError, status int, code string, debug bool) map[string]any {
 	if httpErr == nil {
 		return nil
 	}
 
-	var data map[string]interface{}
+	var data map[string]any
 	if httpErr.Data != nil {
-		data = make(map[string]interface{}, len(httpErr.Data)+1)
+		data = make(map[string]any, len(httpErr.Data)+1)
 		for key, value := range httpErr.Data {
 			data[key] = value
 		}
@@ -138,7 +126,7 @@ func buildErrorData(httpErr *errx.HTTPError, status int, code string, debug bool
 
 	if code != "" {
 		if data == nil {
-			data = make(map[string]interface{}, 1)
+			data = make(map[string]any, 1)
 		}
 		// The envelope's machine-readable code is authoritative. Do not let a
 		// stale value embedded in Data disagree with HTTPError.Code.
@@ -150,9 +138,9 @@ func buildErrorData(httpErr *errx.HTTPError, status int, code string, debug bool
 	// locally through the explicit debug envelope.
 	if debug && status >= http.StatusInternalServerError && httpErr.Cause != nil {
 		if data == nil {
-			data = make(map[string]interface{}, 1)
+			data = make(map[string]any, 1)
 		}
-		data["debug"] = map[string]interface{}{
+		data["debug"] = map[string]any{
 			"error": httpErr.Cause.Error(),
 			"type":  fmt.Sprintf("%T", httpErr.Cause),
 		}
@@ -239,19 +227,4 @@ func setRequestIDHeader(c *gin.Context, id string) {
 		return
 	}
 	c.Header("X-Request-Id", id)
-}
-
-func normalize(input interface{}) *errx.HTTPError {
-	switch value := input.(type) {
-	case nil:
-		return nil
-	case *errx.HTTPError:
-		return value
-	case error:
-		return errx.Normalize(value)
-	case string:
-		return errx.InvalidParams().WithMessage(value)
-	default:
-		return errx.Internal()
-	}
 }

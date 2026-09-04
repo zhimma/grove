@@ -75,7 +75,7 @@ func (h *StorageHandler) Upload(c *gin.Context) {
 			response.Fail(c, errx.RequestBodyTooLarge(maxBytesErr.Limit))
 			return
 		}
-		response.Fail(c, "file is required")
+		response.Fail(c, errx.InvalidParams().WithMessage("file is required"))
 		return
 	}
 	result, serviceErr := h.service.UploadFile(c.Request.Context(), consoleservice.UploadStorageFileInput{

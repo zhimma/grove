@@ -250,3 +250,41 @@ func TestResponseSuccessHelpersKeepEnvelopeAndStatus(t *testing.T) {
 		t.Fatalf("expected no-content request id header, got %q", got)
 	}
 }
+
+// Fail used to accept interface{} and route anything it did not recognise to a
+// bare 500, discarding the value. Taking an error moves that to compile time,
+// and a plain error must still carry its message rather than be flattened.
+func TestFailKeepsAPlainErrorMessage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+	Fail(c, errx.InvalidParams().WithMessage("file is required"))
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", recorder.Code)
+	}
+	var payload Response
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if payload.Message != "file is required" {
+		t.Fatalf("message = %q, want the caller's message", payload.Message)
+	}
+}
+
+func TestFailWritesNothingForANilError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+	Fail(c, nil)
+
+	if recorder.Body.Len() != 0 {
+		t.Fatalf("nil error produced a body: %s", recorder.Body.String())
+	}
+}

@@ -168,12 +168,12 @@ func Internal() *HTTPError {
 	return New(http.StatusInternalServerError, "internal_error", "系统繁忙，请稍后再试")
 }
 
-// Common error constants for convenience
-var (
-	ErrDatabase       = Internal().WithCode("database_error")
-	ErrRecordNotFound = NotFound().WithCode("record_not_found")
-	ErrNotFound       = NotFound()
-)
+// This package deliberately exports no sentinel error values. The constructors
+// (NotFound, Internal, ...) return a fresh *HTTPError on every call, and
+// *HTTPError has no Is method, so a package-level `var ErrNotFound = NotFound()`
+// would never match under errors.Is — it would compile, read correctly, and
+// silently evaluate to false. Add an Is method first if sentinels are ever
+// needed.
 
 func Normalize(err error) *HTTPError {
 	if err == nil {
