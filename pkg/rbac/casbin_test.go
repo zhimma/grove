@@ -2,6 +2,7 @@ package rbac
 
 import (
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -111,13 +112,7 @@ func TestNilEnforcerCanFailsClosed(t *testing.T) {
 	}
 }
 
-func openRBACFailureTest(t *testing.T) (*gorm.DB, *Enforcer) {
-	t.Helper()
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/rbac.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.Exec(`
+const consoleCasbinRuleDDL = `
 CREATE TABLE console_casbin_rules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ptype TEXT NOT NULL DEFAULT '',
@@ -129,7 +124,15 @@ CREATE TABLE console_casbin_rules (
     v5 TEXT NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX idx_console_casbin_rules_unique
-ON console_casbin_rules (ptype, v0, v1, v2, v3, v4, v5);`).Error; err != nil {
+ON console_casbin_rules (ptype, v0, v1, v2, v3, v4, v5);`
+
+func openRBACFailureTest(t *testing.T) (*gorm.DB, *Enforcer) {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/rbac.db"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.Exec(consoleCasbinRuleDDL).Error; err != nil {
 		t.Fatalf("create casbin table: %v", err)
 	}
 	enforcer, err := New(db, &Config{TableName: "console_casbin_rules"})
@@ -171,5 +174,50 @@ func assertRulesEqual(t *testing.T, actual, expected [][]string) {
 				t.Fatalf("rule %d field %d = %q, expected %q", i, j, actual[i][j], expected[i][j])
 			}
 		}
+	}
+}
+
+// A second instance must pick up a policy written by another instance. The
+// enforcer only reloads on a timer, so this drives the shortest interval the
+// API accepts and waits for the reload rather than asserting immediately.
+func TestAutoLoadPolicyPicksUpPolicyWrittenByAnotherEnforcer(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/autoload.db"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.Exec(consoleCasbinRuleDDL).Error; err != nil {
+		t.Fatalf("create casbin table: %v", err)
+	}
+
+	writer, err := New(db, &Config{TableName: "console_casbin_rules"})
+	if err != nil {
+		t.Fatalf("new writer enforcer: %v", err)
+	}
+	reader, err := New(db, &Config{TableName: "console_casbin_rules", AutoLoadInterval: 20 * time.Millisecond})
+	if err != nil {
+		t.Fatalf("new reader enforcer: %v", err)
+	}
+	t.Cleanup(func() { _ = reader.Close() })
+
+	if allowed, err := reader.Can("role-1", "GET /console/v1/roles"); err != nil || allowed {
+		t.Fatalf("reader must not allow before the policy exists: allowed=%v err=%v", allowed, err)
+	}
+	if err := writer.AddConsolePolicies([][]string{{"role-1", "GET /console/v1/roles"}}); err != nil {
+		t.Fatalf("write policy: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		allowed, err := reader.Can("role-1", "GET /console/v1/roles")
+		if err != nil {
+			t.Fatalf("enforce: %v", err)
+		}
+		if allowed {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("reader never reloaded the policy written by the other enforcer")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

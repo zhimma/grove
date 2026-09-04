@@ -16,6 +16,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// defaultCasbinAutoLoadSeconds keeps replicas within half a minute of a policy
+// change without making every request hit the database.
+const defaultCasbinAutoLoadSeconds = 30
+
 var envPattern = regexp.MustCompile(`\$\{([A-Z][A-Z0-9_]*)(?::([^}]*))?\}`)
 
 func Load() (*Config, error) {
@@ -397,6 +401,14 @@ func (c *Config) normalize(service string, debugConfigured bool) {
 	if c.Casbin.Enforcers == nil {
 		c.Casbin.Enforcers = map[string]CasbinEnforcerConfig{}
 	}
+	for name, enforcerCfg := range c.Casbin.Enforcers {
+		// Reload on by default: a silently stale policy on a second replica is
+		// a permission bug nobody thinks to look for. Set 0 to opt out.
+		if enforcerCfg.AutoLoadSeconds == 0 {
+			enforcerCfg.AutoLoadSeconds = defaultCasbinAutoLoadSeconds
+			c.Casbin.Enforcers[name] = enforcerCfg
+		}
+	}
 	if strings.TrimSpace(c.Storage.Default) == "" {
 		c.Storage.Default = "local"
 	}
@@ -587,6 +599,9 @@ func (c Config) Validate(service string) error {
 		databaseCfg, ok := c.databaseConfig(databaseName)
 		if !ok || !databaseCfg.Enabled {
 			return fmt.Errorf("casbin enforcer %q requires enabled database %q", name, databaseName)
+		}
+		if enforcer.AutoLoadSeconds < 0 {
+			return fmt.Errorf("casbin enforcer %q auto_load_seconds must not be negative", name)
 		}
 	}
 	timezone := strings.TrimSpace(c.Scheduler.Timezone)

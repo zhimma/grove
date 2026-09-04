@@ -266,14 +266,17 @@ func WithCasbin() Option {
 				return fmt.Errorf("casbin enforcer %q database %q: %w", name, resourceName, err)
 			}
 			enforcer, err := rbac.New(db, &rbac.Config{
-				Mode:      rbac.Mode(cfg.Mode),
-				TableName: cfg.TableName,
-				ModelPath: cfg.ModelPath,
+				Mode:             rbac.Mode(cfg.Mode),
+				TableName:        cfg.TableName,
+				ModelPath:        cfg.ModelPath,
+				AutoLoadInterval: time.Duration(cfg.AutoLoadSeconds) * time.Second,
 			})
 			if err != nil {
 				return fmt.Errorf("init casbin enforcer %q: %w", name, err)
 			}
-			p.Enforcers[strings.TrimSpace(strings.ToLower(name))] = enforcer
+			enforcerName := strings.TrimSpace(strings.ToLower(name))
+			p.Enforcers[enforcerName] = enforcer
+			p.AddCloser("casbin:"+enforcerName, enforcer.Close)
 		}
 		return nil
 	}

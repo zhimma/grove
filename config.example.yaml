@@ -83,11 +83,14 @@ casbin:
       database: default
       mode: rbac
       table_name: casbin_rules
+      # 策略重载间隔（秒）。留空取默认 30；设为 0 关闭，仅单实例部署可关。
+      auto_load_seconds: 30
     console:
       enabled: true
       database: default
       mode: rbac
       table_name: console_casbin_rules
+      auto_load_seconds: 30
 
 storage:
   default: local

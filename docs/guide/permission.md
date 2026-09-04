@@ -78,7 +78,12 @@ casbin:
       database: default
       mode: rbac
       table_name: console_casbin_rules
+      auto_load_seconds: 30
 ```
+
+`auto_load_seconds` 是策略重载间隔。Enforcer 在启动时把策略读进内存，此后只按这个间隔重新读取；不开的话，A 实例改完角色权限，B 实例会一直用旧策略。默认 30 秒，设为 0 关闭——只有确定单实例部署才可以关。
+
+代价是变更最多延迟一个间隔生效。需要即时生效再换 Casbin watcher。
 
 运行时检查示例：
 

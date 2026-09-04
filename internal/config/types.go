@@ -118,6 +118,10 @@ type CasbinEnforcerConfig struct {
 	Mode      string `yaml:"mode"`
 	TableName string `yaml:"table_name"`
 	ModelPath string `yaml:"model_path"`
+	// AutoLoadSeconds is how often the enforcer re-reads its policy so a role
+	// edit on one instance reaches the others. 0 disables the reload, which is
+	// only safe for a single-instance deployment.
+	AutoLoadSeconds int `yaml:"auto_load_seconds"`
 }
 
 type StorageConfig struct {

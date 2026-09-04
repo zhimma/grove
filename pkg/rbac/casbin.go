@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	rawcasbin "github.com/casbin/casbin/v3"
 	casbinmodel "github.com/casbin/casbin/v3/model"
@@ -23,6 +24,12 @@ type Config struct {
 	Mode      Mode
 	TableName string
 	ModelPath string
+	// AutoLoadInterval makes the enforcer re-read its policy from the adapter
+	// on a timer. Without it a replica keeps serving the policy it loaded at
+	// boot, so a role edit made on one instance never reaches the others.
+	// ponytail: timer reload, not a Redis watcher — changes take up to one
+	// interval to propagate. Swap in a casbin watcher if that ever matters.
+	AutoLoadInterval time.Duration
 }
 
 type Enforcer struct {
@@ -71,6 +78,9 @@ func New(db *gorm.DB, cfg *Config) (*Enforcer, error) {
 	}
 	if err := enforcer.LoadPolicy(); err != nil {
 		return nil, fmt.Errorf("load casbin policy: %w", err)
+	}
+	if cfg != nil && cfg.AutoLoadInterval > 0 {
+		enforcer.StartAutoLoadPolicy(cfg.AutoLoadInterval)
 	}
 
 	return &Enforcer{
@@ -260,4 +270,14 @@ e = some(where (p.eft == allow))
 m = g(r.sub, p.sub) && r.obj == p.obj
 `
 	}
+}
+
+// Close stops the policy auto-reload goroutine. Safe on a nil Enforcer and on
+// one that never started auto-loading.
+func (e *Enforcer) Close() error {
+	if e == nil || e.SyncedEnforcer == nil {
+		return nil
+	}
+	e.StopAutoLoadPolicy()
+	return nil
 }
