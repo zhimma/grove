@@ -2,8 +2,10 @@ package scheduler
 
 import (
 	"context"
+
 	"errors"
 	"fmt"
+	"github.com/zhimma/grove/pkg/cache"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -309,5 +311,73 @@ func BenchmarkSchedulerRegister(b *testing.B) {
 		if err := s.RegisterFunc(fmt.Sprintf("task_%d", i), "0 0 0 * * *", job); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// Two workers sharing one lock store must not both run the same Mutex task.
+// A shared cache.Store stands in for Redis: same Add/Get/Delete contract, no
+// container needed.
+func TestMutexTaskRunsOnOneInstanceWhenSharingALockStore(t *testing.T) {
+	shared := cache.NewMemoryStore()
+	var runs atomic.Int32
+	release := make(chan struct{})
+
+	newWorker := func(t *testing.T) *Scheduler {
+		t.Helper()
+		s, err := New(Config{Location: "Local", Lock: shared, LockTTL: time.Minute})
+		if err != nil {
+			t.Fatalf("new scheduler: %v", err)
+		}
+		t.Cleanup(func() { _ = s.Stop() })
+		if err := s.Register(&Task{
+			Name:     "report",
+			Schedule: "@every 1h",
+			Mutex:    true,
+			Job: JobFunc(func(context.Context) error {
+				runs.Add(1)
+				<-release
+				return nil
+			}),
+		}); err != nil {
+			t.Fatalf("register: %v", err)
+		}
+		return s
+	}
+
+	workerA, workerB := newWorker(t), newWorker(t)
+
+	started := make(chan error, 1)
+	go func() { started <- workerA.Run("report") }()
+	waitFor(t, func() bool { return runs.Load() == 1 }, "first worker never started the task")
+
+	if err := workerB.Run("report"); !errors.Is(err, ErrTaskRunning) {
+		t.Fatalf("second worker must skip a task another instance holds, got %v", err)
+	}
+
+	close(release)
+	if err := <-started; err != nil {
+		t.Fatalf("first worker: %v", err)
+	}
+	if got := runs.Load(); got != 1 {
+		t.Fatalf("task ran %d times across the deployment, want 1", got)
+	}
+
+	// The lock is released, so the next tick is free to run somewhere.
+	if err := workerB.Run("report"); err != nil {
+		t.Fatalf("second worker after release: %v", err)
+	}
+	if got := runs.Load(); got != 2 {
+		t.Fatalf("runs after release = %d, want 2", got)
+	}
+}
+
+func waitFor(t *testing.T, cond func() bool, message string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatal(message)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }

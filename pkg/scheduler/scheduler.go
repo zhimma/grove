@@ -1,22 +1,31 @@
 package scheduler
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/robfig/cron/v3"
+	"github.com/zhimma/grove/pkg/cache"
 	"github.com/zhimma/grove/pkg/logger"
 )
 
 const (
-	defaultStopTimeout         = 30 * time.Second
+	defaultStopTimeout = 30 * time.Second
+	// defaultLockTTL bounds how long a crashed worker keeps a task's cluster
+	// lock. Long enough for a slow job, short enough that a crash does not
+	// silently stop the schedule for hours.
+	defaultLockTTL             = 15 * time.Minute
+	lockOpTimeout              = 3 * time.Second
 	EverySecondSchedule        = "* * * * * *"
 	EveryMinuteSchedule        = "0 * * * * *"
 	EveryFiveMinutesSchedule   = "0 */5 * * * *"
@@ -55,6 +64,13 @@ type Task struct {
 type Config struct {
 	Location    string
 	StopTimeout time.Duration
+	// Lock makes Mutex tasks exclusive across the whole deployment instead of
+	// only within this process. Leave it nil for a single worker; point it at
+	// a Redis-backed cache.Store once a second worker exists, or every replica
+	// runs every task on every tick.
+	Lock cache.Store
+	// LockTTL bounds how long a crashed worker can keep a task's cluster lock.
+	LockTTL time.Duration
 }
 
 type Scheduler struct {
@@ -72,6 +88,8 @@ type Scheduler struct {
 	stoppedCh   chan struct{}
 	stopTimeout time.Duration
 	location    *time.Location
+	lock        cache.Store
+	lockTTL     time.Duration
 }
 
 type scheduledTask struct {
@@ -107,6 +125,9 @@ func New(config Config) (*Scheduler, error) {
 	if config.StopTimeout <= 0 {
 		config.StopTimeout = defaultStopTimeout
 	}
+	if config.LockTTL <= 0 {
+		config.LockTTL = defaultLockTTL
+	}
 	rootCtx, cancel := context.WithCancel(context.Background())
 	s := &Scheduler{
 		tasks:       make(map[string]*scheduledTask),
@@ -117,6 +138,8 @@ func New(config Config) (*Scheduler, error) {
 		stoppedCh:   make(chan struct{}),
 		stopTimeout: config.StopTimeout,
 		location:    location,
+		lock:        config.Lock,
+		lockTTL:     config.LockTTL,
 	}
 	s.cron = cron.New(
 		cron.WithLocation(location),
@@ -223,6 +246,16 @@ func (s *Scheduler) executeTask(record *scheduledTask) (err error) {
 	}
 	if record.task.Mutex {
 		defer record.state.locked.Store(false)
+
+		release, acquired, lockErr := s.acquireClusterLock(record.task.Name)
+		if lockErr != nil {
+			return lockErr
+		}
+		if !acquired {
+			logger.Warn().Str("task", record.task.Name).Msg("任务已被其他实例持有，跳过本次执行")
+			return ErrTaskRunning
+		}
+		defer release()
 	}
 
 	s.mu.Lock()
@@ -405,4 +438,53 @@ func (s *Scheduler) Weekly(name string, job Job) error {
 
 func (s *Scheduler) Monthly(name string, job Job) error {
 	return s.Register(&Task{Name: name, Schedule: MonthlySchedule, Job: job})
+}
+
+// acquireClusterLock takes the deployment-wide slot for a Mutex task. With no
+// Lock configured it is a no-op, which is the correct single-worker behaviour.
+//
+// ponytail: release is Get-then-Delete, not a compare-and-delete script. The
+// token check means a worker that overran lockTTL will not delete the lock a
+// second worker has since taken; the remaining race is the microseconds
+// between that Get and Delete, against a TTL measured in minutes. Move to a
+// Lua CAS release if a task ever runs closer to its TTL than that.
+func (s *Scheduler) acquireClusterLock(taskName string) (release func(), acquired bool, err error) {
+	if s.lock == nil {
+		return func() {}, true, nil
+	}
+	key := clusterLockKey(taskName)
+	token := []byte(strconv.FormatInt(time.Now().UnixNano(), 36) + "-" + strconv.Itoa(os.Getpid()))
+
+	ctx, cancel := context.WithTimeout(s.rootCtx, lockOpTimeout)
+	defer cancel()
+
+	stored, err := s.lock.Add(ctx, key, token, s.lockTTL)
+	if err != nil {
+		logger.Error().Err(err).Str("task", taskName).Msg("获取任务集群锁失败")
+		return nil, false, fmt.Errorf("acquire cluster lock for task %q: %w", taskName, err)
+	}
+	if !stored {
+		return nil, false, nil
+	}
+
+	return func() {
+		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), lockOpTimeout)
+		defer releaseCancel()
+
+		current, found, getErr := s.lock.Get(releaseCtx, key)
+		if getErr != nil || !found {
+			return
+		}
+		if !bytes.Equal(current, token) {
+			logger.Warn().Str("task", taskName).Msg("任务集群锁已被其他实例接管，跳过释放")
+			return
+		}
+		if delErr := s.lock.Delete(releaseCtx, key); delErr != nil {
+			logger.Error().Err(delErr).Str("task", taskName).Msg("释放任务集群锁失败")
+		}
+	}, true, nil
+}
+
+func clusterLockKey(taskName string) string {
+	return "scheduler:lock:" + strings.TrimSpace(taskName)
 }

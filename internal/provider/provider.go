@@ -112,6 +112,7 @@ func WorkerOptions() []Option {
 	return []Option{
 		WithObservability(),
 		WithRedis(),
+		WithCache(),
 		WithJobServer(),
 		WithScheduler(),
 	}
@@ -532,9 +533,17 @@ func WithScheduler() Option {
 		if !p.Config.Scheduler.Enabled {
 			return nil
 		}
+		// Mutex tasks need a lock every worker can see. The Redis cache store is
+		// that shared thing when Redis is configured; without it the lock stays
+		// nil and Mutex is process-local, which only holds for a single worker.
+		var clusterLock cache.Store
+		if p.Cache != nil && p.RedisClient != nil {
+			clusterLock = p.Cache.Store("redis")
+		}
 		sched, err := scheduler.New(scheduler.Config{
 			Location:    p.Config.Scheduler.Timezone,
 			StopTimeout: time.Duration(p.Config.Server.ShutdownTimeout) * time.Second,
+			Lock:        clusterLock,
 		})
 		if err != nil {
 			return fmt.Errorf("init scheduler: %w", err)
