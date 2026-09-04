@@ -51,7 +51,7 @@ type UserPathRequest struct {
 	ID string `uri:"id" binding:"required" label:"用户ID"`
 }
 
-func RegisterUserRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, catalog *route.Catalog) {
+func RegisterUserRoutes(protected *gin.RouterGroup, dbs database.Connections, catalog *route.Catalog) {
 	h := &UserHandler{
 		userSvc: consoleservice.NewUserService(dbs),
 	}

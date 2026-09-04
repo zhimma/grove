@@ -53,7 +53,7 @@ type SystemConfigGroupPathRequest struct {
 	Group string `uri:"group" binding:"required" label:"配置分组"`
 }
 
-func RegisterSystemConfigRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, secrets *secretbox.Box, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
+func RegisterSystemConfigRoutes(protected *gin.RouterGroup, dbs database.Connections, secrets *secretbox.Box, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
 	h := &SystemConfigHandler{
 		service: consoleservice.NewSystemConfigService(dbs, secrets, policies...),
 	}

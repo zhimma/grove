@@ -54,7 +54,7 @@ type ArticlePathRequest struct {
 	ID string `uri:"id" binding:"required" label:"文章ID"`
 }
 
-func RegisterArticleRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
+func RegisterArticleRoutes(protected *gin.RouterGroup, dbs database.Connections, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
 	h := &ArticleHandler{articleSvc: consoleservice.NewArticleService(dbs, policies...)}
 	articles := wrapRoute(protected.Group("/articles"), catalog)
 	articles.GET("", h.List).Name("内容管理.文章列表")

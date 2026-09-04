@@ -71,7 +71,7 @@ type AdminPathRequest struct {
 	ID string `uri:"id" binding:"required" label:"管理员ID"`
 }
 
-func RegisterAdminRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, enforcer *rbac.Enforcer, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
+func RegisterAdminRoutes(protected *gin.RouterGroup, dbs database.Connections, enforcer *rbac.Enforcer, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
 	h := &AdminHandler{
 		adminSvc: consoleservice.NewAdminService(dbs, enforcer, policies...),
 	}

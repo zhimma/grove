@@ -30,7 +30,7 @@ type StorageDownloadRequest struct {
 	Path string `form:"path" label:"文件路径"`
 }
 
-func RegisterStorageRoutesWithDeps(protected *gin.RouterGroup, manager *storage.Manager, catalog *route.Catalog) {
+func RegisterStorageRoutes(protected *gin.RouterGroup, manager *storage.Manager, catalog *route.Catalog) {
 	h := &StorageHandler{
 		service: consoleservice.NewStorageService(manager),
 	}

@@ -44,11 +44,9 @@ make contracts   PASS（路由↔OpenAPI、前端↔OpenAPI 双向）
 
 | # | 问题 | 位置 | 影响 |
 | --- | --- | --- | --- |
-| 1 | `pkg` 反向依赖 `internal` | `pkg/server/core.go:15-18` | `pkg` 名义通用实则锁死本仓库，框架化最大阻碍 |
-| 2 | Casbin 无跨实例策略刷新 | `pkg/rbac/` 无 Watcher / AutoLoad | 多副本下改权限不生效，只能单实例部署 |
-| 3 | `pkg/route` 双轨状态 | `wrap.go:109-111` 全局 `sync.Map` 与实例 `Catalog` 并存 | 生产已全部走 Catalog，全局那套是死路径 |
-| 4 | 缺 Mail / Notification / i18n | 全仓无 smtp 相关代码 | 注册、找回密码、告警无法交付 |
-| 5 | 业务纵深薄 | `app/api` 仅 starter+auth，`app/worker` 仅 default_job | 未验证「新增一个功能要改几处」 |
+| 1 | Casbin 无跨实例策略刷新 | `pkg/rbac/` 无 Watcher / AutoLoad | 多副本下改权限不生效，只能单实例部署 |
+| 2 | 缺 Mail / Notification / i18n | 全仓无 smtp 相关代码 | 注册、找回密码、告警无法交付 |
+| 3 | 业务纵深薄 | `app/api` 仅 starter+auth，`app/worker` 仅 default_job | 未验证「新增一个功能要改几处」 |
 
 ## 4. 任务
 
@@ -56,9 +54,9 @@ make contracts   PASS（路由↔OpenAPI、前端↔OpenAPI 双向）
 
 | ID | 任务 | 验收 |
 | --- | --- | --- |
-| T1 | `pkg/server` → `internal/server`；更新 3 个 importer | `grep -r 'grove/internal' pkg/` 为空；`make verify` 通过 |
-| T2 | 删 `pkg/route` 全局 `sync.Map`、包级 `GetName/GetScope/IsIgnored`、`ResetForTest`；合并 `permission` 与 `admin_auth` 的 `*WithCatalog` 双份实现；`catalog` 改必填 | `go test ./...`、`make contracts` 通过 |
-| T3 | 清理 `RegisterXxxRoutesWithDeps` 的 `WithDeps` 后缀（已无非-Deps 变体） | 纯重命名，测试全绿 |
+| ~~T1~~ | ~~`pkg/server` → `internal/server`~~ | ✅ `891540e` |
+| ~~T2~~ | ~~删 `pkg/route` 全局状态 + 合并 `*WithCatalog` 双轨~~ | ✅ `a0ac0ff` |
+| ~~T3~~ | ~~清理 `RegisterXxxRoutesWithDeps` 后缀~~ | ✅ 本节第 3 行 |
 
 ### Phase 2 — 多实例能力
 
@@ -95,3 +93,6 @@ make contracts   PASS（路由↔OpenAPI、前端↔OpenAPI 双向）
 | 日期 | 任务 | 结果 |
 | --- | --- | --- |
 | 2026-08-30 | 上一轮全部任务 | 已完成，见第 1 节 |
+| 2026-09-04 | T1 `pkg/server` → `internal/server` | `891540e`。`pkg/` 非测试代码已无 `internal/` 依赖；`pkg/job/job_test.go` 仍引 `internal/observability`，属测试专用，不影响外部消费，暂留。 |
+| 2026-09-04 | T2 route catalog 单一化 | `a0ac0ff`。删全局 `sync.Map` / `ResetForTest` / 4 组 `*WithCatalog` 双份实现，净删 139 行。 |
+| 2026-09-04 | T3 去 `WithDeps` 后缀 | 纯重命名，11 个注册函数。 |

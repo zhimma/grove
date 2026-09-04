@@ -55,7 +55,7 @@ type RolePathRequest struct {
 	ID string `uri:"id" binding:"required" label:"角色ID"`
 }
 
-func RegisterRoleRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, enforcer *rbac.Enforcer, runtimeCatalog *consoleservice.RuntimePermissionCatalog, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
+func RegisterRoleRoutes(protected *gin.RouterGroup, dbs database.Connections, enforcer *rbac.Enforcer, runtimeCatalog *consoleservice.RuntimePermissionCatalog, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
 	h := &RoleHandler{
 		roleSvc: consoleservice.NewRoleService(dbs, enforcer, runtimeCatalog),
 	}

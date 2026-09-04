@@ -56,17 +56,17 @@ func (r *Router) InstallToEngine(engine *gin.Engine) {
 	)
 
 	catalog := r.p.RouteCatalog
-	handler.RegisterAuthRoutesWithDeps(public, authed, r.p.DB, r.p.GetEnforcer("console"), r.p.TokenManager, loginGuard, catalog)
-	handler.RegisterDashboardRoutesWithDeps(protected, r.p.DB, catalog)
-	handler.RegisterRoleRoutesWithDeps(protected, r.p.DB, r.p.GetEnforcer("console"), runtimeCatalog, pagePolicies, catalog)
+	handler.RegisterAuthRoutes(public, authed, r.p.DB, r.p.GetEnforcer("console"), r.p.TokenManager, loginGuard, catalog)
+	handler.RegisterDashboardRoutes(protected, r.p.DB, catalog)
+	handler.RegisterRoleRoutes(protected, r.p.DB, r.p.GetEnforcer("console"), runtimeCatalog, pagePolicies, catalog)
 	handler.RegisterPermissionRoutes(protected, runtimeCatalog, catalog)
-	handler.RegisterAdminRoutesWithDeps(protected, r.p.DB, r.p.GetEnforcer("console"), pagePolicies, catalog)
-	handler.RegisterUserRoutesWithDeps(protected, r.p.DB, catalog)
-	handler.RegisterArticleRoutesWithDeps(protected, r.p.DB, pagePolicies, catalog)
-	handler.RegisterSessionRoutesWithDeps(protected, r.p.DB, r.p.TokenManager, pagePolicies, catalog)
-	handler.RegisterSystemConfigRoutesWithDeps(protected, r.p.DB, r.p.ConfigSecrets, pagePolicies, catalog)
-	handler.RegisterStorageRoutesWithDeps(protected, r.p.Storage, catalog)
-	handler.RegisterLogRoutesWithDeps(protected, r.p.DB, pagePolicies, catalog)
+	handler.RegisterAdminRoutes(protected, r.p.DB, r.p.GetEnforcer("console"), pagePolicies, catalog)
+	handler.RegisterUserRoutes(protected, r.p.DB, catalog)
+	handler.RegisterArticleRoutes(protected, r.p.DB, pagePolicies, catalog)
+	handler.RegisterSessionRoutes(protected, r.p.DB, r.p.TokenManager, pagePolicies, catalog)
+	handler.RegisterSystemConfigRoutes(protected, r.p.DB, r.p.ConfigSecrets, pagePolicies, catalog)
+	handler.RegisterStorageRoutes(protected, r.p.Storage, catalog)
+	handler.RegisterLogRoutes(protected, r.p.DB, pagePolicies, catalog)
 	// grove:register-routes
 
 	runtimeCatalog.LoadRoutes(engine.Routes(), catalog)

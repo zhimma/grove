@@ -42,7 +42,7 @@ type ListLoginLogsResponse struct {
 	Meta ListMeta       `json:"meta"`
 }
 
-func RegisterLogRoutesWithDeps(protected *gin.RouterGroup, dbs database.Connections, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
+func RegisterLogRoutes(protected *gin.RouterGroup, dbs database.Connections, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
 	h := &LogHandler{
 		logSvc: consoleservice.NewLogService(dbs, policies...),
 	}
