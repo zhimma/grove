@@ -44,9 +44,8 @@ make contracts   PASS（路由↔OpenAPI、前端↔OpenAPI 双向）
 
 | # | 问题 | 位置 | 影响 |
 | --- | --- | --- | --- |
-| 1 | Casbin 无跨实例策略刷新 | `pkg/rbac/` 无 Watcher / AutoLoad | 多副本下改权限不生效，只能单实例部署 |
-| 2 | 缺 Mail / Notification / i18n | 全仓无 smtp 相关代码 | 注册、找回密码、告警无法交付 |
-| 3 | 业务纵深薄 | `app/api` 仅 starter+auth，`app/worker` 仅 default_job | 未验证「新增一个功能要改几处」 |
+| 1 | 缺 Mail / Notification | 全仓无 smtp 相关代码 | 注册、找回密码、告警无法交付 |
+| 2 | 业务纵深薄 | `app/api` 仅 starter+auth，`app/worker` 仅 default_job | 未验证「新增一个功能要改几处」 |
 
 ## 4. 任务
 
@@ -62,8 +61,8 @@ make contracts   PASS（路由↔OpenAPI、前端↔OpenAPI 双向）
 
 | ID | 任务 | 验收 |
 | --- | --- | --- |
-| T4 | Casbin 加 Redis Watcher 或 `StartAutoLoadPolicy` | 双实例改角色权限后另一实例生效 |
-| T5 | Scheduler 用 Redis 锁替代进程内 atomic | 双 worker 不重复执行同一任务 |
+| ~~T4~~ | ~~Casbin 策略定时重载~~ | ✅ `85cac4c` |
+| ~~T5~~ | ~~Scheduler 集群互斥~~ | ✅ `643d1a7` |
 
 ### Phase 3 — 补组件
 
@@ -96,3 +95,5 @@ make contracts   PASS（路由↔OpenAPI、前端↔OpenAPI 双向）
 | 2026-09-04 | T1 `pkg/server` → `internal/server` | `891540e`。`pkg/` 非测试代码已无 `internal/` 依赖；`pkg/job/job_test.go` 仍引 `internal/observability`，属测试专用，不影响外部消费，暂留。 |
 | 2026-09-04 | T2 route catalog 单一化 | `a0ac0ff`。删全局 `sync.Map` / `ResetForTest` / 4 组 `*WithCatalog` 双份实现，净删 139 行。 |
 | 2026-09-04 | T3 去 `WithDeps` 后缀 | 纯重命名，11 个注册函数。 |
+| 2026-09-04 | T4 Casbin 定时重载 | `85cac4c`。复用 `SyncedEnforcer.StartAutoLoadPolicy`，无新依赖；`auto_load_seconds` 默认 30，Provider 关闭时停 goroutine。代价：变更最多延迟一个间隔。 |
+| 2026-09-04 | T5 Scheduler 集群互斥 | `643d1a7`。复用 `pkg/cache.Store` 的 SETNX，无新依赖；Redis 启用时 Mutex 任务全局互斥，未启用时行为不变（仍限单 Worker）。释放为 Get+Delete 比对，非原子 CAS。 |
