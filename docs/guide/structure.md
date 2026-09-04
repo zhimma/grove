@@ -9,7 +9,7 @@ grove/
 ├── app/                  # 服务应用
 ├── cmd/                  # CLI 入口
 ├── internal/             # 仅仓库内部使用的基础设施
-├── pkg/                  # 可复用基础组件
+├── pkg/                  # 基础层（跨服务复用的技术能力）
 ├── database/             # SQL migrations 与 seeds
 ├── docs/                 # 文档
 ├── web/                  # 前端工作区
@@ -66,7 +66,9 @@ grove/
 
 ### `pkg/`
 
-`pkg/` 放置可复用基础组件，不承载具体业务语义，也**不得反向依赖 `internal/`**。当前包含：
+`pkg/` 是本仓库的基础层：跨 api / console / worker 复用的技术能力。它**不是对外发布的通用库**，因此允许出现 console、admin 这类本仓库的领域词（例如 `auth.UserTypeConsole`、`rbac.CheckConsolePermission`）和中文文案。
+
+仍然成立的唯一硬约束：**不得反向依赖 `internal/` 或 `app/`**，用来固定依赖方向。当前包含：
 
 - `auth`
 - `cache`

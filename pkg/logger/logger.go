@@ -63,6 +63,8 @@ func Init(cfg Config) error {
 	if err != nil {
 		level = zerolog.InfoLevel
 	}
+	// Process-wide on purpose: Grove owns its process, and this is the only
+	// place log.level is applied. Removing it disables level configuration.
 	zerolog.SetGlobalLevel(level)
 
 	var writers []io.Writer

@@ -9,7 +9,7 @@ Grove 是一个 console-first 的中大型 Go 单体脚手架，借鉴 Laravel �
 - 后端入口：`app/api`、`app/console`、`app/worker`
 - CLI：`cmd/grove`
 - 共享内部装配：`internal/`
-- 可复用基础组件：`pkg/`
+- 基础层：`pkg/`（跨服务复用的技术能力，不对外发布，不得反向依赖 `internal/`）
 - 数据库迁移与种子：`database/`
 - 管理后台：`web/admin-vben/apps/console`
 - 文档入口：[docs/README.md](docs/README.md)

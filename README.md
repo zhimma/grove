@@ -66,7 +66,7 @@ cmd/grove/                       迁移、seed、RBAC、代码生成 CLI
 internal/config/                 严格配置加载和服务校验
 internal/provider/               启动装配和资源生命周期
 internal/model/                  共享 GORM 模型
-pkg/                             可复用基础组件
+pkg/                             基础层（跨服务复用的技术能力）
 database/migrations/{postgres,mysql}/ 正反向 SQL 迁移
 database/seeds/{postgres,mysql}/     bootstrap/demo seed
 web/admin-vben/apps/console/     Vue 管理后台

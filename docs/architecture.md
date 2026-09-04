@@ -86,7 +86,7 @@ CoreServer → middleware → router → handler → service → model / databas
 
 - 服务专属代码：`app/<service>`
 - 启动装配、配置、共享中间件：`internal/*`
-- 可复用基础组件：`pkg/*`
+- 基础层：`pkg/*`（跨服务复用，不对外发布）
 - 共享模型：`internal/model`
 - SQL 迁移和种子：`database/migrations`、`database/seeds`
 - 前端路由和页面：`web/admin-vben/apps/console/src`
