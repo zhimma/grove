@@ -25,7 +25,7 @@ func TestHTTPErrorUnwrapsCause(t *testing.T) {
 }
 
 func TestWithDataCopiesMap(t *testing.T) {
-	data := map[string]interface{}{"error_code": "one"}
+	data := map[string]any{"error_code": "one"}
 	err := Conflict().WithData(data)
 	data["error_code"] = "two"
 	if got := err.Data["error_code"]; got != "one" {

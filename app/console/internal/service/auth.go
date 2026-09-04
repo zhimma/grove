@@ -212,7 +212,7 @@ func loginProtectionError(code, message string, retryAfter time.Duration) error 
 	return errx.TooManyRequests().
 		WithCode(code).
 		WithMessage(message).
-		WithData(map[string]interface{}{"retry_after": retrySeconds})
+		WithData(map[string]any{"retry_after": retrySeconds})
 }
 
 func loginProtectionUnavailable(err error) error {

@@ -56,7 +56,7 @@ func TestFailPreservesValidationErrors(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/roles", nil)
 	request.SetRequestID(c, "req-2")
 
-	Fail(c, errx.InvalidParams().WithHTTPStatus(http.StatusUnprocessableEntity).WithMessage("请求参数校验失败").WithData(map[string]interface{}{
+	Fail(c, errx.InvalidParams().WithHTTPStatus(http.StatusUnprocessableEntity).WithMessage("请求参数校验失败").WithData(map[string]any{
 		"errors": map[string][]string{
 			"code": {"角色编码不能为空"},
 		},
@@ -202,7 +202,7 @@ func TestFailFiltersReservedDebugDataWhenDebugDisabled(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodGet, "/roles", nil)
 	request.SetRequestMeta(c, request.RequestMeta{RequestID: "req-debug-data", Debug: false})
 
-	Fail(c, errx.Conflict().WithData(map[string]interface{}{
+	Fail(c, errx.Conflict().WithData(map[string]any{
 		"debug":  "must not leak",
 		"reason": "safe",
 	}))
@@ -251,7 +251,7 @@ func TestResponseSuccessHelpersKeepEnvelopeAndStatus(t *testing.T) {
 	}
 }
 
-// Fail used to accept interface{} and route anything it did not recognise to a
+// Fail used to accept any and route anything it did not recognise to a
 // bare 500, discarding the value. Taking an error moves that to compile time,
 // and a plain error must still carry its message rather than be flattened.
 func TestFailKeepsAPlainErrorMessage(t *testing.T) {

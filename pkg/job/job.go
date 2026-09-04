@@ -61,7 +61,7 @@ func NewClient(cfg RedisConfig) *Client {
 	}
 }
 
-func (c *Client) Enqueue(ctx context.Context, taskType string, payload interface{}, opts ...asynq.Option) (string, error) {
+func (c *Client) Enqueue(ctx context.Context, taskType string, payload any, opts ...asynq.Option) (string, error) {
 	if c == nil || c.client == nil {
 		return "", errors.New("任务客户端未初始化")
 	}
@@ -150,7 +150,7 @@ func (s *Server) Shutdown() {
 	}
 }
 
-func ParsePayload(task *asynq.Task, target interface{}) error {
+func ParsePayload(task *asynq.Task, target any) error {
 	return json.Unmarshal(task.Payload(), target)
 }
 

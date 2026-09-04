@@ -245,7 +245,7 @@ func (m *Manager) validateToken(tokenString string) (*Claims, error) {
 		jwt.WithExpirationRequired(),
 		jwt.WithIssuedAt(),
 	)
-	parsed, err := parser.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+	parsed, err := parser.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (any, error) {
 		if token.Method == nil || token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
 			return nil, ErrUnexpectedSigningMethod
 		}

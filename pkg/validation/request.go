@@ -127,7 +127,7 @@ func runRequestHooks(target any) error {
 			return errx.InvalidParams().
 				WithHTTPStatus(http.StatusUnprocessableEntity).
 				WithMessage(validationMessage).
-				WithData(map[string]interface{}{
+				WithData(map[string]any{
 					"errors": map[string][]string{
 						"_error": {err.Error()},
 					},
@@ -141,7 +141,7 @@ func newValidationError(c *gin.Context, err error, target any, source string) er
 	return errx.InvalidParams().
 		WithHTTPStatus(http.StatusUnprocessableEntity).
 		WithMessage(validationMessage).
-		WithData(map[string]interface{}{
+		WithData(map[string]any{
 			"errors": formatErrors(c, err, target, source),
 		})
 }
@@ -151,7 +151,7 @@ func newBindingError(c *gin.Context, err error, target any, source string) error
 	if errors.As(err, &maxBytesErr) {
 		return errx.RequestBodyTooLarge(maxBytesErr.Limit)
 	}
-	return errx.InvalidParams().WithMessage(invalidParamsMessage).WithData(map[string]interface{}{
+	return errx.InvalidParams().WithMessage(invalidParamsMessage).WithData(map[string]any{
 		"errors": formatErrors(c, err, target, source),
 	})
 }

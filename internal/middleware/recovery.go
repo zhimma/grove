@@ -12,7 +12,7 @@ import (
 )
 
 func Recovery() gin.HandlerFunc {
-	return gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
+	return gin.CustomRecovery(func(c *gin.Context, recovered any) {
 		logger.Error().
 			Interface("panic", recovered).
 			Str("request_id", request.GetRequestID(c)).

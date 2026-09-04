@@ -10,7 +10,7 @@ import (
 )
 
 func TestStringArrayScanSupportsBytesAndString(t *testing.T) {
-	for name, input := range map[string]interface{}{
+	for name, input := range map[string]any{
 		"bytes":  []byte(`["a","b"]`),
 		"string": `["a","b"]`,
 	} {

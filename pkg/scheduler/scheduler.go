@@ -184,7 +184,7 @@ func NewDefault() (*Scheduler, error) {
 
 type cronLogger struct{}
 
-func (*cronLogger) Printf(format string, values ...interface{}) {
+func (*cronLogger) Printf(format string, values ...any) {
 	logger.Debug().Msgf(format, values...)
 }
 

@@ -20,7 +20,7 @@ func NewStringArray(values []string) StringArray {
 	return result
 }
 
-func (s *StringArray) Scan(value interface{}) error {
+func (s *StringArray) Scan(value any) error {
 	if value == nil {
 		*s = StringArray{}
 		return nil

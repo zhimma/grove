@@ -10,7 +10,7 @@ type HTTPError struct {
 	HTTPStatus int
 	Message    string
 	Code       string
-	Data       map[string]interface{}
+	Data       map[string]any
 	Cause      error
 }
 
@@ -41,7 +41,7 @@ func (e *HTTPError) Clone() *HTTPError {
 	}
 	cloned := *e
 	if e.Data != nil {
-		cloned.Data = make(map[string]interface{}, len(e.Data))
+		cloned.Data = make(map[string]any, len(e.Data))
 		for key, value := range e.Data {
 			cloned.Data[key] = value
 		}
@@ -76,7 +76,7 @@ func (e *HTTPError) WithHTTPStatus(httpStatus int) *HTTPError {
 	return cloned
 }
 
-func (e *HTTPError) WithData(data map[string]interface{}) *HTTPError {
+func (e *HTTPError) WithData(data map[string]any) *HTTPError {
 	cloned := e.Clone()
 	if cloned == nil {
 		return nil
@@ -97,23 +97,23 @@ func (e *HTTPError) WithCause(err error) *HTTPError {
 // WithDataValue is a small convenience for adding one response-safe field
 // without mutating the source error's data map. It is intentionally limited to
 // a single level; nested values are treated as caller-owned payloads.
-func (e *HTTPError) WithDataValue(key string, value interface{}) *HTTPError {
+func (e *HTTPError) WithDataValue(key string, value any) *HTTPError {
 	cloned := e.Clone()
 	if cloned == nil {
 		return nil
 	}
 	if cloned.Data == nil {
-		cloned.Data = make(map[string]interface{}, 1)
+		cloned.Data = make(map[string]any, 1)
 	}
 	cloned.Data[key] = value
 	return cloned
 }
 
-func cloneData(data map[string]interface{}) map[string]interface{} {
+func cloneData(data map[string]any) map[string]any {
 	if data == nil {
 		return nil
 	}
-	cloned := make(map[string]interface{}, len(data))
+	cloned := make(map[string]any, len(data))
 	for key, value := range data {
 		cloned[key] = value
 	}
@@ -153,7 +153,7 @@ func TooManyRequests() *HTTPError {
 }
 
 func RequestBodyTooLarge(maxBytes int64) *HTTPError {
-	data := map[string]interface{}{}
+	data := map[string]any{}
 	if maxBytes > 0 {
 		data["max_bytes"] = maxBytes
 	}

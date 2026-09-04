@@ -102,7 +102,7 @@ func TestRouterPingAndProfile(t *testing.T) {
 		t.Fatalf("expected 200 for profile, got %d body=%s", resp.Code, resp.Body.String())
 	}
 
-	var payload map[string]interface{}
+	var payload map[string]any
 	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode profile response: %v", err)
 	}
