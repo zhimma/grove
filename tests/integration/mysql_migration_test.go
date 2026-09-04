@@ -96,6 +96,7 @@ func TestMySQLFreshDatabaseMigration(t *testing.T) {
 		"console_operation_logs",
 		"console_login_logs",
 		"console_sessions",
+		"console_scheduled_tasks",
 		"grove_migrations",
 	} {
 		assertMySQLTableExists(t, db, table, true)
@@ -109,6 +110,7 @@ func TestMySQLFreshDatabaseMigration(t *testing.T) {
 		"chk_system_configs_value_type",
 		"fk_console_sessions_admin",
 		"chk_console_sessions_expiry",
+		"chk_console_scheduled_tasks_timeout",
 	} {
 		assertMySQLConstraintExists(t, db, constraint)
 	}

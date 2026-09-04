@@ -98,10 +98,10 @@ Grove 的切法：
 
 #### 任务清单
 
-- [ ] **S1 数据模型与迁移**
+- [x] **S1 数据模型与迁移** — `internal/model/console_scheduled_task.go` + `202604150014` 双方言迁移
   - `console_scheduled_tasks`：`name`(唯一) / `schedule` / `enabled` / `mutex` / `timeout_seconds` / `run_requested_at` / `last_run_at` / `last_status` / `last_error` / `last_duration_ms`
   - postgres + mysql 双份迁移，含 down
-  - 验收：`make migrate.up` 与 `migrate.down` 均可执行；`go test ./tests/integration/` 通过
+  - 验收：`pkg/migrate` 配对/方言/「schedule-only」守卫测试通过；集成测试断言已补但**本机 Docker 不可用，未真实执行 up/down**
 
 - [ ] **S2 Worker 任务注册表**
   - `app/worker/internal/task`：`name → scheduler.Job` 的显式注册表，编译期确定

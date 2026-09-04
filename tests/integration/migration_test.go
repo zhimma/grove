@@ -89,6 +89,7 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 		"console_operation_logs",
 		"console_login_logs",
 		"console_sessions",
+		"console_scheduled_tasks",
 		"idx_system_configs_group_key",
 		"idx_users_email_active",
 		"idx_console_roles_code_active",
@@ -99,6 +100,7 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 		"idx_console_casbin_rules_unique",
 		"idx_console_sessions_refresh_token_hash",
 		"idx_console_sessions_admin_active",
+		"idx_console_scheduled_tasks_enabled",
 		"grove_migrations",
 	} {
 		assertRelationExists(t, db, relation, true)
@@ -114,12 +116,14 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 		"chk_system_configs_value_type",
 		"fk_console_sessions_admin",
 		"chk_console_sessions_expiry",
+		"chk_console_scheduled_tasks_timeout",
 	} {
 		assertConstraintExists(t, db, constraint)
 	}
 	assertExecFails(t, db, `INSERT INTO console_roles (id, name, code, status) VALUES ('invalid-role', 'Invalid', 'invalid', 9)`)
 	assertExecFails(t, db, `INSERT INTO console_admins (id, account, password, role_id, status) VALUES ('invalid-admin', 'invalid-admin', 'unused', 'missing-role', 1)`)
 	assertExecFails(t, db, `INSERT INTO system_configs (id, config_group, config_key, name, value_type) VALUES ('invalid-config', 'test', 'invalid', 'Invalid', 'yaml')`)
+	assertExecFails(t, db, `INSERT INTO console_scheduled_tasks (id, name, schedule, timeout_seconds) VALUES ('invalid-task', 'invalid', '0 * * * * *', -1)`)
 	if _, err := db.Exec(`INSERT INTO casbin_rules (ptype, v0, v1) VALUES ('p', 'integration-role', 'GET /integration')`); err != nil {
 		t.Fatalf("insert casbin rule: %v", err)
 	}
@@ -201,6 +205,7 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 		"console_operation_logs",
 		"console_login_logs",
 		"console_sessions",
+		"console_scheduled_tasks",
 	} {
 		assertRelationExists(t, db, relation, false)
 	}

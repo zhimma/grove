@@ -405,3 +405,32 @@ func mustReadMigration(t *testing.T, path string) string {
 	}
 	return string(content)
 }
+
+// The scheduled task table must stay schedule-only. A column that could carry
+// a command, script or payload would turn a Console edit into remote code
+// execution, which is exactly the design this table avoids.
+func TestConsoleScheduledTasksMigrationStoresScheduleNotTaskBody(t *testing.T) {
+	for _, dialect := range []string{"postgres", "mysql"} {
+		path := filepath.Join("..", "..", "database", "migrations", dialect, "202604150014_create_console_scheduled_tasks.up.sql")
+		content := mustReadMigration(t, path)
+
+		for _, fragment := range []string{
+			"CREATE TABLE IF NOT EXISTS console_scheduled_tasks",
+			"name VARCHAR(120) NOT NULL UNIQUE",
+			"schedule VARCHAR(120) NOT NULL",
+			"run_requested_at",
+			"last_status VARCHAR(20)",
+			"CONSTRAINT chk_console_scheduled_tasks_timeout",
+		} {
+			if !strings.Contains(content, fragment) {
+				t.Errorf("%s scheduled tasks migration missing %q", dialect, fragment)
+			}
+		}
+
+		for _, forbidden := range []string{"command", "script", "shell", "payload", "handler_path", "exec"} {
+			if strings.Contains(strings.ToLower(content), forbidden) {
+				t.Errorf("%s scheduled tasks migration must not store a task body, found %q", dialect, forbidden)
+			}
+		}
+	}
+}
