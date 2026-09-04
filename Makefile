@@ -57,7 +57,7 @@ test.race: ## 运行全部 Go race 测试
 contracts: ## 检查 API 和 Console 路由/OpenAPI 合同
 	$(GO) test ./app/api/internal/docs ./app/console/internal/docs -run 'Contract' -v
 
-quality: quality.go.fmt quality.go.any quality.go.vet docs.check diff.check admin.lint admin.circular ## 运行本地可用的格式、静态与前端质量检查
+quality: quality.go.fmt quality.go.any quality.go.password quality.go.vet docs.check diff.check admin.lint admin.circular ## 运行本地可用的格式、静态与前端质量检查
 
 docs.check: ## 检查 canonical 文档中的架构示例是否与当前代码一致
 	@files='docs/01-开发规范.md docs/02-console-架构与权限.md docs/03-console-新增模块指南.md docs/guide/service.md docs/guide/pkg-components.md docs/guide/cache.md docs/guide/permission.md docs/guide/httpclient.md docs/guide/event.md'; \
@@ -87,6 +87,13 @@ quality.go.any: ## 检查 Go 代码统一使用 any 而非 interface{}
 	@files=$$(find . -name '*.go' -not -path './web/*' -not -path './vendor/*' -print); \
 	if [ -n "$$files" ] && rg -n -F 'interface{}' $$files; then \
 		echo '请使用 any 代替 interface{}（Go 1.18 起为惯例）。'; \
+		exit 1; \
+	fi
+
+quality.go.password: ## 检查密码哈希只在 pkg/password 中实现
+	@files=$$(find . -name '*.go' -not -name '*_test.go' -not -path './web/*' -not -path './vendor/*' -not -path './pkg/password/*' -print); \
+	if [ -n "$$files" ] && rg -n -F 'bcrypt.' $$files; then \
+		echo '密码哈希请通过 pkg/password 调用，不要直接使用 bcrypt（cost 与恒定时间比较需保持一致）。测试可用 bcrypt.MinCost 保持快速。'; \
 		exit 1; \
 	fi
 

@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/model"
@@ -13,6 +12,7 @@ import (
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/logger"
+	"github.com/zhimma/grove/pkg/password"
 	"github.com/zhimma/grove/pkg/ratelimit"
 	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/request"
@@ -26,8 +26,6 @@ type AuthService struct {
 	sessions     *SessionService
 	loginGuard   ratelimit.LoginGuard
 }
-
-var invalidLoginPasswordHash = []byte("$2y$10$WuzL7jUB./OeDcEIx.eBV.WkSEyl5dY1uxdfxdCq4hZDMFfeU1ZGC")
 
 type LoginInput struct {
 	Account    string
@@ -127,14 +125,14 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (LoginOutput,
 		Where("account = ? OR LOWER(email) = LOWER(?) OR phone = ?", account, account, account).
 		First(&admin).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			_ = bcrypt.CompareHashAndPassword(invalidLoginPasswordHash, []byte(input.Password))
+			password.VerifyMiss(input.Password)
 			s.writeLoginLog(ctx, "", account, false, "账号或密码错误")
 			return LoginOutput{}, s.credentialFailure(ctx, loginKey)
 		}
 		return LoginOutput{}, errx.Internal().WithCause(err)
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte(input.Password)); err != nil {
+	if !password.Verify(admin.Password, input.Password) {
 		s.writeLoginLog(ctx, admin.ID, admin.Account, false, "账号或密码错误")
 		return LoginOutput{}, s.credentialFailure(ctx, loginKey)
 	}
@@ -322,10 +320,10 @@ func (s *AuthService) ChangePassword(ctx context.Context, input ChangePasswordIn
 			}
 			return errx.Internal().WithCause(err)
 		}
-		if err := bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte(input.OldPassword)); err != nil {
+		if !password.Verify(admin.Password, input.OldPassword) {
 			return errx.Unauthorized().WithMessage("原密码不正确").WithCode("invalid_credentials")
 		}
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.NewPassword), bcrypt.DefaultCost)
+		hashedPassword, err := password.Hash(input.NewPassword)
 		if err != nil {
 			return errx.Internal().WithCause(err)
 		}

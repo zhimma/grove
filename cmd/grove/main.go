@@ -11,12 +11,12 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/migrate"
+	pkgpassword "github.com/zhimma/grove/pkg/password"
 )
 
 var configFile string
@@ -303,7 +303,7 @@ func runBootstrapSeeds(cmd *cobra.Command, seedBasePath string) error {
 	if err := config.ValidateInitialRootPassword(password); err != nil {
 		return fmt.Errorf("root 初始密码不符合要求: %w", err)
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := pkgpassword.Hash(password)
 	if err != nil {
 		return fmt.Errorf("生成 root 密码哈希: %w", err)
 	}
@@ -326,7 +326,7 @@ func runBootstrapSeeds(cmd *cobra.Command, seedBasePath string) error {
 		return err
 	}
 	count, err := migrate.RunSQLDirWithReplacements(tx, seedDir, map[string]string{
-		rootPasswordPlaceholder: string(hash),
+		rootPasswordPlaceholder: hash,
 	})
 	if err != nil {
 		tx.Rollback()
@@ -342,7 +342,7 @@ func runBootstrapSeeds(cmd *cobra.Command, seedBasePath string) error {
 		tx.Rollback()
 		return fmt.Errorf("bootstrap seed 未创建或找到 root 管理员")
 	}
-	createdWithCurrentPassword := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password)) == nil
+	createdWithCurrentPassword := pkgpassword.Verify(storedHash, password)
 
 	if err := tx.Commit().Error; err != nil {
 		return err

@@ -33,15 +33,7 @@ func TestLoginUsesSameErrorForMissingAccountAndWrongPassword(t *testing.T) {
 	}
 }
 
-func TestInvalidLoginPasswordHashUsesProductionCost(t *testing.T) {
-	cost, err := bcrypt.Cost(invalidLoginPasswordHash)
-	if err != nil {
-		t.Fatalf("invalid-login password hash is malformed: %v", err)
-	}
-	if cost != bcrypt.DefaultCost {
-		t.Fatalf("invalid-login password hash cost = %d, expected %d", cost, bcrypt.DefaultCost)
-	}
-}
+// The miss hash and its cost are now asserted in pkg/password, which owns them.
 
 func TestLoginLocksAfterFailureLimit(t *testing.T) {
 	service := newLoginTestService(t, 2)

@@ -5,12 +5,12 @@ import (
 	"errors"
 	"strings"
 
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	pkgpassword "github.com/zhimma/grove/pkg/password"
 	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/transaction"
 )
@@ -202,7 +202,7 @@ func (s *AdminService) CreateAdmin(ctx context.Context, in CreateAdminInput) (*m
 		return nil, err
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedPassword, err := pkgpassword.Hash(password)
 	if err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}
@@ -299,7 +299,7 @@ func (s *AdminService) UpdateAdmin(ctx context.Context, in UpdateAdminInput) (*m
 		updates["remark"] = strings.TrimSpace(*in.Remark)
 	}
 	if in.Password != nil && strings.TrimSpace(*in.Password) != "" {
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(strings.TrimSpace(*in.Password)), bcrypt.DefaultCost)
+		hashedPassword, err := pkgpassword.Hash(strings.TrimSpace(*in.Password))
 		if err != nil {
 			return nil, errx.Internal().WithCause(err)
 		}
@@ -404,7 +404,7 @@ func (s *AdminService) ResetPassword(ctx context.Context, in ResetAdminPasswordI
 		return errx.InvalidParams().WithHTTPStatus(422).WithMessage("密码不能为空")
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedPassword, err := pkgpassword.Hash(password)
 	if err != nil {
 		return errx.Internal().WithCause(err)
 	}

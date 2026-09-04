@@ -128,6 +128,35 @@ ordersDB, err := p.DB.Get("orders")
 - `Get(name)` 用于明确的多数据源场景。
 - 框架层不预设读写分离或区域路由。
 
+## Password
+
+账号密码的哈希与校验只在 `pkg/password` 实现，业务代码不直接调用 bcrypt——cost 和恒定时间比较需要全仓一致。
+
+推荐写法：
+
+```go
+hashed, err := password.Hash(plain)   // 空密码返回 password.ErrEmpty
+if !password.Verify(admin.Password, input.Password) {
+    // 凭据错误
+}
+```
+
+登录流程里账号不存在的分支必须调用 `password.VerifyMiss(input.Password)`：
+
+```go
+if errors.Is(err, gorm.ErrRecordNotFound) {
+    password.VerifyMiss(input.Password)   // 与真实校验耗时相当
+    return LoginOutput{}, s.credentialFailure(ctx, loginKey)
+}
+```
+
+不这么做的话，"账号不存在"会明显快于"密码错误"，登录耗时就成了账号枚举的信号。
+
+约定：
+
+- `Verify` 返回 `bool` 而非 error：调用方只关心凭据对不对，哈希本身损坏也属校验失败。
+- 测试可直接用 `bcrypt.MinCost` 生成 fixture 保持快速，`make quality` 只约束非测试代码。
+
 ## 不照搬 Laravel 的边界
 
 - 不引入隐式容器解析。
