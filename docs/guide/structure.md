@@ -40,6 +40,10 @@ grove/
 
 - `middleware/`：后台认证、权限、审计等中间件
 
+`worker` 额外包含：
+
+- `task/`：可在后台管理的计划任务注册表，见[计划任务](./scheduler.md#后台管理)
+
 ### `cmd/`
 
 `cmd/` 用于放置独立 CLI。当前保留：
@@ -140,6 +144,7 @@ grove/
 - 新增后台业务模块：放在 `app/console`
 - 新增对外 API 示例或接口：放在 `app/api`
 - 新增异步任务处理逻辑：放在 `app/worker`
+- 新增可在后台调整调度的计划任务：放在 `app/worker/internal/task`
 - 新增共享模型：放在 `internal/model`
 - 新增通用基础组件：放在 `pkg/*`
 - 新增服务装配能力：放在 `internal/provider` 或 `internal/bootstrap`

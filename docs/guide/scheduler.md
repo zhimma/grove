@@ -51,6 +51,52 @@ err := p.Scheduler.Register(&scheduler.Task{
 
 在 Worker 创建阶段完成任务注册，`WorkerApp.Start` 会启动已启用的 Scheduler。
 
+## 后台管理
+
+需要在后台调整执行时机的任务，注册到 `app/worker/internal/task` 的注册表，而不是直接调 `Scheduler.Register`。
+
+```go
+// app/worker/internal/task/registry.go
+defined := []Definition{
+	{
+		Name:        "console.purge-expired-sessions",
+		DisplayName: "清理过期后台会话",
+		Schedule:    "0 17 3 * * *", // 首次出现时的默认值
+		Mutex:       true,
+		Timeout:     5 * time.Minute,
+		Job:         scheduler.JobFunc(newPurgeExpiredSessions(dbs).Run),
+	},
+}
+```
+
+Worker 会为每个定义在 `console_scheduled_tasks` 补一行，此后按表里的值调度。
+
+### 代码与数据库各管什么
+
+| 归属 | 内容 |
+| --- | --- |
+| 代码 | 任务名 → handler 函数 |
+| 数据库 | 调度表达式、启停、互斥、超时、上次执行结果 |
+| Console | 改表达式、启停、手动执行一次、看上次结果 |
+
+**Console 不能新建任务。** 行由 Worker 按代码注册表补齐；表里没有任何字段能存放任务内容，因此后台改不出一个新任务来执行。表里若残留代码中已删除的任务，Worker 每轮会告警并跳过。
+
+### 生效时机
+
+Worker 每 30 秒与表对账一次，所以：
+
+- 改调度表达式、启停：下一轮对账生效。
+- 手动执行：登记 `run_requested_at`，下一轮对账被认领并执行，因此点击后最多等一个周期。多副本下用条件 UPDATE 抢占，只有一个实例会执行。
+
+首次登记后，**重新部署不会覆盖运维改过的调度**——补行只针对表中缺失的任务。
+
+### 注意事项
+
+- 调度表达式在 Console 保存前用 `scheduler.ValidateSchedule` 校验，与运行中的 cron 是同一个解析器，因此存得进就跑得了。
+- 停用的任务不能手动执行；已有待执行请求时不能重复提交。
+- 跑不了的手动请求（任务已停用、代码中已删除）会被清空并记为 `skipped` + 原因，不会一直显示"待执行"。
+- 未配置数据库时，Scheduler 仍运行代码内直接注册的任务，只是无法在后台管理，Worker 启动时会告警。
+
 ## 使用约定
 
 - 任务名必须唯一。

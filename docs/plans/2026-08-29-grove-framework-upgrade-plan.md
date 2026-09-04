@@ -142,8 +142,9 @@ Grove 的切法：
   - 验收：`admin.typecheck` / `admin.lint` / `admin.circular` / `admin.build` 通过；前端单测 326 个（新增 4 个 API 契约测试）
   - 契约门禁做过变异验证：改坏 `console-contract.json` 里的路径后 `make contracts` 变红
 
-- [ ] **S7 文档**
-  - `docs/guide/scheduler.md` 增加「后台管理」一节：代码/DB 各管什么、为什么不能后台建任务
+- [x] **S7 文档**
+  - `docs/guide/scheduler.md` 新增「后台管理」：注册方式、代码/DB 职责划分、为什么不能后台建任务、对账生效时机、边界
+  - `docs/guide/structure.md` 补 `app/worker/internal/task` 的位置与去向指引
   - 验收：`make docs.check` 通过
 
 #### 本阶段不做
@@ -188,3 +189,4 @@ Grove 的切法：
 | 2026-09-04 | T3 去 `WithDeps` 后缀 | 纯重命名，11 个注册函数。 |
 | 2026-09-04 | T4 Casbin 定时重载 | `85cac4c`。复用 `SyncedEnforcer.StartAutoLoadPolicy`，无新依赖；`auto_load_seconds` 默认 30，Provider 关闭时停 goroutine。代价：变更最多延迟一个间隔。 |
 | 2026-09-04 | T5 Scheduler 集群互斥 | `643d1a7`。复用 `pkg/cache.Store` 的 SETNX，无新依赖；Redis 启用时 Mutex 任务全局互斥，未启用时行为不变（仍限单 Worker）。释放为 Get+Delete 比对，非原子 CAS。 |
+| 2026-09-04 | Phase 5 计划任务后台管理（S1–S7） | `b7e687f` `87fd273` `2419ecc` `901ab35` `1677cd0` `66d38ed`。改调度不再需要重新部署。过程中由测试抓出两个真实缺陷：孤儿行的 `run_requested_at` 永远清不掉；GORM `default:true` 标签使 `Mutex: false` 被静默存成 `true`。四处关键逻辑做过变异验证。**迁移未在真实 PostgreSQL/MySQL 执行**（本机无 Docker），集成断言处于 skip。 |
