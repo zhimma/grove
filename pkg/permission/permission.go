@@ -32,10 +32,6 @@ func NormalizeScope(scope string) string {
 	return normalized
 }
 
-func BuildPermissionKey(app, method, path string) string {
-	return strings.ToLower(strings.TrimSpace(app)) + ":" + strings.ToUpper(strings.TrimSpace(method)) + ":" + strings.TrimSpace(path)
-}
-
 func BuildAPIIdentifier(method, fullPath string) string {
 	return strings.ToUpper(strings.TrimSpace(method)) + " " + strings.TrimSpace(fullPath)
 }
