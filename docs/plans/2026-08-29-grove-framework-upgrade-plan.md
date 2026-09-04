@@ -46,6 +46,7 @@ make contracts   PASS（路由↔OpenAPI、前端↔OpenAPI 双向）
 | --- | --- | --- | --- |
 | 1 | 缺 Mail / Notification | 全仓无 smtp 相关代码 | 注册、找回密码、告警无法交付 |
 | 2 | 业务纵深薄 | `app/api` 仅 starter+auth，`app/worker` 仅 default_job | 未验证「新增一个功能要改几处」 |
+| 3 | 定时任务调度写死在代码 | `pkg/scheduler` 仅支持代码内注册 | 改 cron 表达式要重新部署，见 Phase 5 |
 
 ## 4. 任务
 
@@ -79,6 +80,70 @@ make contracts   PASS（路由↔OpenAPI、前端↔OpenAPI 双向）
 | T9 | 用一个真实模块走完 `grove make:module` 全流程，记录改动点数量 | 产出改动清单，决定是否需要再收敛 |
 | T10 | 补 `pkg/request`、`app/api/service` 等 8 个无测试包 | `go test ./...` 无 `no test files` |
 
+### Phase 5 — 计划任务后台管理
+
+参考 `xinliangnote/go-gin-api` 的 `internal/{api,services}/cron`：DB 存调度参数 + 后台 CRUD + 手动触发。
+
+**但不照抄它的执行模型。** 它的 `AddJob` 只打一条日志，注释写着"生产环境应写入 Kafka 由执行器订阅"——把任务内容存进 DB 再运行时解释这条路它自己没走通，而且那等于开一个远程命令执行口子。
+
+Grove 的切法：
+
+| 归属 | 内容 | 理由 |
+| --- | --- | --- |
+| 代码 | 任务名 → handler 函数 | 编译期确定，可测试，无法注入 |
+| DB | cron 表达式、启停、超时、互斥、上次执行结果 | 改调度不必重新部署 |
+| Console | 改表达式、启停、手动触发、看上次结果 | 运维自助 |
+
+关键约束：**Console 不能新建任务**。行由 Worker 按代码注册表补齐，Console 只能改已存在的行。任务名对不上代码注册表就没有 handler，也就不存在"从后台注入一个任务"的路径。
+
+#### 任务清单
+
+- [ ] **S1 数据模型与迁移**
+  - `console_scheduled_tasks`：`name`(唯一) / `schedule` / `enabled` / `mutex` / `timeout_seconds` / `run_requested_at` / `last_run_at` / `last_status` / `last_error` / `last_duration_ms`
+  - postgres + mysql 双份迁移，含 down
+  - 验收：`make migrate.up` 与 `migrate.down` 均可执行；`go test ./tests/integration/` 通过
+
+- [ ] **S2 Worker 任务注册表**
+  - `app/worker/internal/task`：`name → scheduler.Job` 的显式注册表，编译期确定
+  - 至少一个真实任务（不是 echo demo）
+  - 验收：注册表单测覆盖「未知任务名返回错误」
+
+- [ ] **S3 Worker reconcile 循环**
+  - 启动时按注册表 upsert DB 行（缺行补默认调度，已有行不覆盖运维改动）
+  - 周期性读 DB，与当前 `Scheduler` 状态对账：`schedule` 变了就 `Remove`+`Register`，`enabled=false` 就 `Remove`
+  - 执行完写回 `last_run_at` / `last_status` / `last_error` / `last_duration_ms`
+  - 复用 T4/T5 的节奏：间隔可配，默认 30s
+  - 验收：单测覆盖「改 schedule 后下一轮对账生效」「enabled=false 后任务被移除」
+
+- [ ] **S4 手动触发**
+  - Console 写 `run_requested_at`，Worker 对账时消费并清空
+  - `ponytail:` 注释标明上限：延迟最多一个对账周期；要即时就改 asynq 派发（Console 需加 `WithJob()`）
+  - 验收：单测覆盖「置位后执行一次并清空」「清空后不重复执行」
+
+- [ ] **S5 Console 接口**
+  - `GET /console/v1/scheduled-tasks`（列表）
+  - `PUT /console/v1/scheduled-tasks/:id`（改 schedule / timeout / mutex）
+  - `PUT /console/v1/scheduled-tasks/:id/status`（启停）
+  - `POST /console/v1/scheduled-tasks/:id/run`（手动触发）
+  - 保存前校验 cron 表达式为 6 段（`pkg/scheduler` 开了 `WithSeconds()`）
+  - 权限走 route catalog `.Name("计划任务.xxx")`
+  - 验收：`make contracts` 通过；OpenAPI 与前端契约同步
+
+- [ ] **S6 前端页面**
+  - `web/admin-vben/apps/console/src/views/system/scheduled-task/`
+  - 列表 + 编辑弹窗 + 启停开关 + 手动触发按钮 + 上次执行结果
+  - 验收：`make admin.typecheck`、`make admin.contract`、`make admin.lint` 通过
+
+- [ ] **S7 文档**
+  - `docs/guide/scheduler.md` 增加「后台管理」一节：代码/DB 各管什么、为什么不能后台建任务
+  - 验收：`make docs.check` 通过
+
+#### 本阶段不做
+
+- 任务内容存 DB、运行时解释脚本或 shell 命令。
+- Kafka / 独立执行器。
+- 完整执行历史表——先用行上的 `last_*` 字段；真要排查多次失败再单开 `console_scheduled_task_runs`。
+
 ## 5. 明确不做
 
 - 不拆微服务、不引入插件系统。
@@ -86,6 +151,24 @@ make contracts   PASS（路由↔OpenAPI、前端↔OpenAPI 双向）
 - 不引入通用 Repository 层或继承式领域模型。
 - 不做一次性全仓重命名或大重写。
 - i18n 暂缓：当前只有中文一种语言，等真出现第二语言再做。
+
+### 对照 go-gin-api / nunu 后确认不引入
+
+2026-09-04 逐项比对 `xinliangnote/go-gin-api` 与 `huluxiaobao-nunu/console-api`，除 Phase 5 外均判定不抄：
+
+| 能力 | 对方实现 | Grove 现状 | 结论 |
+| --- | --- | --- | --- |
+| ID 生成 | nunu：sonyflake + base62 | `pkg/ulid` | 不换。sonyflake 需协调 machine ID，容器里易冲突；ULID 128 位、字典序即时间序、无需协调 |
+| ID 混淆 | nunu：`SafeID` Blowfish + base58 | ULID | 不做。ULID 本就不泄露自增序号；nunu 那个是为兼容老系统 `bind_key` 的历史包袱 |
+| trace | go-gin-api：自研 `pkg/trace` | OpenTelemetry | 不换 |
+| 错误码 | go-gin-api：`pkg/errors` | `pkg/errx` | 已有 |
+| 优雅关闭 | go-gin-api：`pkg/shutdown` | `internal/server` | 已有 |
+| 路由白名单 | go-gin-api：`pkg/urltable` | route Catalog | 已有 |
+| 加解密 | go-gin-api：`aes`/`rsa`/`hash`；nunu：blowfish | `pkg/secretbox` | 已有 |
+| 文件 | go-gin-api：`pkg/file` | `pkg/storage` | 已有且更完整 |
+| 时间工具 | go-gin-api：`pkg/timeutil` | stdlib | 不需要 |
+| API 签名验签 | go-gin-api：`pkg/signature` | 无 | 当前无需求，不做 |
+| 多租户过滤 | nunu：`scope.Apply` | 无 | 无多租户需求，不做组件；但其 fail-closed 原则（空范围 → `WHERE 1=0` 而非不过滤）已记入权限文档待办 |
 
 ## 6. 实施记录
 
