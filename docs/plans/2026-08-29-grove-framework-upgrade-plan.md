@@ -134,10 +134,13 @@ Grove 的切法：
   - 验收：8 个 service 单测 + `make contracts` 通过
   - 修掉一个模型缺陷：`gorm:"default:true"` 会让 `false` 在 INSERT 时被省略，`Mutex: false` 的任务定义会被静默存成 `true`。已去掉标签并加回归测试（把标签加回去测试会红）
 
-- [ ] **S6 前端页面**
-  - `web/admin-vben/apps/console/src/views/system/scheduled-task/`
-  - 列表 + 编辑弹窗 + 启停开关 + 手动触发按钮 + 上次执行结果
-  - 验收：`make admin.typecheck`、`make admin.contract`、`make admin.lint` 通过
+- [x] **S6 前端页面** — `views/system/scheduled-task/` + `api/scheduled-task.ts`
+  - 列表 + 编辑弹窗（表达式/互斥/超时）+ 启停 + 手动触发 + 上次执行结果（状态标签、耗时、错误摘要）
+  - 页面顶部说明"任务内容在代码中定义，此处只能调整执行时机"，并提示对账延迟
+  - 已有待执行请求或任务停用时，"执行一次"按钮禁用
+  - 路由登记在 `router/routes/modules/system.ts`（不放 `log.ts`，那是日志模块）
+  - 验收：`admin.typecheck` / `admin.lint` / `admin.circular` / `admin.build` 通过；前端单测 326 个（新增 4 个 API 契约测试）
+  - 契约门禁做过变异验证：改坏 `console-contract.json` 里的路径后 `make contracts` 变红
 
 - [ ] **S7 文档**
   - `docs/guide/scheduler.md` 增加「后台管理」一节：代码/DB 各管什么、为什么不能后台建任务

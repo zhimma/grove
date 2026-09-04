@@ -230,6 +230,26 @@
       "operationId": "consoleListLoginLogs",
       "method": "GET",
       "path": "/logs/logins"
+    },
+    {
+      "operationId": "consoleListScheduledTasks",
+      "method": "GET",
+      "path": "/scheduled-tasks"
+    },
+    {
+      "operationId": "consoleUpdateScheduledTask",
+      "method": "PUT",
+      "path": "/scheduled-tasks/{id}"
+    },
+    {
+      "operationId": "consoleSetScheduledTaskStatus",
+      "method": "PUT",
+      "path": "/scheduled-tasks/{id}/status"
+    },
+    {
+      "operationId": "consoleRunScheduledTask",
+      "method": "POST",
+      "path": "/scheduled-tasks/{id}/run"
     }
   ]
 }
