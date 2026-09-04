@@ -17,10 +17,7 @@ const (
 
 type contextKey string
 
-const (
-	requestMetaStdKey contextKey = "request_meta"
-	identityStdKey    contextKey = "identity"
-)
+const requestMetaStdKey contextKey = "request_meta"
 
 type RequestMeta struct {
 	RequestID string
@@ -60,6 +57,9 @@ type AuditMeta struct {
 }
 
 func SetRequestID(c *gin.Context, requestID string) {
+	if c == nil {
+		return
+	}
 	c.Set(RequestIDKey, requestID)
 }
 
@@ -76,9 +76,16 @@ func GetRequestID(c *gin.Context) string {
 }
 
 func SetRequestMeta(c *gin.Context, meta RequestMeta) {
+	if c == nil {
+		return
+	}
 	c.Set(RequestMetaKey, meta)
 	SetRequestID(c, meta.RequestID)
-	c.Request = c.Request.WithContext(WithRequestMeta(c.Request.Context(), meta))
+	// Services only receive a context.Context, so the meta is mirrored there.
+	// A context built without a Request still gets the gin-side value.
+	if c.Request != nil {
+		c.Request = c.Request.WithContext(WithRequestMeta(c.Request.Context(), meta))
+	}
 }
 
 func GetRequestMeta(c *gin.Context) RequestMeta {
@@ -124,8 +131,10 @@ func GetErrorMeta(c *gin.Context) ErrorMeta {
 }
 
 func SetIdentity(c *gin.Context, identity Identity) {
+	if c == nil {
+		return
+	}
 	c.Set(IdentityKey, identity)
-	c.Request = c.Request.WithContext(WithIdentity(c.Request.Context(), identity))
 }
 
 func GetIdentity(c *gin.Context) Identity {
@@ -165,6 +174,9 @@ func IsSuper(c *gin.Context) bool {
 }
 
 func SetAuthToken(c *gin.Context, token string) {
+	if c == nil {
+		return
+	}
 	c.Set(AuthTokenKey, token)
 }
 
@@ -197,15 +209,4 @@ func GetAuditMeta(c *gin.Context) AuditMeta {
 		}
 	}
 	return AuditMeta{}
-}
-
-func WithIdentity(ctx context.Context, identity Identity) context.Context {
-	return context.WithValue(ctx, identityStdKey, identity)
-}
-
-func GetIdentityFromContext(ctx context.Context) Identity {
-	if identity, ok := ctx.Value(identityStdKey).(Identity); ok {
-		return identity
-	}
-	return Identity{}
 }
