@@ -7,15 +7,15 @@ import (
 	"github.com/zhimma/grove/app/api/internal/router"
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/internal/provider"
-	pkgserver "github.com/zhimma/grove/pkg/server"
+	coreserver "github.com/zhimma/grove/internal/server"
 )
 
 type APIApp struct {
-	*pkgserver.CoreServer
+	*coreserver.CoreServer
 }
 
 func NewServer(cfg *config.Config) (*APIApp, func(), error) {
-	base, cleanup, err := pkgserver.NewCoreServer(
+	base, cleanup, err := coreserver.NewCoreServer(
 		cfg,
 		"api",
 		cfg.Port,

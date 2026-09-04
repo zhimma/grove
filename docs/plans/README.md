@@ -11,6 +11,7 @@
 
 ## 当前主线
 
+- [框架升级计划](2026-08-29-grove-framework-upgrade-plan.md)
 - [Foundation roadmap](2026-07-13-grove-foundation-roadmap.md)
 - [Completion audit](2026-07-15-completion-audit.md)
 - [Documentation restructure plan](2026-07-15-documentation-restructure-plan.md)

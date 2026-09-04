@@ -55,11 +55,14 @@ grove/
 - `docsui/`：文档页与 OpenAPI 页面基础能力
 - `middleware/`：通用 Gin 中间件
 - `model/`：共享 GORM 模型
+- `observability/`：OpenTelemetry 追踪与指标
 - `provider/`：数据库、缓存、存储、认证等资源装配
+- `readiness/`：就绪探针
+- `server/`：HTTP 服务生命周期与优雅关闭
 
 ### `pkg/`
 
-`pkg/` 放置可复用基础组件，不承载具体业务语义。当前包含：
+`pkg/` 放置可复用基础组件，不承载具体业务语义，也**不得反向依赖 `internal/`**。当前包含：
 
 - `auth`
 - `cache`
@@ -76,7 +79,6 @@ grove/
 - `response`
 - `route`
 - `scheduler`
-- `server`
 - `storage`
 - `transaction`
 - `ulid`

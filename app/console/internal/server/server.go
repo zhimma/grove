@@ -10,15 +10,15 @@ import (
 	"github.com/zhimma/grove/app/console/internal/router"
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/internal/provider"
-	pkgserver "github.com/zhimma/grove/pkg/server"
+	coreserver "github.com/zhimma/grove/internal/server"
 )
 
 type ConsoleApp struct {
-	*pkgserver.CoreServer
+	*coreserver.CoreServer
 }
 
 func NewServer(cfg *config.Config) (*ConsoleApp, func(), error) {
-	base, cleanup, err := pkgserver.NewCoreServer(
+	base, cleanup, err := coreserver.NewCoreServer(
 		cfg,
 		"console",
 		cfg.ConsolePort,

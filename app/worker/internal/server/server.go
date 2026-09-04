@@ -9,15 +9,15 @@ import (
 	"github.com/zhimma/grove/app/worker/internal/handler"
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/internal/provider"
+	coreserver "github.com/zhimma/grove/internal/server"
 	"github.com/zhimma/grove/pkg/logger"
-	pkgserver "github.com/zhimma/grove/pkg/server"
 )
 
 var ErrWorkerDisabled = errors.New("worker requires job or scheduler to be enabled")
 
 type WorkerApp struct {
 	provider *provider.Provider
-	health   *pkgserver.CoreServer
+	health   *coreserver.CoreServer
 	errors   chan error
 	done     chan struct{}
 	stopOnce sync.Once
@@ -33,7 +33,7 @@ func NewServer(cfg *config.Config) (*WorkerApp, func(), error) {
 	}
 
 	handler.RegisterDefaultJobs(p.JobServer)
-	health, err := pkgserver.NewHealthServer(cfg, "worker", cfg.WorkerPort, p)
+	health, err := coreserver.NewHealthServer(cfg, "worker", cfg.WorkerPort, p)
 	if err != nil {
 		_ = p.Close()
 		return nil, nil, err
