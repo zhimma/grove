@@ -6,8 +6,7 @@ import {
   updateAdmin,
   updateAdminStatus,
 } from '#/api/core/console';
-
-import ResourcePage from '../shared/resource-page.vue';
+import ResourcePage from '#/components/resource-page/index.vue';
 
 const columns = [
   { title: '账号', dataIndex: 'account', key: 'account', width: 160 },

@@ -5,8 +5,7 @@ import {
   getSystemConfigList,
   updateSystemConfig,
 } from '#/api/core/console';
-
-import ResourcePage from '../shared/resource-page.vue';
+import ResourcePage from '#/components/resource-page/index.vue';
 
 const columns = [
   { title: '配置键', dataIndex: 'config_key', key: 'config_key', width: 220 },

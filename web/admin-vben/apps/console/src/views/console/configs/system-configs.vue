@@ -7,8 +7,7 @@ import {
   getSystemConfigList,
   updateSystemConfig,
 } from '#/api/core/console';
-
-import ResourcePage from '../shared/resource-page.vue';
+import ResourcePage from '#/components/resource-page/index.vue';
 
 const columns = [
   { title: '分组', dataIndex: 'config_group', key: 'config_group', width: 120 },

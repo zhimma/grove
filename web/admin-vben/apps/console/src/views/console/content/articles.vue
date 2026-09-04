@@ -7,8 +7,7 @@ import {
   updateArticle,
   updateArticleStatus,
 } from '#/api/core/console';
-
-import ResourcePage from '../shared/resource-page.vue';
+import ResourcePage from '#/components/resource-page/index.vue';
 
 const statusOptions = [
   { label: '草稿', value: 0 },

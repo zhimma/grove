@@ -51,40 +51,6 @@ const routes: RouteRecordRaw[] = [
       },
     ],
   },
-  {
-    meta: { icon: 'lucide:settings', order: 9999, title: '系统管理' },
-    name: 'ConsoleSystem',
-    path: '/system',
-    children: [
-      {
-        name: 'ConsoleAdmins',
-        path: '/system/admins',
-        component: () => import('#/views/console/system/admins.vue'),
-        meta: { title: '管理员管理' },
-      },
-      {
-        name: 'ConsoleUsers',
-        path: '/system/users',
-        component: () => import('#/views/console/system/users.vue'),
-        meta: { title: '用户管理' },
-      },
-      {
-        name: 'ConsoleRoles',
-        path: '/system/role',
-        component: () => import('#/views/system/role/index.vue'),
-        meta: { title: '角色权限' },
-      },
-      {
-        name: 'ConsoleSessions',
-        path: '/system/sessions',
-        component: () => import('#/views/console/system/sessions.vue'),
-        meta: {
-          title: '在线会话',
-          permissions: ['系统管理.会话列表'],
-        },
-      },
-    ],
-  },
 ];
 
 export default routes;

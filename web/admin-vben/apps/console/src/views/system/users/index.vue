@@ -6,8 +6,7 @@ import {
   updateUser,
   updateUserStatus,
 } from '#/api/core/console';
-
-import ResourcePage from '../shared/resource-page.vue';
+import ResourcePage from '#/components/resource-page/index.vue';
 
 const statusOptions = [
   { label: '启用', value: 1 },
