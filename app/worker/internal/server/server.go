@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/zhimma/grove/app/worker/internal/handler"
+	"github.com/zhimma/grove/app/worker/internal/task"
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/internal/provider"
 	coreserver "github.com/zhimma/grove/internal/server"
@@ -16,11 +17,14 @@ import (
 var ErrWorkerDisabled = errors.New("worker requires job or scheduler to be enabled")
 
 type WorkerApp struct {
-	provider *provider.Provider
-	health   *coreserver.CoreServer
-	errors   chan error
-	done     chan struct{}
-	stopOnce sync.Once
+	provider    *provider.Provider
+	health      *coreserver.CoreServer
+	reconciler  *task.Reconciler
+	errors      chan error
+	done        chan struct{}
+	stopOnce    sync.Once
+	stopTasks   context.CancelFunc
+	tasksClosed chan struct{}
 }
 
 func NewServer(cfg *config.Config) (*WorkerApp, func(), error) {
@@ -33,12 +37,40 @@ func NewServer(cfg *config.Config) (*WorkerApp, func(), error) {
 	}
 
 	handler.RegisterDefaultJobs(p.JobServer)
+
+	// The scheduler is driven by console_scheduled_tasks, so a task the code
+	// does not define cannot be introduced from the console. Without a database
+	// there is no schedule table: the scheduler still runs tasks registered
+	// directly in code, they just cannot be managed from the console.
+	var reconciler *task.Reconciler
+	if p.Scheduler != nil && p.DB == nil {
+		logger.Warn().Msg("未配置数据库，计划任务无法在后台管理")
+	}
+	if p.Scheduler != nil && p.DB != nil {
+		definitions, definitionsErr := task.Definitions(p.DB)
+		if definitionsErr != nil {
+			_ = p.Close()
+			return nil, nil, definitionsErr
+		}
+		reconciler, err = task.NewReconciler(p.DB, p.Scheduler, definitions, 0)
+		if err != nil {
+			_ = p.Close()
+			return nil, nil, err
+		}
+	}
+
 	health, err := coreserver.NewHealthServer(cfg, "worker", cfg.WorkerPort, p)
 	if err != nil {
 		_ = p.Close()
 		return nil, nil, err
 	}
-	app := &WorkerApp{provider: p, health: health, errors: make(chan error, 2), done: make(chan struct{})}
+	app := &WorkerApp{
+		provider:   p,
+		health:     health,
+		reconciler: reconciler,
+		errors:     make(chan error, 2),
+		done:       make(chan struct{}),
+	}
 	return app, func() {
 		_ = app.Stop(context.Background())
 	}, nil
@@ -65,6 +97,15 @@ func (a *WorkerApp) Start() error {
 			_ = a.health.Stop(context.Background())
 			return err
 		}
+	}
+	if a.reconciler != nil {
+		tasksCtx, cancel := context.WithCancel(context.Background())
+		a.stopTasks = cancel
+		a.tasksClosed = make(chan struct{})
+		go func() {
+			defer close(a.tasksClosed)
+			a.reconciler.Run(tasksCtx)
+		}()
 	}
 	if a.provider.JobServer == nil {
 		if a.provider.Scheduler == nil {
@@ -105,7 +146,18 @@ func (a *WorkerApp) Stop(ctx context.Context) error {
 	if a == nil {
 		return nil
 	}
-	a.stopOnce.Do(func() { close(a.done) })
+	a.stopOnce.Do(func() {
+		close(a.done)
+		if a.stopTasks != nil {
+			a.stopTasks()
+		}
+	})
+	if a.tasksClosed != nil {
+		select {
+		case <-a.tasksClosed:
+		case <-ctx.Done():
+		}
+	}
 	if a.health != nil {
 		return a.health.Stop(ctx)
 	}

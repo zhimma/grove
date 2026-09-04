@@ -109,12 +109,14 @@ Grove 的切法：
   - 顺带：`scheduler.ValidateSchedule` 抽为共用校验器，Console 保存前用同一个解析器，避免"后台存得进、Worker 跑不了"
   - 验收：5 个单测通过（注册表可运行性、缺数据库报错、只删过期、跨批清空、取消 context 中止）
 
-- [ ] **S3 Worker reconcile 循环**
-  - 启动时按注册表 upsert DB 行（缺行补默认调度，已有行不覆盖运维改动）
-  - 周期性读 DB，与当前 `Scheduler` 状态对账：`schedule` 变了就 `Remove`+`Register`，`enabled=false` 就 `Remove`
-  - 执行完写回 `last_run_at` / `last_status` / `last_error` / `last_duration_ms`
-  - 复用 T4/T5 的节奏：间隔可配，默认 30s
-  - 验收：单测覆盖「改 schedule 后下一轮对账生效」「enabled=false 后任务被移除」
+- [x] **S3 Worker reconcile 循环** — `app/worker/internal/task/reconciler.go`
+  - 每轮先补齐缺失的行，再让 Scheduler 与表对齐；已有行不覆盖，运维改过的调度在重新部署后仍保留
+  - `schedule`/`mutex`/`timeout` 变了才 `Remove`+`Register`；`enabled=false` 移除；表达式解析失败只跳过该行
+  - 执行结果经 `instrument` 包装写回 `last_*`；写回用独立 context，超时被取消的任务仍能记录失败
+  - 默认间隔 30s，与 T4 casbin 重载同一节奏
+  - 无数据库时降级：Scheduler 仍跑代码内注册的任务，只是无法在后台管理（Worker 会告警）
+  - 验收：14 个单测通过；「保留运维改动」「停用即移除」两项做过变异验证，改坏实现后确实变红
+  - 已知缺口：代码中已删除的任务留下的行，Console 看不出「无 handler」与「从未执行」的区别，仅 Worker 日志告警
 
 - [ ] **S4 手动触发**
   - Console 写 `run_requested_at`，Worker 对账时消费并清空
