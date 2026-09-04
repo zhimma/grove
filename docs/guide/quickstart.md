@@ -13,10 +13,11 @@
 确认 Go 环境：
 
 ```bash
-export PATH="/Users/zhimma/.local/share/mise/installs/go/1.25.12/bin:$PATH"
-export GOTOOLCHAIN=local
-go version
+go version                 # 需要 1.25.12 及以上
+export GOTOOLCHAIN=local   # 固定使用本机工具链，避免自动下载
 ```
+
+仓库带有 `.mise.toml`，用 [mise](https://mise.jdx.dev) 管理版本的话执行 `mise install` 即可装齐 Go 与 Node。
 
 ## 2. 创建配置
 
@@ -36,7 +37,7 @@ databases:
     driver: postgres
     host: 127.0.0.1
     port: 5432
-    user: zhimma
+    user: <your-postgres-user>
     password: <your-postgres-password>
     dbname: grove_dev
     ssl_mode: disable
@@ -62,7 +63,7 @@ casbin:
 数据库只需创建一次：
 
 ```bash
-createdb -h 127.0.0.1 -p 5432 -U zhimma -W grove_dev
+createdb -h 127.0.0.1 -p 5432 -U <your-postgres-user> -W grove_dev
 ```
 
 如果使用 MySQL，先创建数据库：

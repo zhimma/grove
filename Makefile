@@ -73,6 +73,10 @@ docs.check: ## 检查 canonical 文档中的架构示例是否与当前代码一
 		echo '文档架构示例已过期：请使用显式依赖和 route.Wrap(group, catalog)。'; \
 		exit 1; \
 	fi
+	@if rg -n -e '/Users/[a-z]' -e '/home/[a-z]' --glob 'docs/**/*.md' --glob '!docs/plans/**' --glob 'README.md' --glob 'AGENTS.md' .; then \
+		echo '文档中出现了个人机器路径：fork 本仓库的人无法照做，请改成通用命令或占位符。'; \
+		exit 1; \
+	fi
 
 quality.go.fmt: ## 检查 Go 格式（不改写文件）
 	@files=$$(find . -name '*.go' -not -path './web/*' -not -path './vendor/*' -print); \

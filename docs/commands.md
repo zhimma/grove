@@ -3,7 +3,7 @@
 所有命令从仓库根目录执行。先确认 Go 版本符合项目要求，再运行 `make help`。
 
 ```bash
-export PATH="/Users/zhimma/.local/share/mise/installs/go/1.25.12/bin:$PATH"
+go version                 # 需要 1.25.12 及以上
 export GOTOOLCHAIN=local
 make help
 ```
