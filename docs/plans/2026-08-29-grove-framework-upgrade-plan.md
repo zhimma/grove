@@ -118,10 +118,13 @@ Grove 的切法：
   - 验收：14 个单测通过；「保留运维改动」「停用即移除」两项做过变异验证，改坏实现后确实变红
   - 已知缺口：代码中已删除的任务留下的行，Console 看不出「无 handler」与「从未执行」的区别，仅 Worker 日志告警
 
-- [ ] **S4 手动触发**
-  - Console 写 `run_requested_at`，Worker 对账时消费并清空
-  - `ponytail:` 注释标明上限：延迟最多一个对账周期；要即时就改 asynq 派发（Console 需加 `WithJob()`）
-  - 验收：单测覆盖「置位后执行一次并清空」「清空后不重复执行」
+- [x] **S4 手动触发** — `runOnRequest` / `claimRunRequest` / `declineRunRequest`
+  - Console 写 `run_requested_at`；Worker 用条件 UPDATE 抢占，`RowsAffected == 1` 的那个才执行，多副本下只跑一次
+  - 走 `scheduler.Run`，因此手动执行同样受 mutex、集群锁、超时和 panic 隔离保护
+  - 跑不了的请求也要回答：任务已停用或代码中不存在时，清空标记并写 `skipped` + 原因，不会永远显示"待执行"
+  - 新增 `scheduler.ErrTaskNotFound` sentinel，用于区分"未注册"和任务自身失败
+  - 验收：17 个单测通过；抢占逻辑做过变异验证（去掉 `RowsAffected` 检查后 4 个 worker 全部抢到，测试变红）
+  - 上限：触发延迟最多一个对账周期（30s）。要即时需改走 asynq，Console 得加 `WithJob()`
 
 - [ ] **S5 Console 接口**
   - `GET /console/v1/scheduled-tasks`（列表）

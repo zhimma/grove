@@ -3,6 +3,8 @@ package task
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -209,8 +211,13 @@ func (f *reconcilerFixture) restart(t *testing.T) *Reconciler {
 
 func (f *reconcilerFixture) row(t *testing.T, name string) model.ConsoleScheduledTask {
 	t.Helper()
+	return fixtureRow(t, f.dbs, name)
+}
+
+func fixtureRow(t *testing.T, dbs database.Connections, name string) model.ConsoleScheduledTask {
+	t.Helper()
 	var row model.ConsoleScheduledTask
-	if err := f.dbs.Default().Where("name = ?", name).First(&row).Error; err != nil {
+	if err := dbs.Default().Where("name = ?", name).First(&row).Error; err != nil {
 		t.Fatalf("load task %q: %v", name, err)
 	}
 	return row
@@ -264,4 +271,148 @@ func openReconcilerTestDB(t *testing.T) database.Connections {
 		t.Fatalf("migrate scheduled tasks: %v", err)
 	}
 	return dbs
+}
+
+func TestReconcileRunsAndClearsAManualRequest(t *testing.T) {
+	runs := make(chan struct{}, 4)
+	fixture := newReconcilerFixture(t, Definition{
+		Name: "report", DisplayName: "报表", Schedule: "0 0 * * * *", Mutex: true,
+		Job: scheduler.JobFunc(func(context.Context) error {
+			runs <- struct{}{}
+			return nil
+		}),
+	})
+	mustReconcile(t, fixture.reconciler)
+	if err := fixture.scheduler.Start(); err != nil {
+		t.Fatalf("start scheduler: %v", err)
+	}
+
+	requestedAt := time.Now()
+	fixture.update(t, "report", map[string]any{"run_requested_at": requestedAt})
+	mustReconcile(t, fixture.reconciler)
+
+	select {
+	case <-runs:
+	case <-time.After(2 * time.Second):
+		t.Fatal("manual request never ran the task")
+	}
+	waitUntil(t, func() bool { return !fixture.row(t, "report").HasPendingRunRequest() },
+		"manual request was not cleared")
+
+	// A cleared request must not run again on the next pass.
+	mustReconcile(t, fixture.reconciler)
+	select {
+	case <-runs:
+		t.Fatal("manual request ran twice")
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// Every replica reconciles the same table and can load the same pending row
+// before any of them clears it, so the claim is what keeps a manual trigger
+// from running once per replica. Exercised directly: driving it through
+// Reconcile lets the database serialise the reads, which hides the race.
+func TestOnlyOneWorkerClaimsAManualRequest(t *testing.T) {
+	dbs := openReconcilerTestDB(t)
+	definitions := map[string]Definition{"report": definition("report", "0 0 * * * *")}
+
+	workers := make([]*Reconciler, 0, 4)
+	for range 4 {
+		sched, err := scheduler.New(scheduler.Config{Location: "UTC"})
+		if err != nil {
+			t.Fatalf("new scheduler: %v", err)
+		}
+		t.Cleanup(func() { _ = sched.Stop() })
+		reconciler, err := NewReconciler(dbs, sched, definitions, time.Minute)
+		if err != nil {
+			t.Fatalf("new reconciler: %v", err)
+		}
+		workers = append(workers, reconciler)
+	}
+	mustReconcile(t, workers[0])
+
+	if err := dbs.Default().Model(&model.ConsoleScheduledTask{}).
+		Where("name = ?", "report").
+		Update("run_requested_at", time.Now()).Error; err != nil {
+		t.Fatalf("request run: %v", err)
+	}
+
+	var claims atomic.Int32
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for _, worker := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			if worker.claimRunRequest(context.Background(), dbs.Default(), "report") {
+				claims.Add(1)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if got := claims.Load(); got != 1 {
+		t.Fatalf("%d workers claimed the same request, want exactly 1", got)
+	}
+	if fixtureRow(t, dbs, "report").HasPendingRunRequest() {
+		t.Fatal("claimed request must leave the row with no pending flag")
+	}
+}
+
+// A trigger that cannot run must still be answered. Leaving the flag set shows
+// as "pending" in the console forever with no explanation.
+func TestManualRequestThatCannotRunIsClearedAndExplained(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		arrange func(t *testing.T, fixture *reconcilerFixture)
+		reason  string
+	}{
+		{
+			name: "disabled task",
+			arrange: func(t *testing.T, fixture *reconcilerFixture) {
+				fixture.update(t, "report", map[string]any{"enabled": false})
+			},
+			reason: "任务已停用，未执行",
+		},
+		{
+			name: "task removed from the code",
+			arrange: func(t *testing.T, fixture *reconcilerFixture) {
+				fixture.reconciler.definitions = map[string]Definition{}
+			},
+			reason: "任务在代码中不存在，无法执行",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			fixture := newReconcilerFixture(t, definition("report", "0 0 * * * *"))
+			mustReconcile(t, fixture.reconciler)
+
+			testCase.arrange(t, fixture)
+			fixture.update(t, "report", map[string]any{"run_requested_at": time.Now()})
+			mustReconcile(t, fixture.reconciler)
+
+			row := fixture.row(t, "report")
+			if row.HasPendingRunRequest() {
+				t.Fatal("request must not stay pending when it cannot run")
+			}
+			if row.LastStatus != model.ScheduledTaskStatusSkipped {
+				t.Fatalf("last status = %q, want %q", row.LastStatus, model.ScheduledTaskStatusSkipped)
+			}
+			if row.LastError != testCase.reason {
+				t.Fatalf("last error = %q, want %q", row.LastError, testCase.reason)
+			}
+		})
+	}
+}
+
+func waitUntil(t *testing.T, cond func() bool, message string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatal(message)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }

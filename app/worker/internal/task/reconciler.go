@@ -109,23 +109,103 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 
 	for _, row := range rows {
 		definition, defined := r.definitions[row.Name]
-		if !defined {
+		switch {
+		case !defined:
 			// A row left behind by an older binary, or one rolled back. It can
 			// never run, so make sure it is not still scheduled from a previous
 			// pass and say so once per pass.
-			// ponytail: log only — Console cannot tell "no handler" from "never
-			// ran yet". Surface it with a registered flag if operators trip on it.
 			logger.Warn().Str("task", row.Name).Msg("计划任务在代码中不存在，已跳过")
 			r.unschedule(row.Name)
-			continue
-		}
-		if !row.Enabled {
+			r.declineRunRequest(ctx, db, row, "任务在代码中不存在，无法执行")
+		case !row.Enabled:
 			r.unschedule(row.Name)
-			continue
+			r.declineRunRequest(ctx, db, row, "任务已停用，未执行")
+		default:
+			r.schedule(definition, row)
+			if row.HasPendingRunRequest() {
+				r.runOnRequest(ctx, db, row.Name)
+			}
 		}
-		r.schedule(definition, row)
 	}
 	return nil
+}
+
+// declineRunRequest answers a manual trigger that cannot run. Leaving the flag
+// set would show as "pending" in the console forever with no explanation.
+func (r *Reconciler) declineRunRequest(ctx context.Context, db *gorm.DB, row model.ConsoleScheduledTask, reason string) {
+	if !row.HasPendingRunRequest() {
+		return
+	}
+	if !r.claimRunRequest(ctx, db, row.Name) {
+		return
+	}
+	r.recordSkip(row.Name, reason)
+}
+
+// claimRunRequest clears the pending flag and reports whether this worker was
+// the one that cleared it. Several replicas reconcile the same table at once,
+// so this conditional update is what makes a manual trigger run exactly once
+// instead of once per replica.
+func (r *Reconciler) claimRunRequest(ctx context.Context, db *gorm.DB, name string) bool {
+	claim := db.WithContext(ctx).
+		Model(&model.ConsoleScheduledTask{}).
+		Where("name = ? AND run_requested_at IS NOT NULL", name).
+		Update("run_requested_at", nil)
+	if claim.Error != nil {
+		logger.Error().Err(claim.Error).Str("task", name).Msg("认领手动执行请求失败")
+		return false
+	}
+	return claim.RowsAffected > 0
+}
+
+// runOnRequest executes a task the console asked to run off schedule.
+//
+// ponytail: the request is picked up on the next reconcile, so a trigger waits
+// up to one interval. Dispatch through asynq (Console would need WithJob) if
+// operators need it to feel immediate.
+func (r *Reconciler) runOnRequest(ctx context.Context, db *gorm.DB, name string) {
+	if !r.claimRunRequest(ctx, db, name) {
+		return
+	}
+
+	logger.Info().Str("task", name).Msg("手动执行计划任务")
+	go func() {
+		// Scheduler.Run applies the task's mutex, cluster lock and timeout, so
+		// a manual run cannot double up with the scheduled one.
+		err := r.scheduler.Run(name)
+		switch {
+		case err == nil:
+		case errors.Is(err, scheduler.ErrTaskNotFound):
+			// Disabled between the console click and this pass.
+			r.recordSkip(name, "任务未在调度中，已跳过手动执行")
+		case errors.Is(err, scheduler.ErrTaskRunning):
+			r.recordSkip(name, "任务正在运行，已跳过手动执行")
+		default:
+			logger.Error().Err(err).Str("task", name).Msg("手动执行计划任务失败")
+		}
+	}()
+}
+
+// recordSkip marks a run that never started, so the console shows why instead
+// of leaving the previous result in place.
+func (r *Reconciler) recordSkip(name, reason string) {
+	db := r.dbs.Default()
+	if db == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := db.WithContext(ctx).
+		Model(&model.ConsoleScheduledTask{}).
+		Where("name = ?", name).
+		Updates(map[string]any{
+			"last_run_at": r.now(),
+			"last_status": model.ScheduledTaskStatusSkipped,
+			"last_error":  truncate(reason, lastErrorLimit),
+		}).Error; err != nil {
+		logger.Error().Err(err).Str("task", name).Msg("回写计划任务跳过原因失败")
+	}
 }
 
 // seedMissingRows inserts a row for every task the code defines but the table

@@ -38,7 +38,10 @@ const (
 )
 
 var (
-	ErrTaskRunning      = errors.New("scheduler task is already running")
+	ErrTaskRunning = errors.New("scheduler task is already running")
+	// ErrTaskNotFound separates "this task is not registered" from a failure
+	// inside the task, so a caller can tell a disabled task from a broken one.
+	ErrTaskNotFound     = errors.New("scheduler task not found")
 	ErrSchedulerStopped = errors.New("scheduler is stopped")
 	ErrStopTimeout      = errors.New("scheduler stop timed out")
 )
@@ -371,7 +374,7 @@ func (s *Scheduler) Run(name string) error {
 	record, exists := s.tasks[name]
 	s.mu.RUnlock()
 	if !exists {
-		return fmt.Errorf("task %q not found", name)
+		return fmt.Errorf("%w: %s", ErrTaskNotFound, name)
 	}
 	return s.executeTask(record)
 }
@@ -401,7 +404,7 @@ func (s *Scheduler) Remove(name string) error {
 		return ErrSchedulerStopped
 	}
 	if _, exists := s.tasks[name]; !exists {
-		return fmt.Errorf("task %q not found", name)
+		return fmt.Errorf("%w: %s", ErrTaskNotFound, name)
 	}
 	if entryID, exists := s.entries[name]; exists {
 		s.cron.Remove(entryID)
