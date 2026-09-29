@@ -308,92 +308,132 @@ func TestListMigrationsParsesVersionedFiles(t *testing.T) {
 }
 
 func TestCreateFilesSanitizesUnsafeMigrationName(t *testing.T) {
-	dir := t.TempDir()
+	baseDir := t.TempDir()
 
-	upPath, downPath, err := CreateFiles(dir, "../Create Demo-Table!")
+	paths, err := CreateFiles(baseDir, "../Create Demo-Table!", nil)
 	if err != nil {
 		t.Fatalf("CreateFiles returned error: %v", err)
 	}
 
-	for _, path := range []string{upPath, downPath} {
-		if filepath.Dir(path) != dir {
-			t.Fatalf("migration path escaped target dir: %s", path)
+	for _, path := range paths {
+		dialectDir := filepath.Dir(path)
+		if filepath.Dir(dialectDir) != baseDir {
+			t.Fatalf("migration path escaped the dialect directories: %s", path)
 		}
 		base := filepath.Base(path)
 		if strings.Contains(base, "..") || strings.Contains(base, "-") || strings.Contains(base, "!") {
 			t.Fatalf("migration filename was not sanitized: %s", base)
 		}
+		if !strings.Contains(base, "_create_demo_table.") {
+			t.Fatalf("unexpected migration name: %s", base)
+		}
+	}
+}
+
+// Every dialect tree must gain the same version at once. Creating the pair in
+// only the configured dialect is what made TestDialectMigrationVersionsMatch
+// fail the moment anyone ran `grove migrate create`.
+func TestCreateFilesWritesEveryDialectAtOneVersion(t *testing.T) {
+	baseDir := t.TempDir()
+	bodies := map[string]SQL{
+		"postgres": {Up: "CREATE TABLE pg_only (id TEXT);\n", Down: "DROP TABLE pg_only;\n"},
 	}
 
-	if !strings.Contains(filepath.Base(upPath), "_create_demo_table.up.sql") {
-		t.Fatalf("unexpected up migration name: %s", upPath)
+	paths, err := CreateFiles(baseDir, "create_widgets", bodies)
+	if err != nil {
+		t.Fatalf("CreateFiles: %v", err)
 	}
-	if !strings.Contains(filepath.Base(downPath), "_create_demo_table.down.sql") {
-		t.Fatalf("unexpected down migration name: %s", downPath)
+	if len(paths) != len(Dialects)*2 {
+		t.Fatalf("created %d files, want an up and a down for each of %d dialects: %v", len(paths), len(Dialects), paths)
+	}
+
+	versions := map[string]struct{}{}
+	for _, dialect := range Dialects {
+		ups, err := filepath.Glob(filepath.Join(baseDir, dialect, "*.up.sql"))
+		if err != nil || len(ups) != 1 {
+			t.Fatalf("%s: up migrations = %v, err = %v", dialect, ups, err)
+		}
+		versions[strings.SplitN(filepath.Base(ups[0]), "_", 2)[0]] = struct{}{}
+		if downs, _ := filepath.Glob(filepath.Join(baseDir, dialect, "*.down.sql")); len(downs) != 1 {
+			t.Fatalf("%s: down migrations = %v", dialect, downs)
+		}
+	}
+	if len(versions) != 1 {
+		t.Fatalf("dialects were given different versions: %v", versions)
+	}
+
+	// A supplied body is written as-is; a dialect without one gets placeholders.
+	pgUp := mustReadMigration(t, paths[0])
+	if pgUp != bodies["postgres"].Up {
+		t.Fatalf("postgres up = %q, want the supplied body", pgUp)
+	}
+	mysqlUp := mustReadMigration(t, paths[2])
+	if !strings.Contains(mysqlUp, "Write your UP migration") {
+		t.Fatalf("mysql up = %q, want the placeholder", mysqlUp)
 	}
 }
 
 func TestCreateFilesAllocatesUniqueVersionsOnRepeatedCalls(t *testing.T) {
-	dir := t.TempDir()
-	up1, down1, err := CreateFiles(dir, "first")
+	baseDir := t.TempDir()
+	first, err := CreateFiles(baseDir, "first", nil)
 	if err != nil {
 		t.Fatalf("create first migration: %v", err)
 	}
-	up2, down2, err := CreateFiles(dir, "second")
+	second, err := CreateFiles(baseDir, "second", nil)
 	if err != nil {
 		t.Fatalf("create second migration: %v", err)
 	}
-	if up1 == up2 || down1 == down2 {
-		t.Fatalf("repeated migrations must have unique paths: %s %s", up1, up2)
-	}
-	for _, path := range []string{up1, down1, up2, down2} {
+	seen := map[string]struct{}{}
+	for _, path := range append(first, second...) {
+		if _, dup := seen[path]; dup {
+			t.Fatalf("repeated migrations must have unique paths: %s", path)
+		}
+		seen[path] = struct{}{}
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected migration file %s: %v", path, err)
 		}
 	}
 }
 
-func TestCreateFilesAllocatesCompletePairsConcurrently(t *testing.T) {
-	dir := t.TempDir()
+func TestCreateFilesAllocatesCompleteSetsConcurrently(t *testing.T) {
+	baseDir := t.TempDir()
 	const count = 8
-	type pair struct {
-		up   string
-		down string
-		err  error
+	type result struct {
+		paths []string
+		err   error
 	}
-	results := make(chan pair, count)
+	results := make(chan result, count)
 	var wg sync.WaitGroup
 	for i := 0; i < count; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			up, down, err := CreateFiles(dir, "concurrent_"+strconv.Itoa(i))
-			results <- pair{up: up, down: down, err: err}
+			paths, err := CreateFiles(baseDir, "concurrent_"+strconv.Itoa(i), nil)
+			results <- result{paths: paths, err: err}
 		}(i)
 	}
 	wg.Wait()
 	close(results)
 
-	seen := make(map[string]struct{}, count*2)
-	for result := range results {
-		if result.err != nil {
-			t.Fatalf("concurrent migration creation failed: %v", result.err)
+	seen := make(map[string]struct{}, count*len(Dialects)*2)
+	for r := range results {
+		if r.err != nil {
+			t.Fatalf("concurrent migration creation failed: %v", r.err)
 		}
-		for _, path := range []string{result.up, result.down} {
+		for _, path := range r.paths {
 			if _, ok := seen[path]; ok {
 				t.Fatalf("migration path was reused: %s", path)
 			}
 			seen[path] = struct{}{}
-			if _, err := os.Stat(path); err != nil {
-				t.Fatalf("expected migration file %s: %v", path, err)
-			}
 		}
 	}
-	if len(seen) != count*2 {
-		t.Fatalf("expected %d migration files, got %d", count*2, len(seen))
+	if want := count * len(Dialects) * 2; len(seen) != want {
+		t.Fatalf("expected %d migration files, got %d", want, len(seen))
 	}
-	if leftovers, err := filepath.Glob(filepath.Join(dir, ".grove-migration-*")); err != nil || len(leftovers) != 0 {
-		t.Fatalf("temporary migration files must be removed: files=%v err=%v", leftovers, err)
+	for _, dialect := range Dialects {
+		if leftovers, err := filepath.Glob(filepath.Join(baseDir, dialect, ".grove-migration-*")); err != nil || len(leftovers) != 0 {
+			t.Fatalf("temporary migration files must be removed: files=%v err=%v", leftovers, err)
+		}
 	}
 }
 

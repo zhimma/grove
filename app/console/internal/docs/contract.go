@@ -203,6 +203,7 @@ func spec(cfg *config.Config) docsui.Document {
 	addConsoleOperation(&doc, "计划任务", "/scheduled-tasks/{id}/run", http.MethodPost, "consoleRunScheduledTask", "请求立即执行计划任务", true,
 		scheduledTaskPath, nil, scheduledTaskResponse)
 
+	// grove:register-operations
 	return doc
 }
 

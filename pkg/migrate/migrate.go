@@ -313,38 +313,78 @@ func migrationName(files []migrationFile, version uint) string {
 	return ""
 }
 
-func CreateFiles(dir, name string) (string, string, error) {
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return "", "", err
-	}
+// Dialects are the migration trees every schema change must cover. The
+// dialect-parity test holds them to identical version sets.
+var Dialects = []string{"postgres", "mysql"}
 
-	name = sanitizeName(name)
-	if name == "" {
-		return "", "", fmt.Errorf("migration name is required")
-	}
-
-	return withMigrationCreateLock(dir, func() (string, string, error) {
-		return createMigrationFiles(dir, name)
-	})
+// SQL is the up and down body of one migration in one dialect.
+type SQL struct {
+	Up   string
+	Down string
 }
 
-func createMigrationFiles(dir, name string) (string, string, error) {
+// CreateFiles writes one migration pair per dialect under baseDir, all sharing
+// one version. bodies maps a dialect to its SQL; a dialect without an entry
+// gets placeholder comments. It returns every created path, postgres first.
+//
+// Creating the pair only in the configured dialect used to leave the other
+// tree without that version, which the dialect-parity test rejects on the spot.
+func CreateFiles(baseDir, name string, bodies map[string]SQL) ([]string, error) {
+	name = sanitizeName(name)
+	if name == "" {
+		return nil, fmt.Errorf("migration name is required")
+	}
+	for _, dialect := range Dialects {
+		if err := os.MkdirAll(filepath.Join(baseDir, dialect), 0o750); err != nil {
+			return nil, err
+		}
+	}
+
+	var created []string
+	err := withMigrationCreateLock(baseDir, func() error {
+		paths, err := createDialectMigrations(baseDir, name, bodies)
+		created = paths
+		return err
+	})
+	return created, err
+}
+
+func createDialectMigrations(baseDir, name string, bodies map[string]SQL) ([]string, error) {
 	baseVersion := time.Now().Unix()
 	for attempt := int64(0); attempt < 1000; attempt++ {
 		version := time.Unix(baseVersion+attempt, 0).Format("20060102150405")
+		created, err := createVersion(baseDir, version, name, bodies)
+		if err == nil {
+			return created, nil
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return nil, err
+		}
+	}
+	return nil, fmt.Errorf("could not allocate a unique migration version")
+}
+
+// createVersion publishes every dialect's pair at one version, or none of
+// them: a version already taken in any dialect rolls back the ones written.
+func createVersion(baseDir, version, name string, bodies map[string]SQL) ([]string, error) {
+	created := make([]string, 0, len(Dialects)*2)
+	for _, dialect := range Dialects {
+		body, ok := bodies[dialect]
+		if !ok {
+			body = SQL{Up: "-- Write your UP migration here.\n", Down: "-- Write your DOWN migration here.\n"}
+		}
+		dir := filepath.Join(baseDir, dialect)
 		upPath := filepath.Join(dir, version+"_"+name+".up.sql")
 		downPath := filepath.Join(dir, version+"_"+name+".down.sql")
-
-		err := createMigrationPair(upPath, downPath, "-- Write your UP migration here.\n", "-- Write your DOWN migration here.\n")
-		if err != nil {
-			if errors.Is(err, os.ErrExist) {
-				continue
+		if err := createMigrationPair(upPath, downPath, body.Up, body.Down); err != nil {
+			for _, path := range created {
+				_ = os.Remove(path)
 			}
-			return "", "", err
+			return nil, err
 		}
-		return upPath, downPath, nil
+		created = append(created, upPath, downPath)
 	}
-	return "", "", fmt.Errorf("could not allocate a unique migration version")
+	return created, nil
 }
 
 // createMigrationPair prepares both files before publishing either final
@@ -402,7 +442,7 @@ func writeMigrationTemp(dir, content string) (string, error) {
 	return path, nil
 }
 
-func withMigrationCreateLock(dir string, action func() (string, string, error)) (string, string, error) {
+func withMigrationCreateLock(dir string, action func() error) error {
 	lockPath := filepath.Join(dir, migrationCreateLockName)
 	deadline := time.Now().Add(migrationCreateLockTimeout)
 	for {
@@ -412,10 +452,10 @@ func withMigrationCreateLock(dir string, action func() (string, string, error)) 
 			return action()
 		}
 		if !errors.Is(err, os.ErrExist) {
-			return "", "", fmt.Errorf("create migration lock: %w", err)
+			return fmt.Errorf("create migration lock: %w", err)
 		}
 		if time.Now().After(deadline) {
-			return "", "", fmt.Errorf("timed out waiting for migration creation lock %s", lockPath)
+			return fmt.Errorf("timed out waiting for migration creation lock %s", lockPath)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

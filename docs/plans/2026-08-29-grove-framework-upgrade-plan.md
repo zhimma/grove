@@ -226,7 +226,8 @@ Grove 的切法：
 
 | 优先级 | ID | 任务 | 验收方向 | 阻塞 |
 | --- | --- | --- | --- | --- |
-| P0 | G1 | `make:module Invoice --fields "title:string,amount:int"` 生成可用的纵向切片：双方言迁移 + 模型字段 + 分页 CRUD service + handler + 路由权限名 + OpenAPI 操作 + 前端契约/API/页面（复用 `resource-page`）。字段走命令行（Rails/Phoenix 路线）而非读库：双方言下读库需连库且写两套自省，命令行字段可在 CI 回归 | 回归测试：在临时仓库生成后 `go build` 与 `make contracts` 同时通过 | 无 |
+| ~~P0~~ | ~~G1~~ | ~~`make:module --fields` 生成可用纵向切片（后端）~~ | ✅ 双方言迁移 + 模型 + 分页 CRUD + 自带测试 + handler + OpenAPI；回归测试在仓库副本里生成后跑 `go vet`、契约、生成的 CRUD 测试、方言规则，三处变异均被抓到。顺带修复 `grove migrate create` 只建单方言的问题 | — |
+| P0 | G1b | 生成前端：`console-contract.json` 条目 + `api/*.ts` + 基于 `resource-page` 的页面 + 路由 | 生成后 `admin.typecheck` / `admin.lint` / `admin.test` 通过 | 无 |
 | P1 | G2 | 日志轮转：按大小切割 + 保留期，对应 Laravel daily channel，做法同 nunu | 配置 `log.max_size_mb`/`max_age_days`；超限后生成新文件 | 需引入 lumberjack（Go 事实标准） |
 | P1 | G3 | 分页下沉到 `pkg/`，api 与 console 共用；去掉 `[]PagePolicy` 可变参数 | api 服务可直接用；`ListMeta` 只剩一份 | 无 |
 | P1 | G4 | `internal/testkit`：`OpenDB(t, models...)` 等，替换重复夹具 | 至少收敛 6 个建库函数 | 无 |

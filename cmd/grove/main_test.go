@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -102,36 +101,30 @@ func TestMigrateCommandSupportsCustomSourcePath(t *testing.T) {
 	assertContains(t, out.String(), "--path")
 }
 
-func TestMigrateCreateUsesConfiguredDialectDirectory(t *testing.T) {
-	root := t.TempDir()
-	base := filepath.Join(root, "migrations")
-	mustMkdir(t, filepath.Join(base, "postgres"))
-	mustMkdir(t, filepath.Join(base, "mysql"))
-	configPath := filepath.Join(root, "config.yaml")
-	mustWrite(t, configPath, `databases:
-  default:
-    driver: mysql
-`)
-
-	previousConfigFile := configFile
-	configFile = configPath
-	t.Cleanup(func() { configFile = previousConfigFile })
+// migrate create used to write only the configured dialect, and the previous
+// version of this test asserted exactly that — while TestDialectMigrationVersionsMatch
+// failed on every such pair. Both trees must gain the same version at once.
+func TestMigrateCreateWritesBothDialectsAtOneVersion(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "migrations")
 
 	cmd := newMigrateCmd()
 	cmd.SetArgs([]string{"--path", base, "create", "create_articles"})
 	if err := cmd.Execute(); err != nil {
-		t.Fatalf("create mysql migration: %v", err)
+		t.Fatalf("migrate create: %v", err)
 	}
-	files, err := filepath.Glob(filepath.Join(base, "mysql", "*.sql"))
-	if err != nil {
-		t.Fatalf("list created mysql migrations: %v", err)
+
+	versions := map[string]struct{}{}
+	for _, dialect := range []string{"postgres", "mysql"} {
+		files, err := filepath.Glob(filepath.Join(base, dialect, "*.sql"))
+		if err != nil || len(files) != 2 {
+			t.Fatalf("%s migrations = %v, err = %v; want an up and a down", dialect, files, err)
+		}
+		for _, file := range files {
+			versions[strings.SplitN(filepath.Base(file), "_", 2)[0]] = struct{}{}
+		}
 	}
-	if len(files) != 2 {
-		t.Fatalf("expected two mysql migration files, got %d", len(files))
-	}
-	postgresFiles, _ := filepath.Glob(filepath.Join(base, "postgres", "*.sql"))
-	if len(postgresFiles) != 0 {
-		t.Fatalf("migration create wrote PostgreSQL files: %v", postgresFiles)
+	if len(versions) != 1 {
+		t.Fatalf("dialects got different versions: %v", versions)
 	}
 }
 
@@ -281,85 +274,85 @@ docs:
 	assertContains(t, content, "任务队列: 未启用")
 }
 
-func TestMakeModuleGeneratesConsoleModuleTemplate(t *testing.T) {
-	root := t.TempDir()
-	mustMkdir(t, filepath.Join(root, "app/console/internal/router"))
-	mustMkdir(t, filepath.Join(root, "app/console/internal/service"))
-	mustMkdir(t, filepath.Join(root, "app/console/internal/handler"))
-	mustMkdir(t, filepath.Join(root, "internal/model"))
-	mustWrite(t, filepath.Join(root, "app/console/internal/router/router.go"), `package router
+const moduleFieldsForTest = "title:string:required,amount:int,paid:bool,note:text,due_at:time"
 
-func register() {
-	// grove:register-routes
-}
-`)
-	// Generated imports come from the go.mod of the repository being written
-	// into, so a fixture without one is not a valid target.
-	mustWrite(t, filepath.Join(root, "go.mod"), "module example.com/forked\n\ngo 1.25.0\n")
-
-	previousWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("get wd: %v", err)
+// This is the contract the generator exists to keep: what it writes into a real
+// copy of this repository must build, pass the route/OpenAPI contract, pass the
+// dialect migration rules, and pass the CRUD test it generates alongside.
+// It used to write a stub whose route failed make contracts on the spot.
+func TestMakeModuleOutputPassesTheProjectGates(t *testing.T) {
+	if testing.Short() {
+		t.Skip("copies the repository and runs go test; skipped in -short")
 	}
-	if err := os.Chdir(root); err != nil {
-		t.Fatalf("chdir temp root: %v", err)
-	}
-	defer func() {
-		if err := os.Chdir(previousWD); err != nil {
-			t.Fatalf("restore wd: %v", err)
-		}
-	}()
+	root := prepareRepositoryCopy(t)
+	chdir(t, root)
 
 	cmd := newMakeModuleCmd()
-	cmd.SetArgs([]string{"ProductCategory"})
+	cmd.SetArgs([]string{"Invoice", "--label", "发票", "--fields", moduleFieldsForTest})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("make:module failed: %v", err)
 	}
 
-	service := mustRead(t, filepath.Join(root, "app/console/internal/service/product_category.go"))
-	assertContains(t, service, "package service")
-	assertContains(t, service, "type ProductCategoryService struct")
-	assertContains(t, service, "database.Connections")
-	assertContains(t, service, "errx.ServiceUnavailable")
+	runGo(t, root, "vet", "./internal/model/...", "./app/console/...")
+	runGo(t, root, "test",
+		"./app/console/internal/docs/", "./app/console/internal/service/", "./pkg/migrate/",
+		"-run", "Contract|InvoiceServiceCRUD|DialectMigrationVersionsMatch|EveryUpMigrationHasDown|MySQLMigrations",
+	)
+}
+
+func TestMakeModuleWiresRoutesOperationsAndMigrations(t *testing.T) {
+	root := prepareModuleWorkspace(t, stubRouterWithMarker)
+	chdir(t, root)
+
+	cmd := newMakeModuleCmd()
+	cmd.SetArgs([]string{"ProductCategory", "--label", "商品分类", "--fields", "name:string:required,sort:int"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("make:module failed: %v", err)
+	}
+
+	router := mustRead(t, filepath.Join(root, routerFile))
+	assertContains(t, router, "\thandler.RegisterProductCategoryRoutes(protected, r.p.DB, pagePolicies, catalog)\n")
+	contract := mustRead(t, filepath.Join(root, contractFile))
+	assertContains(t, contract, "\taddProductCategoryOperations(&doc)\n")
+
+	handler := mustRead(t, filepath.Join(root, "app/console/internal/handler/product_category.go"))
+	assertContains(t, handler, `wrapRoute(protected.Group("/product-categories"), catalog)`)
+	// Permission names group by the part before the dot, so the label is what
+	// operators see in the role editor.
+	for _, name := range []string{"商品分类.列表", "商品分类.详情", "商品分类.创建", "商品分类.更新", "商品分类.删除"} {
+		assertContains(t, handler, `.Name("`+name+`")`)
+	}
+	assertContains(t, handler, `binding:"required,max=255"`)
 
 	model := mustRead(t, filepath.Join(root, "internal/model/product_category.go"))
 	assertContains(t, model, `return "product_categories"`)
+	assertNotContains(t, model, "default:")
 
-	handler := mustRead(t, filepath.Join(root, "app/console/internal/handler/product_category.go"))
-	assertContains(t, handler, "package handler")
-	assertContains(t, handler, "RegisterProductCategoryRoutes")
-	assertContains(t, handler, "route.Wrap(protected.Group(\"/product-categories\"), catalog)")
-	assertContains(t, handler, ".Name(\"ProductCategory.列表\")")
-	assertContains(t, handler, "response.Success")
-
-	router := mustRead(t, filepath.Join(root, "app/console/internal/router/router.go"))
-	assertContains(t, router, "\thandler.RegisterProductCategoryRoutes(protected, r.p.DB, r.p.RouteCatalog)\n")
+	versions := map[string]struct{}{}
+	for _, dialect := range []string{"postgres", "mysql"} {
+		ups, _ := filepath.Glob(filepath.Join(root, migrationsDir, dialect, "*_create_product_categories.up.sql"))
+		downs, _ := filepath.Glob(filepath.Join(root, migrationsDir, dialect, "*_create_product_categories.down.sql"))
+		if len(ups) != 1 || len(downs) != 1 {
+			t.Fatalf("%s migrations: up=%v down=%v", dialect, ups, downs)
+		}
+		versions[strings.SplitN(filepath.Base(ups[0]), "_", 2)[0]] = struct{}{}
+	}
+	if len(versions) != 1 {
+		t.Fatalf("dialects got different migration versions: %v", versions)
+	}
 }
 
-func TestMakeModuleGeneratedPackagesCompile(t *testing.T) {
-	root := prepareModuleCompileWorkspace(t)
-
-	previousWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("get wd: %v", err)
-	}
-	if err := os.Chdir(root); err != nil {
-		t.Fatalf("chdir temp root: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(previousWD) })
+func TestMakeModuleDefaultsToANameField(t *testing.T) {
+	root := prepareModuleWorkspace(t, stubRouterWithMarker)
+	chdir(t, root)
 
 	cmd := newMakeModuleCmd()
-	cmd.SetArgs([]string{"ProductCategory"})
+	cmd.SetArgs([]string{"Tag"})
 	if err := cmd.Execute(); err != nil {
-		t.Fatalf("make:module failed: %v", err)
+		t.Fatalf("make:module without --fields failed: %v", err)
 	}
-
-	goTest := exec.Command("go", "test", "./internal/model", "./app/console/internal/service", "./app/console/internal/handler", "./app/console/internal/router")
-	goTest.Dir = root
-	output, err := goTest.CombinedOutput()
-	if err != nil {
-		t.Fatalf("generated packages do not compile: %v\n%s", err, output)
-	}
+	model := mustRead(t, filepath.Join(root, "internal/model/tag.go"))
+	assertContains(t, model, `Name string`)
 }
 
 func TestMakeModulePreflightsBeforeWriting(t *testing.T) {
@@ -369,79 +362,44 @@ func register() {
 	// marker missing on purpose
 }
 `)
-
-	previousWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("get wd: %v", err)
-	}
-	if err := os.Chdir(root); err != nil {
-		t.Fatalf("chdir temp root: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(previousWD) })
+	chdir(t, root)
 
 	cmd := newMakeModuleCmd()
 	cmd.SetArgs([]string{"ProductCategory"})
 	if err := cmd.Execute(); err == nil {
 		t.Fatal("expected missing router marker error")
 	}
-
-	for _, path := range []string{
-		"internal/model/product_category.go",
-		"app/console/internal/service/product_category.go",
-		"app/console/internal/handler/product_category.go",
-	} {
-		if _, err := os.Stat(filepath.Join(root, path)); !os.IsNotExist(err) {
-			t.Fatalf("preflight failure left generated file %s", path)
-		}
-	}
+	assertNothingGenerated(t, root, "product_category", "product_categories")
 }
 
-func TestMakeModuleRejectsInvalidNameBeforeWriting(t *testing.T) {
-	root := prepareModuleWorkspace(t, `package router
-
-func register() {
-	// grove:register-routes
-}
-`)
-
-	previousWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("get wd: %v", err)
+func TestMakeModuleRejectsInvalidInputBeforeWriting(t *testing.T) {
+	cases := map[string][]string{
+		"invalid name":        {"123-product"},
+		"unknown field type":  {"Product", "--fields", "price:money"},
+		"reserved field name": {"Product", "--fields", "id:string"},
+		"sql keyword field":   {"Product", "--fields", "order:int"},
+		"required bool":       {"Product", "--fields", "active:bool:required"},
+		"label with a dot":    {"Product", "--label", "商品.管理"},
 	}
-	if err := os.Chdir(root); err != nil {
-		t.Fatalf("chdir temp root: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(previousWD) })
+	for name, args := range cases {
+		t.Run(name, func(t *testing.T) {
+			root := prepareModuleWorkspace(t, stubRouterWithMarker)
+			chdir(t, root)
 
-	cmd := newMakeModuleCmd()
-	cmd.SetArgs([]string{"123-product"})
-	if err := cmd.Execute(); err == nil {
-		t.Fatal("expected invalid Go identifier error")
-	}
-
-	if _, err := os.Stat(filepath.Join(root, "internal/model/123_product.go")); !os.IsNotExist(err) {
-		t.Fatal("invalid module name left a generated file")
+			cmd := newMakeModuleCmd()
+			cmd.SetArgs(args)
+			if err := cmd.Execute(); err == nil {
+				t.Fatalf("expected %s to be rejected", name)
+			}
+			assertNothingGenerated(t, root, "product", "products")
+		})
 	}
 }
 
 func TestMakeModuleChecksAllTargetsBeforeWriting(t *testing.T) {
-	root := prepareModuleWorkspace(t, `package router
-
-func register() {
-	// grove:register-routes
-}
-`)
-	existingService := filepath.Join(root, "app/console/internal/service/product_category.go")
-	mustWrite(t, existingService, "package service\n")
-
-	previousWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("get wd: %v", err)
-	}
-	if err := os.Chdir(root); err != nil {
-		t.Fatalf("chdir temp root: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(previousWD) })
+	root := prepareModuleWorkspace(t, stubRouterWithMarker)
+	mustWrite(t, filepath.Join(root, "app/console/internal/service/product_category.go"), "package service\n")
+	chdir(t, root)
 
 	cmd := newMakeModuleCmd()
 	cmd.SetArgs([]string{"ProductCategory"})
@@ -456,24 +414,14 @@ func register() {
 			t.Fatalf("target preflight left generated file %s", path)
 		}
 	}
+	if migrations, _ := filepath.Glob(filepath.Join(root, migrationsDir, "*", "*_create_product_categories.*")); len(migrations) != 0 {
+		t.Fatalf("target preflight left migrations: %v", migrations)
+	}
 }
 
-func TestMakeModuleConcurrentGenerationsPreserveBothRouteRegistrations(t *testing.T) {
-	root := prepareModuleWorkspace(t, `package router
-
-func register() {
-	// grove:register-routes
-}
-`)
-
-	previousWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("get wd: %v", err)
-	}
-	if err := os.Chdir(root); err != nil {
-		t.Fatalf("chdir temp root: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(previousWD) })
+func TestMakeModuleConcurrentGenerationsPreserveBothRegistrations(t *testing.T) {
+	root := prepareModuleWorkspace(t, stubRouterWithMarker)
+	chdir(t, root)
 
 	inputs := []string{"ProductCategory", "OrderItem"}
 	errs := make(chan error, len(inputs))
@@ -482,7 +430,7 @@ func register() {
 		wg.Add(1)
 		go func(input string) {
 			defer wg.Done()
-			_, err := generateConsoleModule(input)
+			_, err := generateConsoleModule(input, "", "")
 			errs <- err
 		}(input)
 	}
@@ -494,43 +442,111 @@ func register() {
 		}
 	}
 
-	router := mustRead(t, filepath.Join(root, "app/console/internal/router/router.go"))
-	for _, line := range []string{
-		"handler.RegisterProductCategoryRoutes(protected, r.p.DB, r.p.RouteCatalog)",
-		"handler.RegisterOrderItemRoutes(protected, r.p.DB, r.p.RouteCatalog)",
-	} {
-		assertContains(t, router, line)
-	}
-	for _, path := range []string{
-		"internal/model/product_category.go",
-		"app/console/internal/service/product_category.go",
-		"app/console/internal/handler/product_category.go",
-		"internal/model/order_item.go",
-		"app/console/internal/service/order_item.go",
-		"app/console/internal/handler/order_item.go",
-	} {
-		if _, err := os.Stat(filepath.Join(root, path)); err != nil {
-			t.Fatalf("expected generated file %s: %v", path, err)
-		}
+	router := mustRead(t, filepath.Join(root, routerFile))
+	contract := mustRead(t, filepath.Join(root, contractFile))
+	for _, name := range []string{"ProductCategory", "OrderItem"} {
+		assertContains(t, router, "handler.Register"+name+"Routes(protected, r.p.DB, pagePolicies, catalog)")
+		assertContains(t, contract, "add"+name+"Operations(&doc)")
 	}
 }
 
-func TestCommitGeneratedModuleRollsBackFilesWhenRouterWriteFails(t *testing.T) {
+// A failure after some files are written must leave the repository as it was:
+// new files removed, edited files restored.
+func TestCommitGeneratedModuleRollsBackEverythingOnFailure(t *testing.T) {
 	root := t.TempDir()
-	routerPath := filepath.Join(root, "router")
-	mustMkdir(t, routerPath)
+	chdir(t, root)
+
+	edited := filepath.Join(root, "router.go")
+	mustWrite(t, edited, "package router\n")
+	unwritable := filepath.Join(root, "contract")
+	mustMkdir(t, unwritable)
+
 	sources := []generatedSource{
 		{path: filepath.Join(root, "model.go"), content: []byte("package model\n")},
 		{path: filepath.Join(root, "service.go"), content: []byte("package service\n")},
 	}
+	edits := []fileEdit{
+		{path: edited, original: []byte("package router\n"), updated: []byte("package router // changed\n")},
+		// Replacing a directory with a file fails, after the first edit landed.
+		{path: unwritable, original: nil, updated: []byte("package docs\n")},
+	}
 
-	if err := commitGeneratedModule(sources, routerPath, []byte("package router\n")); err == nil {
-		t.Fatal("expected router replacement failure")
+	if _, err := commitGeneratedModule(sources, nil, "widgets", edits); err == nil {
+		t.Fatal("expected the second edit to fail")
 	}
 	for _, source := range sources {
 		if _, err := os.Stat(source.path); !os.IsNotExist(err) {
-			t.Fatalf("router failure left generated file %s", source.path)
+			t.Fatalf("failure left generated file %s", source.path)
 		}
+	}
+	if migrations, _ := filepath.Glob(filepath.Join(root, migrationsDir, "*", "*_create_widgets.*")); len(migrations) != 0 {
+		t.Fatalf("failure left migrations: %v", migrations)
+	}
+	if got := mustRead(t, edited); got != "package router\n" {
+		t.Fatalf("failure did not restore the edited file: %q", got)
+	}
+}
+
+const stubRouterWithMarker = `package router
+
+func register() {
+	// grove:register-routes
+}
+`
+
+// prepareRepositoryCopy copies the Go tree with its tests, plus the frontend
+// contract the OpenAPI contract test reads, so generated code is checked
+// against the real router, docs and migration rules rather than stubs.
+func prepareRepositoryCopy(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	repoRoot := filepath.Join("..", "..")
+	for _, dir := range []string{"app", "internal", "pkg", "database"} {
+		copyTree(t, filepath.Join(repoRoot, dir), filepath.Join(root, dir), true)
+	}
+	for _, file := range []string{"go.mod", "go.sum", "web/admin-vben/apps/console/src/api/console-contract.json"} {
+		if err := copyFile(t, filepath.Join(repoRoot, file), filepath.Join(root, file)); err != nil {
+			t.Fatalf("copy %s: %v", file, err)
+		}
+	}
+	return root
+}
+
+func chdir(t *testing.T, dir string) {
+	t.Helper()
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get wd: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir %s: %v", dir, err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(previous) })
+}
+
+func runGo(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	command := exec.Command("go", args...)
+	command.Dir = dir
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("go %s failed: %v\n%s", strings.Join(args, " "), err, output)
+	}
+}
+
+func assertNothingGenerated(t *testing.T, root, snake, table string) {
+	t.Helper()
+	for _, path := range []string{
+		"internal/model/" + snake + ".go",
+		"app/console/internal/service/" + snake + ".go",
+		"app/console/internal/handler/" + snake + ".go",
+		"app/console/internal/docs/" + snake + ".go",
+	} {
+		if _, err := os.Stat(filepath.Join(root, path)); !os.IsNotExist(err) {
+			t.Fatalf("rejected generation left %s", path)
+		}
+	}
+	if migrations, _ := filepath.Glob(filepath.Join(root, migrationsDir, "*", "*_create_"+table+".*")); len(migrations) != 0 {
+		t.Fatalf("rejected generation left migrations: %v", migrations)
 	}
 }
 
@@ -539,44 +555,27 @@ func prepareModuleWorkspace(t *testing.T, router string) string {
 	root := t.TempDir()
 	repoRoot := filepath.Join("..", "..")
 	for _, dir := range []string{"internal", "pkg", "app/console"} {
-		copyTree(t, filepath.Join(repoRoot, dir), filepath.Join(root, dir))
+		copyTree(t, filepath.Join(repoRoot, dir), filepath.Join(root, dir), false)
 	}
-	mustMkdir(t, filepath.Join(root, "app/console/internal/router"))
-	mustWrite(t, filepath.Join(root, "app/console/internal/router/router.go"), router)
-	if err := copyFile(t, filepath.Join(repoRoot, "go.mod"), filepath.Join(root, "go.mod")); err != nil {
-		t.Fatalf("copy go.mod: %v", err)
-	}
-	if err := copyFile(t, filepath.Join(repoRoot, "go.sum"), filepath.Join(root, "go.sum")); err != nil {
-		t.Fatalf("copy go.sum: %v", err)
+	mustWrite(t, filepath.Join(root, routerFile), router)
+	for _, file := range []string{"go.mod", "go.sum"} {
+		if err := copyFile(t, filepath.Join(repoRoot, file), filepath.Join(root, file)); err != nil {
+			t.Fatalf("copy %s: %v", file, err)
+		}
 	}
 	return root
 }
 
-func prepareModuleCompileWorkspace(t *testing.T) string {
-	return prepareModuleWorkspace(t, `package router
-
-import (
-	"github.com/gin-gonic/gin"
-	"github.com/zhimma/grove/app/console/internal/handler"
-	"github.com/zhimma/grove/internal/provider"
-)
-
-type Router struct { p *provider.Provider }
-
-func (r *Router) register(protected *gin.RouterGroup) {
-	// grove:register-routes
-	_ = handler.RegisterProductCategoryRoutes
-}
-`)
-}
-
-func copyTree(t *testing.T, source, target string) {
+// copyTree copies a directory. Files are read and written whole rather than
+// streamed through handles held until cleanup, which ran into the open-file
+// limit once whole-repository copies came along.
+func copyTree(t *testing.T, source, target string, includeTests bool) {
 	t.Helper()
 	err := filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && strings.HasSuffix(info.Name(), "_test.go") {
+		if !info.IsDir() && !includeTests && strings.HasSuffix(info.Name(), "_test.go") {
 			return nil
 		}
 		rel, err := filepath.Rel(source, path)
@@ -585,7 +584,7 @@ func copyTree(t *testing.T, source, target string) {
 		}
 		destination := filepath.Join(target, rel)
 		if info.IsDir() {
-			return os.MkdirAll(destination, info.Mode().Perm())
+			return os.MkdirAll(destination, 0o750)
 		}
 		return copyFile(t, path, destination)
 	})
@@ -599,28 +598,11 @@ func copyFile(t *testing.T, source, target string) error {
 	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 		return err
 	}
-	in, err := os.Open(filepath.Clean(source))
+	content, err := os.ReadFile(filepath.Clean(source))
 	if err != nil {
-		t.Fatalf("open source %s: %v", source, err)
+		return err
 	}
-	t.Cleanup(func() {
-		if err := in.Close(); err != nil {
-			t.Errorf("close source: %v", err)
-		}
-	})
-	out, err := os.OpenFile(filepath.Clean(target), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-	if err != nil {
-		t.Fatalf("create target %s: %v", target, err)
-	}
-	t.Cleanup(func() {
-		if err := out.Close(); err != nil {
-			t.Errorf("close target: %v", err)
-		}
-	})
-	if _, err := io.Copy(out, in); err != nil {
-		t.Fatalf("copy %s: %v", source, err)
-	}
-	return nil
+	return os.WriteFile(filepath.Clean(target), content, 0o600)
 }
 
 func mustMkdir(t *testing.T, path string) {
@@ -676,6 +658,8 @@ func register() {
 	// grove:register-routes
 }
 `)
+	mustMkdir(t, filepath.Join(root, "app/console/internal/docs"))
+	mustWrite(t, filepath.Join(root, contractFile), "package docs\n\nfunc spec() {\n\t// grove:register-operations\n}\n")
 	mustWrite(t, filepath.Join(root, "go.mod"), "module example.com/renamed-fork\n\ngo 1.25.0\n")
 
 	previousWD, err := os.Getwd()

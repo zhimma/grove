@@ -18,7 +18,7 @@
 需要持久化时：
 
 1. 使用 `make migrate.up` 之前先创建正反向 SQL 迁移。
-2. 可用 CLI 创建迁移文件对：
+2. 可用 CLI 创建迁移文件对（postgres 与 mysql 各一对，同一版本号）：
 
    ```bash
    go run ./cmd/grove migrate create create_articles_table
@@ -206,18 +206,45 @@ make admin.build
 make verify
 ```
 
-## CLI 生成器边界
+## 用生成器起步
 
-可用以下命令减少模板代码：
+新模块优先从生成器开始，一条命令得到可运行、已通过门禁的纵向切片：
 
 ```bash
-go run ./cmd/grove make:model Article
-go run ./cmd/grove make:service Article
-go run ./cmd/grove make:handler Article
-go run ./cmd/grove make:module Article
+go run ./cmd/grove make:module Invoice --label 发票 \
+  --fields "title:string:required,amount:int,paid:bool,note:text,due_at:time"
 ```
 
-`make:module` 会生成 `internal/model`、Console service、Console handler，并在路由标记处注册后端路由；它不会生成迁移、前端页面、菜单或权限数据。生成后必须人工补齐业务逻辑、OpenAPI、测试和前端。
+| 生成物 | 位置 |
+| --- | --- |
+| 双方言迁移（同版本） | `database/migrations/{postgres,mysql}/*_create_invoices.*.sql` |
+| 模型 | `internal/model/invoice.go` |
+| 分页 CRUD service 与测试 | `app/console/internal/service/invoice.go`、`invoice_test.go` |
+| 请求、响应与路由（含权限名 `发票.列表` 等） | `app/console/internal/handler/invoice.go`、`invoice_response.go` |
+| OpenAPI 操作 | `app/console/internal/docs/invoice.go` |
+| 路由与 OpenAPI 注册 | 写入 `router.go` 与 `contract.go` 中的 `grove:` 标记处 |
+
+字段写法 `name:type[:required]`：
+
+| 类型 | Go | PostgreSQL | MySQL |
+| --- | --- | --- | --- |
+| `string` | `string` | `VARCHAR(255)` | `VARCHAR(255)` |
+| `text` | `string` | `TEXT` | `TEXT` |
+| `int` | `int` | `INTEGER` | `INT` |
+| `bool` | `bool` | `BOOLEAN` | `TINYINT(1)` |
+| `time` | `*time.Time` | `TIMESTAMPTZ NULL` | `DATETIME(6) NULL` |
+
+- `required` 只用于 `string`、`text`、`time`。`int`、`bool` 的零值本身合法，validator 的 `required` 会误拒 0 和 `false`，需要约束请在 service 里写。
+- 省略 `--fields` 时默认 `name:string:required`；省略 `--label` 时显示名同模块名。
+- 字段来自命令行而不是读库，所以生成不需要数据库连接，两种方言的产物完全对称。
+
+生成后通常还要做：
+
+1. `make migrate.up` 建表。
+2. 按业务补充校验（唯一性、状态流转等）与字段的中文 `label`。
+3. 写前端页面：在 `console-contract.json` 登记接口，用 `components/resource-page` 配置列表与表单。
+
+生成器自身有回归测试：在仓库副本里生成模块后，必须同时通过 `go vet`、`make contracts`、生成出的 CRUD 测试和方言迁移规则。
 
 ## 常见错误
 

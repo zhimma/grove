@@ -4,15 +4,21 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"go/format"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/zhimma/grove/pkg/migrate"
 )
 
 const (
 	routeMarker           = "\t// grove:register-routes\n"
+	operationMarker       = "\t// grove:register-operations\n"
 	generatorLockFilename = ".grove-generate.lock"
+	migrationsDir         = "database/migrations"
+	routerFile            = "app/console/internal/router/router.go"
+	contractFile          = "app/console/internal/docs/contract.go"
 )
 
 type generatedSource struct {
@@ -20,52 +26,135 @@ type generatedSource struct {
 	content []byte
 }
 
-func generateConsoleModule(input string) ([]string, error) {
+// fileEdit is a line inserted into an existing file at a grove marker. The
+// original is kept so a failed generation can put the file back.
+type fileEdit struct {
+	path     string
+	original []byte
+	updated  []byte
+}
+
+// generateConsoleModule writes a complete vertical slice: model, CRUD service
+// with its test, handler, response, OpenAPI operations and a migration in every
+// dialect, then registers the routes and operations. Either all of it lands or
+// none of it does, and the result has to pass make contracts as generated.
+func generateConsoleModule(input, fieldSpec, label string) ([]string, error) {
 	module, err := modulePath()
 	if err != nil {
 		return nil, err
 	}
-	name := toPascal(input)
-	snake := toSnake(input)
-	if !isValidGoIdentifier(name) || snake == "" {
-		return nil, fmt.Errorf("模块名称 %q 不能转换为合法 Go 标识符", input)
+	fields, err := parseFields(fieldSpec)
+	if err != nil {
+		return nil, err
+	}
+	spec, err := newModuleSpec(module, input, label, fields)
+	if err != nil {
+		return nil, err
+	}
+	sources, err := renderModuleSources(spec)
+	if err != nil {
+		return nil, err
+	}
+	migrations, err := renderMigrations(spec)
+	if err != nil {
+		return nil, err
 	}
 
-	sources := []generatedSource{
-		{path: filepath.Join("internal/model", snake+".go"), content: []byte(modelTemplate(name, snake))},
-		{path: filepath.Join("app/console/internal/service", snake+".go"), content: []byte(consoleServiceTemplate(module, name, snake))},
-		{path: filepath.Join("app/console/internal/handler", snake+".go"), content: []byte(consoleHandlerTemplate(module, name, snake))},
-	}
-	routerPath := filepath.Join("app/console/internal/router", "router.go")
-	line := fmt.Sprintf("\thandler.Register%sRoutes(protected, r.p.DB, r.p.RouteCatalog)\n", name)
-
-	for i := range sources {
-		formatted, err := format.Source(sources[i].content)
-		if err != nil {
-			return nil, fmt.Errorf("格式化生成文件 %s: %w", sources[i].path, err)
-		}
-		sources[i].content = formatted
-	}
-
-	if err := withGeneratorLock(routerPath, func() error {
+	var created []string
+	err = withGeneratorLock(routerFile, func() error {
 		for _, source := range sources {
 			if err := ensureFileAbsent(source.path); err != nil {
 				return err
 			}
 		}
-		routerContent, err := prepareRouteRegistration(routerPath, line)
+		edits, err := prepareEdits(spec)
 		if err != nil {
 			return err
 		}
-		return commitGeneratedModule(sources, routerPath, routerContent)
-	}); err != nil {
+		created, err = commitGeneratedModule(sources, migrations, spec.Table, edits)
+		return err
+	})
+	if err != nil {
 		return nil, err
 	}
-	paths := make([]string, 0, len(sources))
-	for _, source := range sources {
-		paths = append(paths, source.path)
+	return created, nil
+}
+
+func renderModuleSources(spec moduleSpec) ([]generatedSource, error) {
+	files := []struct{ path, name, text string }{
+		{filepath.Join("internal/model", spec.Snake+".go"), "model", modelTemplate},
+		{filepath.Join("app/console/internal/service", spec.Snake+".go"), "service", serviceTemplate},
+		{filepath.Join("app/console/internal/service", spec.Snake+"_test.go"), "service test", serviceTestTemplate},
+		{filepath.Join("app/console/internal/handler", spec.Snake+".go"), "handler", handlerTemplate},
+		{filepath.Join("app/console/internal/handler", spec.Snake+"_response.go"), "response", responseTemplate},
+		{filepath.Join("app/console/internal/docs", spec.Snake+".go"), "docs", docsTemplate},
 	}
-	return paths, nil
+	sources := make([]generatedSource, 0, len(files))
+	for _, file := range files {
+		content, err := renderGo(file.name, file.text, spec)
+		if err != nil {
+			return nil, err
+		}
+		sources = append(sources, generatedSource{path: file.path, content: content})
+	}
+	return sources, nil
+}
+
+func renderMigrations(spec moduleSpec) (map[string]migrate.SQL, error) {
+	postgresUp, err := render("postgres migration", postgresUpTemplate, spec)
+	if err != nil {
+		return nil, err
+	}
+	mysqlUp, err := render("mysql migration", mysqlUpTemplate, spec)
+	if err != nil {
+		return nil, err
+	}
+	down, err := render("down migration", dropTableTemplate, spec)
+	if err != nil {
+		return nil, err
+	}
+	bodies := map[string]migrate.SQL{
+		"postgres": {Up: string(postgresUp), Down: string(down)},
+		"mysql":    {Up: string(mysqlUp), Down: string(down)},
+	}
+	// A dialect added to migrate.Dialects without a template here would get
+	// placeholder SQL and a table that never exists; fail instead.
+	for _, dialect := range migrate.Dialects {
+		if _, ok := bodies[dialect]; !ok {
+			return nil, fmt.Errorf("缺少 %s 方言的迁移模板", dialect)
+		}
+	}
+	return bodies, nil
+}
+
+func prepareEdits(spec moduleSpec) ([]fileEdit, error) {
+	router, err := insertAtMarker(routerFile, routeMarker,
+		fmt.Sprintf("\thandler.Register%sRoutes(protected, r.p.DB, pagePolicies, catalog)\n", spec.Name))
+	if err != nil {
+		return nil, err
+	}
+	contract, err := insertAtMarker(contractFile, operationMarker,
+		fmt.Sprintf("\tadd%sOperations(&doc)\n", spec.Name))
+	if err != nil {
+		return nil, err
+	}
+	return []fileEdit{router, contract}, nil
+}
+
+func insertAtMarker(path, marker, line string) (fileEdit, error) {
+	body, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return fileEdit{}, err
+	}
+	edit := fileEdit{path: path, original: body, updated: body}
+	if bytes.Contains(body, []byte(line)) {
+		return edit, nil
+	}
+	if !bytes.Contains(body, []byte(marker)) {
+		return fileEdit{}, fmt.Errorf("未在 %s 中找到标记 %q", path, strings.TrimSpace(marker))
+	}
+	edit.updated = bytes.Replace(body, []byte(marker), []byte(line+marker), 1)
+	return edit, nil
 }
 
 // withGeneratorLock serializes the read-modify-write of router.go across CLI
@@ -102,23 +191,13 @@ func ensureFileAbsent(path string) error {
 	}
 }
 
-func prepareRouteRegistration(path, line string) ([]byte, error) {
-	body, err := os.ReadFile(filepath.Clean(path))
-	if err != nil {
-		return nil, err
-	}
-	if bytes.Contains(body, []byte(line)) {
-		return body, nil
-	}
-	if !bytes.Contains(body, []byte(routeMarker)) {
-		return nil, fmt.Errorf("未在 %s 中找到 grove 路由标记", path)
-	}
-	return bytes.Replace(body, []byte(routeMarker), []byte(line+routeMarker), 1), nil
-}
-
-func commitGeneratedModule(sources []generatedSource, routerPath string, routerContent []byte) error {
-	created := make([]string, 0, len(sources))
+func commitGeneratedModule(sources []generatedSource, migrations map[string]migrate.SQL, table string, edits []fileEdit) ([]string, error) {
+	created := make([]string, 0, len(sources)+len(migrate.Dialects)*2)
+	var applied []fileEdit
 	rollback := func() {
+		for _, edit := range applied {
+			_ = replaceFileAtomic(edit.path, edit.original)
+		}
 		for _, path := range created {
 			_ = os.Remove(path)
 		}
@@ -127,15 +206,24 @@ func commitGeneratedModule(sources []generatedSource, routerPath string, routerC
 	for _, source := range sources {
 		if err := writeNewFileAtomic(source.path, source.content, 0o600); err != nil {
 			rollback()
-			return err
+			return nil, err
 		}
 		created = append(created, source.path)
 	}
-	if err := replaceFileAtomic(routerPath, routerContent); err != nil {
+	paths, err := migrate.CreateFiles(migrationsDir, "create_"+table, migrations)
+	if err != nil {
 		rollback()
-		return err
+		return nil, err
 	}
-	return nil
+	created = append(created, paths...)
+	for _, edit := range edits {
+		if err := replaceFileAtomic(edit.path, edit.updated); err != nil {
+			rollback()
+			return nil, err
+		}
+		applied = append(applied, edit)
+	}
+	return created, nil
 }
 
 func writeNewFileAtomic(path string, content []byte, mode os.FileMode) error {

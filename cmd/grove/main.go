@@ -46,10 +46,8 @@ func newRootCmd() *cobra.Command {
 2. 生成 console 后台约定代码
 3. 查看当前框架约定与环境信息
 
-注意：
-- make:module 只生成 console 后台的 model/service/handler，并自动注册后端路由
-- 不会自动生成数据库迁移
-- 不会自动生成前端页面或菜单`,
+make:module 一条命令生成可运行的后台模块：双方言迁移、模型、
+分页 CRUD 与测试、接口文档，并注册路由。前端页面暂需手写。`,
 	}
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "配置文件路径")
 
@@ -58,9 +56,6 @@ func newRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newMigrateCmd())
 	rootCmd.AddCommand(newSeedCmd())
 	rootCmd.AddCommand(newRBACCmd())
-	rootCmd.AddCommand(newMakeModelCmd())
-	rootCmd.AddCommand(newMakeServiceCmd())
-	rootCmd.AddCommand(newMakeHandlerCmd())
 	rootCmd.AddCommand(newMakeModuleCmd())
 
 	return rootCmd
@@ -214,23 +209,16 @@ func newMigrateCmd() *cobra.Command {
 
 	cmd.AddCommand(&cobra.Command{
 		Use:   "create [name]",
-		Short: "创建新的迁移文件对",
+		Short: "为 postgres 与 mysql 各创建一对同版本的迁移文件",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := loadCLIConfig()
+			paths, err := migrate.CreateFiles(migrationPath, args[0], nil)
 			if err != nil {
 				return err
 			}
-			dir, err := migrate.ResolveDialectDir(migrationPath, cfg.Databases.Default.Driver)
-			if err != nil {
-				return err
+			for _, path := range paths {
+				fmt.Println(path)
 			}
-			upPath, downPath, err := migrate.CreateFiles(dir, args[0])
-			if err != nil {
-				return err
-			}
-			fmt.Println(upPath)
-			fmt.Println(downPath)
 			return nil
 		},
 	})
@@ -408,84 +396,29 @@ func resolveRootPassword(cfg *config.Config) (string, bool, error) {
 	return base64.RawURLEncoding.EncodeToString(randomBytes), true, nil
 }
 
-func newMakeModelCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "make:model [name]",
-		Short: "生成共享 model 模板",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			name := toPascal(args[0])
-			path := filepath.Join("internal/model", toSnake(args[0])+".go")
-			content := fmt.Sprintf(`package model
-
-type %s struct {
-	Base
-}
-
-func (%s) TableName() string {
-	return "%s"
-}
-`, name, name, toSnakePlural(args[0]))
-			return writeFile(path, content)
-		},
-	}
-}
-
-func newMakeServiceCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "make:service [name]",
-		Short: "生成 console service 模板",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			module, err := modulePath()
-			if err != nil {
-				return err
-			}
-			name := toPascal(args[0])
-			snake := toSnake(args[0])
-			path := filepath.Join("app/console/internal/service", snake+".go")
-			return writeFile(path, consoleServiceTemplate(module, name, snake))
-		},
-	}
-}
-
-func newMakeHandlerCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "make:handler [name]",
-		Short: "生成 console handler 模板",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			module, err := modulePath()
-			if err != nil {
-				return err
-			}
-			name := toPascal(args[0])
-			snake := toSnake(args[0])
-			path := filepath.Join("app/console/internal/handler", snake+".go")
-			return writeFile(path, consoleHandlerTemplate(module, name, snake))
-		},
-	}
-}
-
 func newMakeModuleCmd() *cobra.Command {
-	return &cobra.Command{
+	var fieldSpec, label string
+	cmd := &cobra.Command{
 		Use:   "make:module [name]",
-		Short: "生成 console model、service、handler，并自动注册后端路由",
-		Long: `生成当前 console-first 约定下的最小后台模块模板。
+		Short: "生成可运行的 console 模块：迁移、模型、CRUD、接口文档与测试",
+		Long: `生成一个可以直接运行、并通过 make contracts 的 console 模块。
 
 会生成：
-- internal/model
-- app/console/internal/service
-- app/console/internal/handler
-- app/console/internal/router 路由注册
+- database/migrations/{postgres,mysql} 同版本迁移
+- internal/model 模型
+- app/console/internal/service 分页 CRUD 与对应测试
+- app/console/internal/handler 请求、响应与路由（含权限名）
+- app/console/internal/docs OpenAPI 操作
+- 路由注册与 OpenAPI 注册
 
-不会生成：
-- database/migrations
-- web/admin-vben 前端页面
-- 菜单或权限数据`,
+字段写法：name:type[:required]，逗号分隔。
+类型：string、text、int、bool、time；required 仅用于 string、text、time。
+
+示例：
+  grove make:module Invoice --label 发票 --fields "title:string:required,amount:int,paid:bool,due_at:time"`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			paths, err := generateConsoleModule(args[0])
+			paths, err := generateConsoleModule(args[0], fieldSpec, label)
 			if err != nil {
 				return err
 			}
@@ -494,10 +427,13 @@ func newMakeModuleCmd() *cobra.Command {
 			for _, path := range paths {
 				fmt.Println(path)
 			}
-			fmt.Println("已自动写入 console 路由注册，请继续补充迁移、前端页面和业务逻辑。")
+			fmt.Println("已注册路由与 OpenAPI 操作。下一步：make migrate.up，然后按业务补充校验规则与前端页面。")
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&fieldSpec, "fields", "", `字段列表，默认 "`+defaultFields+`"`)
+	cmd.Flags().StringVar(&label, "label", "", "模块显示名，用于权限名与接口分组，默认同模块名")
+	return cmd
 }
 
 func openDefaultDB() (*gorm.DB, func(), error) {
@@ -543,16 +479,6 @@ func openDefaultDBWithConfig(cfg *config.Config) (*gorm.DB, func(), error) {
 	return dbs.Default(), func() {
 		_ = dbs.Close()
 	}, nil
-}
-
-func writeFile(path, content string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
-	}
-	if _, err := os.Stat(path); err == nil {
-		return fmt.Errorf("文件已存在: %s", path)
-	}
-	return os.WriteFile(filepath.Clean(path), []byte(content), 0o600)
 }
 
 func statusText(enabled bool) string {

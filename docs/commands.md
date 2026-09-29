@@ -87,12 +87,14 @@ go run ./cmd/grove about
 go run ./cmd/grove doctor
 go run ./cmd/grove --help
 go run ./cmd/grove migrate create create_articles_table
-go run ./cmd/grove make:module Article
+go run ./cmd/grove make:module Invoice --label 发票 --fields "title:string:required,amount:int,due_at:time"
 go run ./cmd/grove rbac check
 go run ./cmd/grove rbac repair --dry-run
 ```
 
-`rbac repair` 默认是 dry-run，只有显式传入 `--dry-run=false` 才会修改派生 RBAC 数据。`make:module` 不会自动生成前端页面，也不会替代数据库迁移设计。
+- `migrate create` 为 postgres 与 mysql 各建一对**同版本**迁移，两棵方言目录始终保持一致，不再依赖 `config.yaml`。
+- `make:module` 生成可运行的后台模块，见 [新增模块指南](03-console-新增模块指南.md#用生成器起步)。前端页面暂需手写。
+- `rbac repair` 默认是 dry-run，只有显式传入 `--dry-run=false` 才会修改派生 RBAC 数据。
 
 ## 健康与观测端点
 
