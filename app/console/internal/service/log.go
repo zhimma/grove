@@ -14,7 +14,7 @@ import (
 )
 
 type LogService struct {
-	dbs   database.Connections
+	dbs   *database.Connections
 	pages pagination.Policy
 }
 
@@ -59,7 +59,7 @@ type OperationLogDetail struct {
 	Detail map[string]any
 }
 
-func NewLogService(dbs database.Connections, pages pagination.Policy) *LogService {
+func NewLogService(dbs *database.Connections, pages pagination.Policy) *LogService {
 	return &LogService{dbs: dbs, pages: pages}
 }
 

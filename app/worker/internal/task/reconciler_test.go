@@ -168,7 +168,7 @@ func TestRunStopsWhenContextIsCancelled(t *testing.T) {
 }
 
 type reconcilerFixture struct {
-	dbs         database.Connections
+	dbs         *database.Connections
 	scheduler   *scheduler.Scheduler
 	reconciler  *Reconciler
 	definitions map[string]Definition
@@ -214,7 +214,7 @@ func (f *reconcilerFixture) row(t *testing.T, name string) model.ConsoleSchedule
 	return fixtureRow(t, f.dbs, name)
 }
 
-func fixtureRow(t *testing.T, dbs database.Connections, name string) model.ConsoleScheduledTask {
+func fixtureRow(t *testing.T, dbs *database.Connections, name string) model.ConsoleScheduledTask {
 	t.Helper()
 	var row model.ConsoleScheduledTask
 	if err := dbs.Default().Where("name = ?", name).First(&row).Error; err != nil {
@@ -264,7 +264,7 @@ func assertScheduled(t *testing.T, sched *scheduler.Scheduler, name string, want
 	}
 }
 
-func openReconcilerTestDB(t *testing.T) database.Connections {
+func openReconcilerTestDB(t *testing.T) *database.Connections {
 	t.Helper()
 	dbs := openTaskTestDB(t)
 	if err := dbs.Default().AutoMigrate(&model.ConsoleScheduledTask{}); err != nil {

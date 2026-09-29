@@ -118,7 +118,7 @@ func TestPurgeExpiredSessionsStopsOnCancelledContext(t *testing.T) {
 	}
 }
 
-func openTaskTestDB(t *testing.T) database.Connections {
+func openTaskTestDB(t *testing.T) *database.Connections {
 	t.Helper()
 	db := testkit.OpenDB(t, &model.ConsoleSession{})
 	return database.NewConnectionsFromDBs(db, nil)

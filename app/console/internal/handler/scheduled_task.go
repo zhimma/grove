@@ -42,7 +42,7 @@ type SetScheduledTaskStatusRequest struct {
 // RegisterScheduledTaskRoutes exposes editing only. Rows mirror the Worker's
 // code registry, so there is deliberately no create or delete: a task Console
 // invented would have no handler to run.
-func RegisterScheduledTaskRoutes(protected *gin.RouterGroup, dbs database.Connections, pages pagination.Policy, catalog *route.Catalog) {
+func RegisterScheduledTaskRoutes(protected *gin.RouterGroup, dbs *database.Connections, pages pagination.Policy, catalog *route.Catalog) {
 	h := &ScheduledTaskHandler{
 		scheduledTaskSvc: consoleservice.NewScheduledTaskService(dbs, pages),
 	}

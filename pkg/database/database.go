@@ -36,21 +36,16 @@ type Config struct {
 	ConnectTimeout  int
 }
 
-type Connections interface {
-	Default() *gorm.DB
-	Get(name string) (*gorm.DB, error)
-	Has(name string) bool
-	Names() []string
-	Close() error
-}
-
-type connections struct {
+// Connections holds the default database and any named resources. Its
+// methods are safe on a nil receiver, so an unconfigured database reads as
+// "no connection" rather than a panic.
+type Connections struct {
 	defaultDB *gorm.DB
 	resources map[string]*gorm.DB
 }
 
-func NewConnections(defaultConfig Config, resourceConfigs map[string]Config) (Connections, error) {
-	dbs := &connections{
+func NewConnections(defaultConfig Config, resourceConfigs map[string]Config) (*Connections, error) {
+	dbs := &Connections{
 		resources: map[string]*gorm.DB{},
 	}
 
@@ -81,8 +76,8 @@ func NewConnections(defaultConfig Config, resourceConfigs map[string]Config) (Co
 	return dbs, nil
 }
 
-func NewConnectionsFromDBs(defaultDB *gorm.DB, resources map[string]*gorm.DB) Connections {
-	dbs := &connections{
+func NewConnectionsFromDBs(defaultDB *gorm.DB, resources map[string]*gorm.DB) *Connections {
+	dbs := &Connections{
 		defaultDB: defaultDB,
 		resources: map[string]*gorm.DB{},
 	}
@@ -102,14 +97,14 @@ func NewConnectionsFromDBs(defaultDB *gorm.DB, resources map[string]*gorm.DB) Co
 	return dbs
 }
 
-func (c *connections) Default() *gorm.DB {
+func (c *Connections) Default() *gorm.DB {
 	if c == nil {
 		return nil
 	}
 	return c.defaultDB
 }
 
-func (c *connections) Get(name string) (*gorm.DB, error) {
+func (c *Connections) Get(name string) (*gorm.DB, error) {
 	if c == nil {
 		return nil, fmt.Errorf("database connections are nil")
 	}
@@ -127,7 +122,7 @@ func (c *connections) Get(name string) (*gorm.DB, error) {
 	return db, nil
 }
 
-func (c *connections) Has(name string) bool {
+func (c *Connections) Has(name string) bool {
 	if c == nil {
 		return false
 	}
@@ -135,7 +130,7 @@ func (c *connections) Has(name string) bool {
 	return err == nil
 }
 
-func (c *connections) Names() []string {
+func (c *Connections) Names() []string {
 	if c == nil {
 		return nil
 	}
@@ -150,7 +145,7 @@ func (c *connections) Names() []string {
 	return names
 }
 
-func (c *connections) Close() error {
+func (c *Connections) Close() error {
 	if c == nil {
 		return nil
 	}

@@ -19,12 +19,12 @@ import (
 // It deliberately has no create or delete: rows mirror the Worker's code
 // registry, so a row Console invented would name a task with no handler.
 type ScheduledTaskService struct {
-	dbs   database.Connections
+	dbs   *database.Connections
 	pages pagination.Policy
 	now   func() time.Time
 }
 
-func NewScheduledTaskService(dbs database.Connections, pages pagination.Policy) *ScheduledTaskService {
+func NewScheduledTaskService(dbs *database.Connections, pages pagination.Policy) *ScheduledTaskService {
 	return &ScheduledTaskService{
 		dbs:   dbs,
 		pages: pages,

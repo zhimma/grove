@@ -16,7 +16,7 @@ import (
 )
 
 type RoleService struct {
-	dbs               database.Connections
+	dbs               *database.Connections
 	rolePolicies      rolePolicyStore
 	runtimePermission *RuntimePermissionCatalog
 	pages             pagination.Policy
@@ -99,7 +99,7 @@ type SetRoleMenusInput struct {
 	MenuKeys []string
 }
 
-func NewRoleService(dbs database.Connections, enforcer *rbac.Enforcer, catalog *RuntimePermissionCatalog, pages pagination.Policy) *RoleService {
+func NewRoleService(dbs *database.Connections, enforcer *rbac.Enforcer, catalog *RuntimePermissionCatalog, pages pagination.Policy) *RoleService {
 	return &RoleService{
 		dbs:               dbs,
 		rolePolicies:      enforcer,

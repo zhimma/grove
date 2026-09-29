@@ -30,7 +30,7 @@ import (
 
 type Provider struct {
 	Config        *config.Config
-	DB            database.Connections
+	DB            *database.Connections
 	RedisClient   *redis.Client
 	TokenManager  *auth.Manager
 	JobClient     *job.Client

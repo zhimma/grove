@@ -88,7 +88,7 @@ func TestUserServiceRejectsInvalidInput(t *testing.T) {
 	}
 }
 
-func openUserServiceDB(t *testing.T) (database.Connections, *gorm.DB) {
+func openUserServiceDB(t *testing.T) (*database.Connections, *gorm.DB) {
 	t.Helper()
 	db := testkit.OpenDB(t, &model.User{})
 	return database.NewConnectionsFromDBs(db, nil), db

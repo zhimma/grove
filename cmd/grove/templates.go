@@ -185,7 +185,7 @@ import (
 )
 
 type {{.Name}}Service struct {
-	dbs   database.Connections
+	dbs   *database.Connections
 	pages pagination.Policy
 }
 
@@ -216,7 +216,7 @@ type Update{{.Name}}Input struct {
 {{- end}}
 }
 
-func New{{.Name}}Service(dbs database.Connections, pages pagination.Policy) *{{.Name}}Service {
+func New{{.Name}}Service(dbs *database.Connections, pages pagination.Policy) *{{.Name}}Service {
 	return &{{.Name}}Service{dbs: dbs, pages: pages}
 }
 
@@ -511,7 +511,7 @@ type {{.Name}}PathRequest struct {
 	ID string {{tag "uri:\"id\" binding:\"required\" label:\"ID\""}}
 }
 
-func Register{{.Name}}Routes(protected *gin.RouterGroup, dbs database.Connections, pages pagination.Policy, catalog *route.Catalog) {
+func Register{{.Name}}Routes(protected *gin.RouterGroup, dbs *database.Connections, pages pagination.Policy, catalog *route.Catalog) {
 	h := &{{.Name}}Handler{ {{- .Var}}Svc: consoleservice.New{{.Name}}Service(dbs, pages)}
 	group := wrapRoute(protected.Group("{{.RoutePath}}"), catalog)
 	group.GET("", h.List).Name("{{.Label}}.列表")

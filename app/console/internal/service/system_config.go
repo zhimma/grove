@@ -17,7 +17,7 @@ import (
 const SecretMask = "********"
 
 type SystemConfigService struct {
-	dbs       database.Connections
+	dbs       *database.Connections
 	secretBox *secretbox.Box
 	pages     pagination.Policy
 }
@@ -61,7 +61,7 @@ type GetGroupConfigsInput struct {
 	Group string
 }
 
-func NewSystemConfigService(dbs database.Connections, secretBox *secretbox.Box, pages pagination.Policy) *SystemConfigService {
+func NewSystemConfigService(dbs *database.Connections, secretBox *secretbox.Box, pages pagination.Policy) *SystemConfigService {
 	return &SystemConfigService{
 		dbs: dbs, secretBox: secretBox, pages: pages,
 	}

@@ -19,7 +19,7 @@ import (
 const sessionActivityWriteInterval = 5 * time.Minute
 
 type SessionService struct {
-	dbs          database.Connections
+	dbs          *database.Connections
 	tokenManager *auth.Manager
 	pages        pagination.Policy
 }
@@ -44,7 +44,7 @@ type ListSessionsResult struct {
 	Meta pagination.Meta
 }
 
-func NewSessionService(dbs database.Connections, tokenManager *auth.Manager, pages pagination.Policy) *SessionService {
+func NewSessionService(dbs *database.Connections, tokenManager *auth.Manager, pages pagination.Policy) *SessionService {
 	return &SessionService{dbs: dbs, tokenManager: tokenManager, pages: pages}
 }
 

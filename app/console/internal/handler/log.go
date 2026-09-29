@@ -43,7 +43,7 @@ type ListLoginLogsResponse struct {
 	Meta pagination.Meta `json:"meta"`
 }
 
-func RegisterLogRoutes(protected *gin.RouterGroup, dbs database.Connections, pages pagination.Policy, catalog *route.Catalog) {
+func RegisterLogRoutes(protected *gin.RouterGroup, dbs *database.Connections, pages pagination.Policy, catalog *route.Catalog) {
 	h := &LogHandler{
 		logSvc: consoleservice.NewLogService(dbs, pages),
 	}

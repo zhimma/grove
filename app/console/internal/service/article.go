@@ -16,7 +16,7 @@ import (
 )
 
 type ArticleService struct {
-	dbs   database.Connections
+	dbs   *database.Connections
 	pages pagination.Policy
 }
 
@@ -61,7 +61,7 @@ type UpdateArticleInput struct {
 
 type DeleteArticleInput struct{ ArticleID string }
 
-func NewArticleService(dbs database.Connections, pages pagination.Policy) *ArticleService {
+func NewArticleService(dbs *database.Connections, pages pagination.Policy) *ArticleService {
 	return &ArticleService{dbs: dbs, pages: pages}
 }
 

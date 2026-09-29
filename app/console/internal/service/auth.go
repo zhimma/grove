@@ -21,7 +21,7 @@ import (
 )
 
 type AuthService struct {
-	dbs          database.Connections
+	dbs          *database.Connections
 	enforcer     *rbac.Enforcer
 	tokenManager *auth.Manager
 	sessions     *SessionService
@@ -79,7 +79,7 @@ type GetAuthorizationOverviewOutput struct {
 	MenuKeys       []string `json:"menu_keys"`
 }
 
-func NewAuthService(dbs database.Connections, enforcer *rbac.Enforcer, tm *auth.Manager, guards ...ratelimit.LoginGuard) *AuthService {
+func NewAuthService(dbs *database.Connections, enforcer *rbac.Enforcer, tm *auth.Manager, guards ...ratelimit.LoginGuard) *AuthService {
 	service := &AuthService{
 		dbs:          dbs,
 		enforcer:     enforcer,

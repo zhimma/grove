@@ -17,7 +17,7 @@ import (
 )
 
 type AdminService struct {
-	dbs          database.Connections
+	dbs          *database.Connections
 	roleBindings adminRoleBindings
 	pages        pagination.Policy
 }
@@ -89,7 +89,7 @@ type ResetAdminPasswordInput struct {
 	Password string
 }
 
-func NewAdminService(dbs database.Connections, enforcer *rbac.Enforcer, pages pagination.Policy) *AdminService {
+func NewAdminService(dbs *database.Connections, enforcer *rbac.Enforcer, pages pagination.Policy) *AdminService {
 	return &AdminService{dbs: dbs, roleBindings: enforcer, pages: pages}
 }
 

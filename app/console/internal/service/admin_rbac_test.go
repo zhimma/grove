@@ -147,7 +147,7 @@ func TestUpdateAdminRoleSynchronizesDatabaseAndGrouping(t *testing.T) {
 	}
 }
 
-func openAdminRBACTestContext(t *testing.T) (database.Connections, *gorm.DB, string, string) {
+func openAdminRBACTestContext(t *testing.T) (*database.Connections, *gorm.DB, string, string) {
 	t.Helper()
 	db := testkit.OpenDB(t, &model.ConsoleRole{}, &model.ConsoleAdmin{})
 	testkit.CreateCasbinTable(t, db, "console_casbin_rules")

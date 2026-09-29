@@ -25,7 +25,7 @@ type Definition struct {
 }
 
 // Definitions returns every task this binary can run, keyed by name.
-func Definitions(dbs database.Connections) (map[string]Definition, error) {
+func Definitions(dbs *database.Connections) (map[string]Definition, error) {
 	if dbs == nil {
 		return nil, fmt.Errorf("task registry requires database connections")
 	}

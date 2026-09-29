@@ -70,13 +70,12 @@ handler 只负责：
 `app/console/internal/router/router.go` 统一调用。新增模块应保持同样结构：
 
 ```go
-func RegisterArticleRoutes(protected *gin.RouterGroup, dbs database.Connections, catalog *route.Catalog) {
-	h := &ArticleHandler{
-		articleSvc: service.NewArticleService(dbs),
-	}
+func RegisterArticleRoutes(protected *gin.RouterGroup, dbs *database.Connections, pages pagination.Policy, catalog *route.Catalog) {
+	h := &ArticleHandler{articleSvc: consoleservice.NewArticleService(dbs, pages)}
 
-	articles := route.Wrap(protected.Group("/articles"), catalog)
+	articles := wrapRoute(protected.Group("/articles"), catalog)
 	articles.GET("", h.List).Name("内容管理.文章列表")
+	articles.GET("/:id", h.Detail).Name("内容管理.文章详情")
 	articles.POST("", h.Create).Name("内容管理.创建文章")
 	articles.PUT("/:id", h.Update).Name("内容管理.更新文章")
 	articles.PUT("/:id/status", h.UpdateStatus).Name("内容管理.更新文章状态")
@@ -87,10 +86,10 @@ func RegisterArticleRoutes(protected *gin.RouterGroup, dbs database.Connections,
 然后在 `app/console/internal/router/router.go` 的 `// grove:register-routes` 标记附近注册：
 
 ```go
-handler.RegisterArticleRoutes(protected, r.p.DB, r.p.RouteCatalog)
+handler.RegisterArticleRoutes(protected, r.p.DB, pages, catalog)
 ```
 
-`Provider` 只在 router/server 装配边界出现。handler 和 service 只接收实际依赖；如果模块只使用一个数据库，也可以进一步把 `database.Connections` 收窄为具体的 `*gorm.DB`。
+`Provider` 只在 router/server 装配边界出现。handler 和 service 只接收实际依赖；如果模块只使用一个数据库，也可以进一步把 `*database.Connections` 收窄为具体的 `*gorm.DB`。列表服务另收 router 里建好的同一份 `pages pagination.Policy`。
 
 所有需要进入 API 权限目录的接口必须注册在 `protected` 组，且不能使用 `.Ignore()`。`route.Name("模块.动作")` 只影响角色授权页的展示文案，不改变实际权限 key。
 

@@ -11,7 +11,7 @@
 - SQL 迁移与 seeds
 - 共享模型定义
 
-`database.Connections` 表示默认连接和命名连接的集合。它只管理连接生命周期，不提供通用 Repository 抽象。
+`*database.Connections` 表示默认连接和命名连接的集合，是具体类型而非接口（只有一种实现，测试直接用 `database.NewConnectionsFromDBs`）。它只管理连接生命周期，不提供通用 Repository 抽象；方法对 nil 接收者安全。
 
 ## 最短路径
 

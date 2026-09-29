@@ -8,7 +8,7 @@ import (
 )
 
 type DashboardService struct {
-	dbs database.Connections
+	dbs *database.Connections
 }
 
 type SummaryOutput struct {
@@ -20,7 +20,7 @@ type SummaryOutput struct {
 	Message        string `json:"message"`
 }
 
-func NewDashboardService(dbs database.Connections) *DashboardService {
+func NewDashboardService(dbs *database.Connections) *DashboardService {
 	return &DashboardService{dbs: dbs}
 }
 

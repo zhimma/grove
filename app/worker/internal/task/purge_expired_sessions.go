@@ -15,11 +15,11 @@ import (
 const purgeBatchSize = 1000
 
 type purgeExpiredSessions struct {
-	dbs database.Connections
+	dbs *database.Connections
 	now func() time.Time
 }
 
-func newPurgeExpiredSessions(dbs database.Connections) *purgeExpiredSessions {
+func newPurgeExpiredSessions(dbs *database.Connections) *purgeExpiredSessions {
 	return &purgeExpiredSessions{dbs: dbs, now: time.Now}
 }
 

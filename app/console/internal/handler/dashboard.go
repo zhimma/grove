@@ -13,7 +13,7 @@ type DashboardHandler struct {
 	dashboardSvc *consoleservice.DashboardService
 }
 
-func RegisterDashboardRoutes(protected *gin.RouterGroup, dbs database.Connections, catalog *route.Catalog) {
+func RegisterDashboardRoutes(protected *gin.RouterGroup, dbs *database.Connections, catalog *route.Catalog) {
 	h := &DashboardHandler{
 		dashboardSvc: consoleservice.NewDashboardService(dbs),
 	}

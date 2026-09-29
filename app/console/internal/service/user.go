@@ -14,7 +14,7 @@ import (
 )
 
 type UserService struct {
-	dbs   database.Connections
+	dbs   *database.Connections
 	pages pagination.Policy
 }
 
@@ -64,7 +64,7 @@ type DeleteUserInput struct {
 	UserID string
 }
 
-func NewUserService(dbs database.Connections, pages pagination.Policy) *UserService {
+func NewUserService(dbs *database.Connections, pages pagination.Policy) *UserService {
 	return &UserService{dbs: dbs, pages: pages}
 }
 

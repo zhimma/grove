@@ -24,10 +24,10 @@
 
 ```go
 type ArticleService struct {
-	dbs database.Connections
+	dbs *database.Connections
 }
 
-func NewArticleService(dbs database.Connections) *ArticleService {
+func NewArticleService(dbs *database.Connections) *ArticleService {
 	return &ArticleService{dbs: dbs}
 }
 ```

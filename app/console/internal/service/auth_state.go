@@ -22,10 +22,10 @@ type AdminAuthStateResolver interface {
 }
 
 type adminAuthStateResolver struct {
-	dbs database.Connections
+	dbs *database.Connections
 }
 
-func NewAdminAuthStateResolver(dbs database.Connections) AdminAuthStateResolver {
+func NewAdminAuthStateResolver(dbs *database.Connections) AdminAuthStateResolver {
 	return &adminAuthStateResolver{dbs: dbs}
 }
 

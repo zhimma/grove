@@ -28,7 +28,7 @@ const lastErrorLimit = 1000
 // naming a task this binary does not define has no handler, so it is reported
 // and otherwise ignored.
 type Reconciler struct {
-	dbs         database.Connections
+	dbs         *database.Connections
 	scheduler   *scheduler.Scheduler
 	definitions map[string]Definition
 	interval    time.Duration
@@ -45,7 +45,7 @@ type appliedSchedule struct {
 	timeout  time.Duration
 }
 
-func NewReconciler(dbs database.Connections, sched *scheduler.Scheduler, definitions map[string]Definition, interval time.Duration) (*Reconciler, error) {
+func NewReconciler(dbs *database.Connections, sched *scheduler.Scheduler, definitions map[string]Definition, interval time.Duration) (*Reconciler, error) {
 	if dbs == nil {
 		return nil, fmt.Errorf("task reconciler requires database connections")
 	}

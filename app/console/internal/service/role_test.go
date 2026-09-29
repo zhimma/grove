@@ -162,7 +162,7 @@ END;`).Error; err != nil {
 	}
 }
 
-func openRoleServiceTestContext(t *testing.T) (database.Connections, *rbac.Enforcer, string) {
+func openRoleServiceTestContext(t *testing.T) (*database.Connections, *rbac.Enforcer, string) {
 	t.Helper()
 
 	db := testkit.OpenDB(t, &model.ConsoleRole{}, &model.ConsoleAdmin{})
