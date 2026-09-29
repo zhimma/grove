@@ -196,6 +196,49 @@ Grove 的切法：
 | bcrypt 越界 | 非测试代码绕过 `pkg/password` 直接用 bcrypt |
 | 计划任务 schedule-only | 迁移里出现 command/script/payload 之类的列 |
 
+### Phase 7 — 对标评估路线图（2026-09-29）
+
+**对照原则：Laravel 只借「要有哪些能力」，Go 原生框架决定「怎么实现」。** 不参考任何 Java 系脚手架的设计（注解/AOP、BaseService 继承、Repository/DAO 分层、部门岗位数据权限）。
+
+| 对照组 | 借什么 | 不借什么 |
+| --- | --- | --- |
+| Laravel | 能力清单与开发闭环：`make:model -mcr`、`key:generate`、`paginate()`、`throttle`、daily 日志、RefreshDatabase | Facade、服务容器、Eloquent 魔法方法、模型观察者 |
+| go-zero | goctl「一份描述 → 全栈代码」、内置限流、ServiceContext 显式依赖 | 微服务注册发现（Grove 是单体） |
+| Huma | OpenAPI 与代码不能漂移 | 替换 gin handler 签名（Grove 已有契约测试兜底） |
+| Goravel | 仅作能力覆盖参照 | 它的 Facade 风格，正是要避免的 |
+
+#### 实测结论
+
+| 结论 | 证据 |
+| --- | --- |
+| **生成器与门禁互相矛盾** | 临时 worktree 执行 `grove make:module Invoice` 后 `make contracts` 立即失败：`missing OpenAPI operations: GET /console/v1/invoices`。且生成的 service 只返回「模块已就绪」，没有迁移、没有 CRUD |
+| 日志永不轮转 | `pkg/logger` 以 `O_APPEND` 写 `./logs/<service>.log`，无切割、无保留期，部署文档未提 |
+| 分页锁在 console 内部 | `PagePolicy`/`ListMeta` 在 `app/console/internal/service`，api 服务无法复用；`ListMeta` 在 handler 与 service 各定义一份；构造靠 `policies []PagePolicy` 可变参数冒充可选参数 |
+| 三个 app 结构不一致 | `app/api` 的 handler/service/middleware 在 `internal/` 外，console 与 worker 在里面 |
+| 测试夹具重复 | 23 个测试文件各自 `sqlite.Open`，6 个同构的建库函数 |
+| Java 味残留 | `pkg/request` 12 个 `Get` 前缀访问器（Effective Go 不推荐）；`auth`/`cache`/`migrate`/`storage` 四个 `Manager`；`database.NewConnections` 返回单实现接口 |
+
+#### 任务（按优先级）
+
+| 优先级 | ID | 任务 | 验收方向 | 阻塞 |
+| --- | --- | --- | --- | --- |
+| P0 | G1 | `make:module` 生成可用的纵向切片：双方言迁移 + 模型字段 + 分页 CRUD service + handler + 路由权限名 + OpenAPI 操作 + 前端契约/API/页面（复用 `resource-page`） | 回归测试：在临时仓库生成后 `go build` 与 `make contracts` 同时通过 | 无 |
+| P1 | G2 | 日志轮转：按大小切割 + 保留期，对应 Laravel daily channel | 配置 `log.max_size_mb`/`max_age_days`；超限后生成新文件 | 需引入 lumberjack（Go 事实标准） |
+| P1 | G3 | 分页下沉到 `pkg/`，api 与 console 共用；去掉 `[]PagePolicy` 可变参数 | api 服务可直接用；`ListMeta` 只剩一份 | 无 |
+| P1 | G4 | `internal/testkit`：`OpenDB(t, models...)` 等，替换重复夹具 | 至少收敛 6 个建库函数 | 无 |
+| P2 | G5 | `app/api` 结构与 console/worker 对齐 | handler/service/middleware 移入 `internal/` | 无 |
+| P2 | G6 | 去 Java 味：`request.GetAdminID` → `request.AdminID` 等；`database.Connections` 返回具体类型；`Manager` 改为表意名 | 行为不变，调用点机械替换 | 改名面较大，可分批 |
+| P2 | G7 | `grove key:generate`：生成 `jwt.secret`、`config_encryption_key` 等强密钥 | fork 后无需手工造密钥 | 无 |
+| P3 | G8 | 通用限流中间件（go-zero 内置、Laravel `throttle`），复用现有 `x/time/rate` 与 Redis | 按 IP/用户限流，429 走统一错误信封 | 等 api 服务有公开接口 |
+| P3 | G9 | `pkg/mail` | — | 等真实触发 |
+
+#### 本阶段不做
+
+- Facade、服务容器、注解/AOP 式横切（幂等、脱敏、字段翻译装饰器）。
+- Repository/DAO 层、BaseService 继承、DTO/VO/BO 分层。
+- 部门/岗位/数据权限/多租户、字典表——需要下拉选项时用代码枚举或 `system_configs`。
+- 迁移到 Huma 或 `log/slog`——现有契约测试与 zerolog 已够用，迁移成本不抵收益。
+
 ## 5. 明确不做
 
 - 不拆微服务、不引入插件系统。
