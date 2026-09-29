@@ -24,3 +24,6 @@ config.yaml
 /web/admin-vben/.turbo/
 /web/admin-vben/apps/*/dist/
 /web/admin-vben/apps/*/.turbo/
+
+# corepack 管理的 pnpm shim（make admin.* 自动生成）
+/.tooling/

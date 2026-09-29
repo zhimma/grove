@@ -1,10 +1,15 @@
 BIN_DIR := bin
 ADMIN_DIR := web/admin-vben
 GO ?= go
-# Run pnpm through corepack so the version comes from web/admin-vben's
-# packageManager field, the same way CI does. A globally installed pnpm of a
-# different major otherwise fails every admin.* target with ERR_PNPM_UNSUPPORTED_ENGINE.
-PNPM ?= corepack pnpm
+# pnpm comes from corepack, which reads the version from web/admin-vben's
+# packageManager field the same way CI does. The shims go in a local directory
+# that is prepended to PATH rather than calling `corepack pnpm` directly:
+# package.json scripts invoke pnpm again (build:console runs `pnpm run build`),
+# and a nested call resolves from PATH, so only a shim fixes those too.
+# Without this, a globally installed pnpm of a different major fails the
+# admin.* targets with ERR_PNPM_UNSUPPORTED_ENGINE.
+PNPM_SHIM_DIR := $(CURDIR)/.tooling/pnpm
+PNPM ?= PATH="$(PNPM_SHIM_DIR):$$PATH" pnpm
 GOLANGCI_LINT ?= golangci-lint
 GOVULNCHECK ?= govulncheck
 GROVE := $(GO) run ./cmd/grove
@@ -127,28 +132,34 @@ diff.check: ## 检查当前改动或 DIFF_BASE 到 HEAD 的空白错误
 
 ci: quality quality.go.lint quality.govuln test test.race contracts build admin.typecheck admin.contract admin.test admin.build ## 运行完整 CI 质量门禁（先执行 admin.install）
 
-admin.install: ## 安装管理后台依赖
+$(PNPM_SHIM_DIR)/pnpm:
+	@mkdir -p $(PNPM_SHIM_DIR)
+	@corepack enable --install-directory $(PNPM_SHIM_DIR) pnpm
+
+admin.tooling: $(PNPM_SHIM_DIR)/pnpm ## 准备 corepack 管理的 pnpm（由 admin.* 自动触发）
+
+admin.install: $(PNPM_SHIM_DIR)/pnpm ## 安装管理后台依赖
 	cd $(ADMIN_DIR) && $(PNPM) install --frozen-lockfile
 
-admin.dev: ## 启动管理后台前端开发服务（:5666）
+admin.dev: $(PNPM_SHIM_DIR)/pnpm ## 启动管理后台前端开发服务（:5666）
 	cd $(ADMIN_DIR) && $(PNPM) dev:console
 
-admin.build: ## 构建管理后台前端
+admin.build: $(PNPM_SHIM_DIR)/pnpm ## 构建管理后台前端
 	cd $(ADMIN_DIR) && $(PNPM) build:console
 
-admin.typecheck: ## 检查管理后台 TypeScript 类型
+admin.typecheck: $(PNPM_SHIM_DIR)/pnpm ## 检查管理后台 TypeScript 类型
 	cd $(ADMIN_DIR) && $(PNPM) --filter @grove/console typecheck
 
-admin.contract: ## 检查 Console 前端 API 合同注册表
+admin.contract: $(PNPM_SHIM_DIR)/pnpm ## 检查 Console 前端 API 合同注册表
 	cd $(ADMIN_DIR) && $(PNPM) check:console-api-contract
 
-admin.lint: ## 检查管理后台 ESLint、Stylelint 与格式
+admin.lint: $(PNPM_SHIM_DIR)/pnpm ## 检查管理后台 ESLint、Stylelint 与格式
 	cd $(ADMIN_DIR) && $(PNPM) lint
 
-admin.circular: ## 检查管理后台循环依赖
+admin.circular: $(PNPM_SHIM_DIR)/pnpm ## 检查管理后台循环依赖
 	cd $(ADMIN_DIR) && $(PNPM) check:circular
 
-admin.test: ## 运行管理后台单元测试
+admin.test: $(PNPM_SHIM_DIR)/pnpm ## 运行管理后台单元测试
 	cd $(ADMIN_DIR) && $(PNPM) test:unit
 
 migrate.up: ## 执行数据库迁移
