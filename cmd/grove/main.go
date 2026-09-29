@@ -41,10 +41,11 @@ func newRootCmd() *cobra.Command {
 		SilenceUsage: true,
 		Long: `grove 是当前仓库唯一保留的 CLI 入口。
 
-适合做三类事情：
+适合做四类事情：
 1. 迁移与 seed
 2. 生成 console 后台约定代码
-3. 查看当前框架约定与环境信息
+3. 生成强随机密钥
+4. 查看当前框架约定与环境信息
 
 make:module 一条命令生成可运行的后台模块：双方言迁移、模型、
 分页 CRUD 与测试、接口文档、路由注册，以及后台前端的接口、页面与菜单。`,
@@ -57,6 +58,7 @@ make:module 一条命令生成可运行的后台模块：双方言迁移、模�
 	rootCmd.AddCommand(newSeedCmd())
 	rootCmd.AddCommand(newRBACCmd())
 	rootCmd.AddCommand(newMakeModuleCmd())
+	rootCmd.AddCommand(newKeyGenerateCmd())
 
 	return rootCmd
 }
@@ -443,6 +445,41 @@ func newMakeModuleCmd() *cobra.Command {
 	cmd.Flags().StringVar(&fieldSpec, "fields", "", `字段列表，默认 "`+defaultFields+`"`)
 	cmd.Flags().StringVar(&label, "label", "", "模块显示名，用于权限名与接口分组，默认同模块名")
 	return cmd
+}
+
+func newKeyGenerateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "key:generate",
+		Short: "生成 jwt.secret 与 security.config_encryption_key 强随机密钥",
+		Long: `打印一组新的强随机密钥，复制到 config.yaml 的对应位置。
+
+不改写任何文件：替换已有的 jwt.secret 会让签发过的 token 全部失效，
+替换 config_encryption_key 会让已加密的系统配置无法再解密。`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			jwtSecret, err := randomKey()
+			if err != nil {
+				return err
+			}
+			encryptionKey, err := randomKey()
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "jwt:\n  secret: '%s'\nsecurity:\n  config_encryption_key: 'base64:%s'\n",
+				base64.RawURLEncoding.EncodeToString(jwtSecret), base64.StdEncoding.EncodeToString(encryptionKey))
+			return err
+		},
+	}
+}
+
+// randomKey is 32 bytes: the AES-256 key size secretbox expects, and 43
+// characters once encoded, past the 32 production requires of jwt.secret.
+func randomKey() ([]byte, error) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, fmt.Errorf("生成随机密钥: %w", err)
+	}
+	return key, nil
 }
 
 func openDefaultDB() (*gorm.DB, func(), error) {

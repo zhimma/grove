@@ -10,7 +10,10 @@ import (
 	"sync"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/zhimma/grove/internal/config"
+	"github.com/zhimma/grove/pkg/secretbox"
 )
 
 func TestAboutCommandPrintsFrameworkSummary(t *testing.T) {
@@ -126,6 +129,40 @@ func TestMigrateCreateWritesBothDialectsAtOneVersion(t *testing.T) {
 	}
 	if len(versions) != 1 {
 		t.Fatalf("dialects got different versions: %v", versions)
+	}
+}
+
+func TestKeyGenerateProducesKeysTheConfigAccepts(t *testing.T) {
+	generate := func() string {
+		cmd := newKeyGenerateCmd()
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("key:generate: %v", err)
+		}
+		return out.String()
+	}
+	first := generate()
+
+	var keys struct {
+		JWT struct {
+			Secret string `yaml:"secret"`
+		} `yaml:"jwt"`
+		Security struct {
+			ConfigEncryptionKey string `yaml:"config_encryption_key"`
+		} `yaml:"security"`
+	}
+	if err := yaml.Unmarshal([]byte(first), &keys); err != nil {
+		t.Fatalf("output is not YAML: %v\n%s", err, first)
+	}
+	if len(keys.JWT.Secret) < 32 {
+		t.Fatalf("jwt.secret has %d characters, production requires 32", len(keys.JWT.Secret))
+	}
+	if _, err := secretbox.New(keys.Security.ConfigEncryptionKey); err != nil {
+		t.Fatalf("config_encryption_key rejected by secretbox: %v", err)
+	}
+	if generate() == first {
+		t.Fatal("two runs printed the same keys")
 	}
 }
 

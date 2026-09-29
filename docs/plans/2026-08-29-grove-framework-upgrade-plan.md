@@ -233,7 +233,7 @@ Grove 的切法：
 | ~~P1~~ | ~~G4~~ | ~~`internal/testkit`：`OpenDB(t, models...)` 等，替换重复夹具~~ | ✅ `OpenDB`（每测独立、`t.Cleanup` 关闭，原先无一处关闭连接）+ `CreateCasbinTable`（按迁移后的 `NOT NULL DEFAULT ''` 与唯一索引建表，原先 6 份手写 DDL 有两种形状）；app/cmd/internal 下 26 处建库与 6 份 DDL 全部收敛，生成器模板同步。`pkg/*` 测试因依赖方向保留自建 | — |
 | ~~P2~~ | ~~G5~~ | ~~`app/api` 结构与 console/worker 对齐~~ | ✅ handler/service/middleware 移入 `app/api/internal/`，去掉 `auth_handler.go`、`starter_service.go` 这类与包名重复的后缀；`structure.md` 原先描述的目录结构与 console 实际不符，一并改正 | — |
 | ~~P2~~ | ~~G6~~ | ~~去 Java 味：`request.GetAdminID` → `request.AdminID` 等；`database.Connections` 返回具体类型；`Manager` 改为表意名~~ | ✅ 分三批：`pkg/request` 去掉 `Get` 前缀（返回结构体的四个与类型重名，改为 `IdentityOf` 等）；`database.Connections` 由单实现接口改为具体类型；`auth.Manager` → `auth.Tokens`（Provider 字段 `TokenManager` → `Tokens`）、`cache.Manager` → `cache.Stores`（`Stores()` → `Names()`）、`migrate.Manager` → `migrate.Migrator`。`storage.Manager` 保留：它同时持有 disk 与上传策略，没有更准确的单个名词，改名只是换一个同样含糊的词 | — |
-| P2 | G7 | `grove key:generate`：生成 `jwt.secret`、`config_encryption_key` 等强密钥 | fork 后无需手工造密钥 | 无 |
+| ~~P2~~ | ~~G7~~ | ~~`grove key:generate`：生成 `jwt.secret`、`config_encryption_key` 等强密钥~~ | ✅ 打印一段可直接粘贴的 YAML（32 字节随机，JWT 为 43 字符 base64url，加密密钥为 `base64:` 格式）；刻意不改写 `config.yaml`，避免覆盖正在使用的密钥。测试校验输出能被 secretbox 与生产 JWT 规则接受。`fork.md` 的 `load.go:行号` 引用改为函数名 | — |
 | P3 | G8 | 通用限流中间件（go-zero 内置、Laravel `throttle`），复用现有 `x/time/rate` 与 Redis | 按 IP/用户限流，429 走统一错误信封 | 等 api 服务有公开接口 |
 | P3 | G9 | `pkg/mail` | — | 等真实触发 |
 | P3 | G10 | `make dev` 热重载（对应 nunu `run`、`gf run`），用 `go run` 固定版本的 air，不进 go.mod | 改代码后服务自动重启 | 无 |

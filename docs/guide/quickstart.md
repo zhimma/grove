@@ -46,6 +46,8 @@ jwt:
   secret: <at-least-32-random-characters>
 ```
 
+`jwt.secret` 与 `security.config_encryption_key` 不用手造：`go run ./cmd/grove key:generate` 打印一组强随机值，粘进 `config.yaml` 即可。
+
 如果需要后台 API 权限，再打开：
 
 ```yaml

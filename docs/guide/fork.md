@@ -74,22 +74,20 @@ pkg/job/tasks.go              # TaskEcho / EchoPayload
 | 配置项 | 说明 |
 | --- | --- |
 | `databases.default` | driver / host / port / user / password / dbname。host、user、dbname 不能为空 |
-| `jwt.secret` | 模板留空；不填无法签发 token |
+| `jwt.secret` | 模板留空；不填无法签发 token。用 `go run ./cmd/grove key:generate` 生成 |
 | `security.initial_root_password` | 留空则 `make seed.bootstrap` 生成一次性随机密码并打印，注意从输出里抄走 |
-| `security.config_encryption_key` | 使用系统配置的加密字段时必填 |
+| `security.config_encryption_key` | 使用系统配置的加密字段时必填，同样由 `key:generate` 生成。上线后不要更换，否则已加密的配置无法解密 |
 
-注意 `job.enabled: true` **强制要求** `redis.enabled: true`（`internal/config/load.go:578`）。本机没有 Redis 就把两个一起关掉。
+注意 `job.enabled: true` **强制要求** `redis.enabled: true`（`internal/config/load.go` 的 `Config.Validate`）。本机没有 Redis 就把两个一起关掉。
 
-生产环境额外强制（不满足直接启动失败）：
+生产环境额外强制（不满足直接启动失败，均在 `Config.Validate` 的 production 分支）：
 
-| 校验 | 位置 |
-| --- | --- |
-| `app.debug` 必须为 `false` | `load.go:553` |
-| `jwt.secret` 必须是强值 | `load.go:557` |
-| `security.initial_root_password` 必须符合强度要求 | `load.go:561` |
-| `cors.allowed_origins` 不能含 `*` | `load.go:565` |
-| console 要求默认数据库启用 | `load.go:569` |
-| console 要求 console casbin enforcer 启用 | `load.go:573` |
+- `app.debug` 必须为 `false`
+- `jwt.secret` 至少 32 个字符且不是 `change-me`
+- `security.initial_root_password` 若填写，必须符合强度要求
+- `cors.allowed_origins` 不能含 `*`
+- console 要求默认数据库启用
+- console 要求 console casbin enforcer 启用
 
 ## 4. 改项目标识
 
