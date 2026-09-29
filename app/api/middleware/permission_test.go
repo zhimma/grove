@@ -8,9 +8,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
 
+	"github.com/zhimma/grove/internal/testkit"
 	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/request"
 )
@@ -137,23 +136,8 @@ func TestPermissionSetReturnsResolverError(t *testing.T) {
 func openPermissionTestEnforcer(t *testing.T, mode rbac.Mode) *rbac.Enforcer {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/permission.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.Exec(`
-CREATE TABLE IF NOT EXISTS casbin_rules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ptype TEXT,
-    v0 TEXT,
-    v1 TEXT,
-    v2 TEXT,
-    v3 TEXT,
-    v4 TEXT,
-    v5 TEXT
-);`).Error; err != nil {
-		t.Fatalf("create casbin table: %v", err)
-	}
+	db := testkit.OpenDB(t)
+	testkit.CreateCasbinTable(t, db, "casbin_rules")
 
 	enforcer, err := rbac.New(db, &rbac.Config{Mode: mode, TableName: "casbin_rules"})
 	if err != nil {

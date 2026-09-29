@@ -10,10 +10,9 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/model"
+	"github.com/zhimma/grove/internal/testkit"
 	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"
@@ -22,13 +21,7 @@ import (
 func TestAuditOperationUsesErrorMetaMessage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/audit.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.ConsoleOperationLog{}); err != nil {
-		t.Fatalf("migrate operation logs: %v", err)
-	}
+	db := testkit.OpenDB(t, &model.ConsoleOperationLog{})
 
 	engine := gin.New()
 	engine.Use(func(c *gin.Context) {
@@ -97,13 +90,7 @@ func TestAuditRequestQueryRedactsSensitiveValuesAndBoundsLength(t *testing.T) {
 
 func TestAuditOperationRedactsNestedDetailValues(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/audit-detail.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.ConsoleOperationLog{}); err != nil {
-		t.Fatalf("migrate operation logs: %v", err)
-	}
+	db := testkit.OpenDB(t, &model.ConsoleOperationLog{})
 
 	engine := gin.New()
 	engine.Use(AuditOperation(db))
@@ -155,13 +142,7 @@ func TestAuditOperationRedactsNestedDetailValues(t *testing.T) {
 
 func TestAuditOperationUsesValidTruncationMarkerForLargeDetail(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/audit-detail-limit.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.ConsoleOperationLog{}); err != nil {
-		t.Fatalf("migrate operation logs: %v", err)
-	}
+	db := testkit.OpenDB(t, &model.ConsoleOperationLog{})
 
 	engine := gin.New()
 	engine.Use(AuditOperation(db))

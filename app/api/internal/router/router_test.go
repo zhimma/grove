@@ -8,13 +8,13 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/config"
 	appmiddleware "github.com/zhimma/grove/internal/middleware"
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/internal/testkit"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/rbac"
 )
@@ -55,13 +55,7 @@ func TestRouterPingAndProfile(t *testing.T) {
 		t.Fatalf("new provider: %v", err)
 	}
 	t.Cleanup(func() { _ = p.Close() })
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/api.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open test database: %v", err)
-	}
-	if err := db.AutoMigrate(&model.User{}); err != nil {
-		t.Fatalf("migrate users: %v", err)
-	}
+	db := testkit.OpenDB(t, &model.User{})
 	if err := db.Create(&model.User{
 		Base:   model.Base{ID: "api-user"},
 		Name:   "API User",
@@ -204,10 +198,7 @@ func newRouterTestEngine(t *testing.T, cfg *config.Config, permissions ...string
 	}
 	t.Cleanup(func() { _ = p.Close() })
 	if len(permissions) > 0 {
-		db, err := gorm.Open(sqlite.Open(t.TempDir()+"/api-permission.db"), &gorm.Config{})
-		if err != nil {
-			t.Fatalf("open permission database: %v", err)
-		}
+		db := testkit.OpenDB(t)
 		attachAPIEnforcer(t, p, db, permissions...)
 	}
 
@@ -219,19 +210,7 @@ func newRouterTestEngine(t *testing.T, cfg *config.Config, permissions ...string
 
 func attachAPIEnforcer(t *testing.T, p *provider.Provider, db *gorm.DB, permissions ...string) {
 	t.Helper()
-	if err := db.Exec(`
-CREATE TABLE IF NOT EXISTS casbin_rules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ptype TEXT,
-    v0 TEXT,
-    v1 TEXT,
-    v2 TEXT,
-    v3 TEXT,
-    v4 TEXT,
-    v5 TEXT
-);`).Error; err != nil {
-		t.Fatalf("create API casbin table: %v", err)
-	}
+	testkit.CreateCasbinTable(t, db, "casbin_rules")
 	enforcer, err := rbac.New(db, &rbac.Config{TableName: "casbin_rules"})
 	if err != nil {
 		t.Fatalf("new API enforcer: %v", err)

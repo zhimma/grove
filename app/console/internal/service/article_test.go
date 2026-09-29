@@ -4,23 +4,15 @@ import (
 	"context"
 	"testing"
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-
 	"github.com/zhimma/grove/internal/model"
+	"github.com/zhimma/grove/internal/testkit"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/pagination"
 )
 
 func TestArticleServiceCRUDAndPublishing(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/articles.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.Article{}); err != nil {
-		t.Fatalf("auto migrate: %v", err)
-	}
+	db := testkit.OpenDB(t, &model.Article{})
 	service := NewArticleService(database.NewConnectionsFromDBs(db, nil), pagination.Policy{Default: 10, Max: 100})
 	ctx := context.Background()
 
@@ -61,13 +53,7 @@ func TestArticleServiceCRUDAndPublishing(t *testing.T) {
 }
 
 func TestArticleServiceRejectsInvalidInput(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/articles.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.Article{}); err != nil {
-		t.Fatalf("auto migrate: %v", err)
-	}
+	db := testkit.OpenDB(t, &model.Article{})
 	service := NewArticleService(database.NewConnectionsFromDBs(db, nil), pagination.Policy{})
 	for _, input := range []CreateArticleInput{
 		{Title: "", Content: "正文"},

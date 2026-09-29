@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/model"
+	"github.com/zhimma/grove/internal/testkit"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/pagination"
@@ -149,13 +149,7 @@ func TestSystemConfigNonSecretRemainsPlainWithoutEncryptionKey(t *testing.T) {
 
 func newSystemConfigSecretService(t *testing.T, withBox bool) (*SystemConfigService, *gorm.DB) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/system-config-secret.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.SystemConfig{}); err != nil {
-		t.Fatalf("migrate system config: %v", err)
-	}
+	db := testkit.OpenDB(t, &model.SystemConfig{})
 	dbs := database.NewConnectionsFromDBs(db, nil)
 	if !withBox {
 		return NewSystemConfigService(dbs, nil, pagination.Policy{}), db

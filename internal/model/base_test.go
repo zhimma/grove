@@ -4,18 +4,13 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
+
+	"github.com/zhimma/grove/internal/testkit"
 )
 
 func TestBusinessModelsUseSoftDeleteAndAuditLogsUsePhysicalDelete(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/deletion.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&ConsoleRole{}, &ConsoleAdmin{}, &ConsoleOperationLog{}); err != nil {
-		t.Fatalf("auto migrate models: %v", err)
-	}
+	db := testkit.OpenDB(t, &ConsoleRole{}, &ConsoleAdmin{}, &ConsoleOperationLog{})
 
 	role := ConsoleRole{
 		Base:   Base{ID: "console-role-delete-test"},

@@ -5,23 +5,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/model"
+	"github.com/zhimma/grove/internal/testkit"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/pagination"
 )
 
 func TestChangePasswordClearsMustChangePassword(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/auth-password.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.ConsoleAdmin{}, &model.ConsoleSession{}); err != nil {
-		t.Fatalf("migrate console admin: %v", err)
-	}
+	db := testkit.OpenDB(t, &model.ConsoleAdmin{}, &model.ConsoleSession{})
 
 	oldHash, err := bcrypt.GenerateFromPassword([]byte("old-password"), bcrypt.MinCost)
 	if err != nil {
@@ -78,13 +71,7 @@ func TestChangePasswordClearsMustChangePassword(t *testing.T) {
 }
 
 func TestResetPasswordRevokesSessions(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/admin-reset-password.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.ConsoleAdmin{}, &model.ConsoleSession{}); err != nil {
-		t.Fatalf("migrate models: %v", err)
-	}
+	db := testkit.OpenDB(t, &model.ConsoleAdmin{}, &model.ConsoleSession{})
 	admin := model.ConsoleAdmin{
 		Base: model.Base{ID: "console-admin-reset"}, Account: "reset", Password: "old", Status: model.ConsoleAdminStatusActive,
 	}

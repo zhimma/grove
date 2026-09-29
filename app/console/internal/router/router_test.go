@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/glebarez/sqlite"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
@@ -21,6 +20,7 @@ import (
 	appmiddleware "github.com/zhimma/grove/internal/middleware"
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/internal/testkit"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/rbac"
@@ -431,11 +431,7 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 func openConsoleTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/console.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(
+	db := testkit.OpenDB(t,
 		&model.User{},
 		&model.Article{},
 		&model.ConsoleRole{},
@@ -444,22 +440,8 @@ func openConsoleTestDB(t *testing.T) *gorm.DB {
 		&model.ConsoleOperationLog{},
 		&model.ConsoleLoginLog{},
 		&model.ConsoleSession{},
-	); err != nil {
-		t.Fatalf("auto migrate: %v", err)
-	}
-	if err := db.Exec(`
-CREATE TABLE IF NOT EXISTS console_casbin_rules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ptype TEXT,
-    v0 TEXT,
-    v1 TEXT,
-    v2 TEXT,
-    v3 TEXT,
-    v4 TEXT,
-    v5 TEXT
-);`).Error; err != nil {
-		t.Fatalf("create casbin table: %v", err)
-	}
+	)
+	testkit.CreateCasbinTable(t, db, "console_casbin_rules")
 	return db
 }
 

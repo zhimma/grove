@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/model"
+	"github.com/zhimma/grove/internal/testkit"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/rbac"
@@ -149,28 +149,8 @@ func TestUpdateAdminRoleSynchronizesDatabaseAndGrouping(t *testing.T) {
 
 func openAdminRBACTestContext(t *testing.T) (database.Connections, *gorm.DB, string, string) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/admin-rbac.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.ConsoleRole{}, &model.ConsoleAdmin{}); err != nil {
-		t.Fatalf("auto migrate admin RBAC models: %v", err)
-	}
-	if err := db.Exec(`
-CREATE TABLE console_casbin_rules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ptype TEXT NOT NULL DEFAULT '',
-    v0 TEXT NOT NULL DEFAULT '',
-    v1 TEXT NOT NULL DEFAULT '',
-    v2 TEXT NOT NULL DEFAULT '',
-    v3 TEXT NOT NULL DEFAULT '',
-    v4 TEXT NOT NULL DEFAULT '',
-    v5 TEXT NOT NULL DEFAULT ''
-);
-CREATE UNIQUE INDEX idx_console_casbin_rules_unique
-ON console_casbin_rules (ptype, v0, v1, v2, v3, v4, v5);`).Error; err != nil {
-		t.Fatalf("create casbin table: %v", err)
-	}
+	db := testkit.OpenDB(t, &model.ConsoleRole{}, &model.ConsoleAdmin{})
+	testkit.CreateCasbinTable(t, db, "console_casbin_rules")
 	oldRole := model.ConsoleRole{Name: "Old", Code: "old", Status: model.ConsoleRoleStatusActive}
 	newRole := model.ConsoleRole{Name: "New", Code: "new", Status: model.ConsoleRoleStatusActive}
 	if err := db.Create(&oldRole).Error; err != nil {

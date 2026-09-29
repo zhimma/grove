@@ -6,11 +6,10 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/datatype"
 	"github.com/zhimma/grove/internal/model"
+	"github.com/zhimma/grove/internal/testkit"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/rbac"
@@ -166,26 +165,8 @@ END;`).Error; err != nil {
 func openRoleServiceTestContext(t *testing.T) (database.Connections, *rbac.Enforcer, string) {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/role-service.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.ConsoleRole{}, &model.ConsoleAdmin{}); err != nil {
-		t.Fatalf("auto migrate role models: %v", err)
-	}
-	if err := db.Exec(`
-CREATE TABLE IF NOT EXISTS console_casbin_rules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ptype TEXT,
-    v0 TEXT,
-    v1 TEXT,
-    v2 TEXT,
-    v3 TEXT,
-    v4 TEXT,
-    v5 TEXT
-);`).Error; err != nil {
-		t.Fatalf("create casbin table: %v", err)
-	}
+	db := testkit.OpenDB(t, &model.ConsoleRole{}, &model.ConsoleAdmin{})
+	testkit.CreateCasbinTable(t, db, "console_casbin_rules")
 
 	enforcer, err := rbac.New(db, &rbac.Config{TableName: "console_casbin_rules"})
 	if err != nil {

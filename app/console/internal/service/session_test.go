@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/model"
+	"github.com/zhimma/grove/internal/testkit"
 	"github.com/zhimma/grove/pkg/auth"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
@@ -123,13 +123,7 @@ func TestSessionRevokeInvalidatesAccessSession(t *testing.T) {
 
 func newSessionTestService(t *testing.T) (*SessionService, *gorm.DB, *auth.Manager) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/session.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.ConsoleRole{}, &model.ConsoleAdmin{}, &model.ConsoleSession{}); err != nil {
-		t.Fatalf("auto migrate: %v", err)
-	}
+	db := testkit.OpenDB(t, &model.ConsoleRole{}, &model.ConsoleAdmin{}, &model.ConsoleSession{})
 	admin := model.ConsoleAdmin{
 		Base:     model.Base{ID: "console-admin-session-test"},
 		Account:  "session-test",

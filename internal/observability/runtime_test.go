@@ -9,13 +9,12 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/glebarez/sqlite"
 	"github.com/redis/go-redis/v9"
+	"github.com/zhimma/grove/internal/testkit"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
-	"gorm.io/gorm"
 )
 
 func TestRuntimeGinMiddlewarePropagatesTraceAndExportsLowCardinalityMetrics(t *testing.T) {
@@ -97,10 +96,7 @@ func TestInstrumentGORMRecordsOperationWithoutSQL(t *testing.T) {
 	t.Cleanup(func() { _ = tracerProvider.Shutdown(context.Background()) })
 	runtime := &Runtime{tracerProvider: tracerProvider}
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
+	db := testkit.OpenDB(t)
 	if err := runtime.InstrumentGORM("default", db); err != nil {
 		t.Fatalf("instrument gorm: %v", err)
 	}
@@ -129,10 +125,7 @@ func TestInstrumentGORMRecordsOperationWithoutSQL(t *testing.T) {
 }
 
 func TestDatabaseSystemUsesActualDialector(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
+	db := testkit.OpenDB(t)
 	if got := databaseSystem(db); got != "sqlite" {
 		t.Fatalf("expected sqlite system, got %q", got)
 	}
@@ -154,10 +147,7 @@ func TestObserveDBPoolExportsConnectionStats(t *testing.T) {
 		t.Fatalf("new runtime: %v", err)
 	}
 	t.Cleanup(func() { _ = runtime.Close() })
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
+	db := testkit.OpenDB(t)
 	sqlDB, err := db.DB()
 	if err != nil {
 		t.Fatalf("get sql db: %v", err)

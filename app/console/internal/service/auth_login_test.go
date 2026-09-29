@@ -6,11 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/model"
+	"github.com/zhimma/grove/internal/testkit"
 	"github.com/zhimma/grove/pkg/auth"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
@@ -83,18 +82,12 @@ func TestLoginFailureStateIsIsolatedByAccountAndIP(t *testing.T) {
 
 func newLoginTestService(t *testing.T, failureLimit int) *AuthService {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/auth-login.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(
+	db := testkit.OpenDB(t,
 		&model.ConsoleRole{},
 		&model.ConsoleAdmin{},
 		&model.ConsoleSession{},
 		&model.ConsoleLoginLog{},
-	); err != nil {
-		t.Fatalf("migrate login models: %v", err)
-	}
+	)
 	hashed, err := bcrypt.GenerateFromPassword([]byte("correct-password"), bcrypt.MinCost)
 	if err != nil {
 		t.Fatalf("hash password: %v", err)

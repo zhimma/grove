@@ -401,22 +401,14 @@ import (
 	"time"
 {{- end}}
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-
 	"{{.Module}}/internal/model"
+	"{{.Module}}/internal/testkit"
 	"{{.Module}}/pkg/database"
 	"{{.Module}}/pkg/pagination"
 )
 
 func Test{{.Name}}ServiceCRUD(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/{{.Snake}}.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.{{.Name}}{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := testkit.OpenDB(t, &model.{{.Name}}{})
 	svc := New{{.Name}}Service(database.NewConnectionsFromDBs(db, nil), pagination.Policy{})
 	ctx := context.Background()
 {{- with .FirstRequiredString}}

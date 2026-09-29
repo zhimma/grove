@@ -7,10 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-
 	"github.com/zhimma/grove/internal/model"
+	"github.com/zhimma/grove/internal/testkit"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/scheduler"
 )
@@ -122,12 +120,6 @@ func TestPurgeExpiredSessionsStopsOnCancelledContext(t *testing.T) {
 
 func openTaskTestDB(t *testing.T) database.Connections {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/worker-task.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.ConsoleSession{}); err != nil {
-		t.Fatalf("migrate sessions: %v", err)
-	}
+	db := testkit.OpenDB(t, &model.ConsoleSession{})
 	return database.NewConnectionsFromDBs(db, nil)
 }

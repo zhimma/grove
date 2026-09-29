@@ -12,11 +12,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/internal/provider"
+	"github.com/zhimma/grove/internal/testkit"
 	"github.com/zhimma/grove/pkg/database"
 )
 
@@ -70,10 +69,7 @@ func TestReadinessFailureDoesNotExposeDependencyError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := testServerConfig(t)
 	cfg.Databases.Default.Enabled = true
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := testkit.OpenDB(t)
 	sqlDB, err := db.DB()
 	if err != nil {
 		t.Fatal(err)

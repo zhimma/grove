@@ -5,10 +5,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
 	"github.com/zhimma/grove/internal/model"
+	"github.com/zhimma/grove/internal/testkit"
 	"github.com/zhimma/grove/pkg/rbac"
 )
 
@@ -71,28 +71,8 @@ func TestInspectAndRepairConsoleRBAC(t *testing.T) {
 
 func openRBACCommandTestContext(t *testing.T) (*gorm.DB, *rbac.Enforcer, string, string) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/rbac-command.db"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.ConsoleRole{}, &model.ConsoleAdmin{}); err != nil {
-		t.Fatalf("auto migrate RBAC models: %v", err)
-	}
-	if err := db.Exec(`
-CREATE TABLE console_casbin_rules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ptype TEXT NOT NULL DEFAULT '',
-    v0 TEXT NOT NULL DEFAULT '',
-    v1 TEXT NOT NULL DEFAULT '',
-    v2 TEXT NOT NULL DEFAULT '',
-    v3 TEXT NOT NULL DEFAULT '',
-    v4 TEXT NOT NULL DEFAULT '',
-    v5 TEXT NOT NULL DEFAULT ''
-);
-CREATE UNIQUE INDEX idx_console_casbin_rules_unique
-ON console_casbin_rules (ptype, v0, v1, v2, v3, v4, v5);`).Error; err != nil {
-		t.Fatalf("create casbin table: %v", err)
-	}
+	db := testkit.OpenDB(t, &model.ConsoleRole{}, &model.ConsoleAdmin{})
+	testkit.CreateCasbinTable(t, db, "console_casbin_rules")
 	enforcer, err := rbac.New(db, &rbac.Config{TableName: "console_casbin_rules"})
 	if err != nil {
 		t.Fatalf("new enforcer: %v", err)
