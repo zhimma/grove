@@ -149,11 +149,13 @@ func TestValidateRejectsNegativeDatabaseConnectTimeout(t *testing.T) {
 	}
 }
 
-func TestLoadWithOptionsRejectsExplicitInvalidServerAndPaginationLimits(t *testing.T) {
+func TestLoadWithOptionsRejectsExplicitInvalidLimits(t *testing.T) {
 	tests := map[string]string{
 		"server zero timeout": "server:\n  idle_timeout: 0\n",
 		"body limit":          "server:\n  max_body_bytes: 0\n",
 		"pagination":          "api:\n  default_per_page: 101\n  max_per_page: 100\n",
+		"log file size":       "log:\n  max_size_mb: 0\n",
+		"log retention":       "log:\n  max_age_days: -1\n",
 	}
 	for name, body := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -165,6 +167,23 @@ func TestLoadWithOptionsRejectsExplicitInvalidServerAndPaginationLimits(t *testi
 				t.Fatal("expected invalid explicit configuration to be rejected")
 			}
 		})
+	}
+}
+
+// A config written before rotation existed must still load, rotate at a
+// bounded size and expire old files, and the ignored log.service key must not
+// trip strict decoding.
+func TestLoadWithOptionsDefaultsLogRotation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("log:\n  level: info\n  service: legacy\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := LoadWithOptions(LoadOptions{ConfigFile: path, Service: "api"})
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Log.MaxSizeMB != 100 || cfg.Log.MaxAgeDays != 14 {
+		t.Fatalf("log rotation defaults = %d MB / %d days, want 100 / 14", cfg.Log.MaxSizeMB, cfg.Log.MaxAgeDays)
 	}
 }
 

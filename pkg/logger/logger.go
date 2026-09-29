@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/rs/zerolog"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 type Config struct {
@@ -16,6 +17,10 @@ type Config struct {
 	Path    string
 	Service string
 	Console bool
+	// MaxSizeMB rotates <service>.log once it reaches this size; 0 means 100.
+	MaxSizeMB int
+	// MaxAgeDays deletes rotated files older than this; 0 keeps them forever.
+	MaxAgeDays int
 }
 
 type contextKey string
@@ -75,9 +80,15 @@ func Init(cfg Config) error {
 		if err := os.MkdirAll(cfg.Path, 0o750); err != nil {
 			return err
 		}
-		logFile := filepath.Join(cfg.Path, cfg.Service+".log")
-		file, err := os.OpenFile(filepath.Clean(logFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-		if err != nil {
+		file := &lumberjack.Logger{
+			Filename:  filepath.Join(cfg.Path, cfg.Service+".log"),
+			MaxSize:   cfg.MaxSizeMB,
+			MaxAge:    cfg.MaxAgeDays,
+			LocalTime: true,
+		}
+		// lumberjack opens on first write; open now so a bad path fails
+		// startup instead of every later log line.
+		if _, err := file.Write(nil); err != nil {
 			return err
 		}
 		fileWriter := &managedWriter{writer: file}

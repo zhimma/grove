@@ -124,10 +124,12 @@ func New(cfg *config.Config, serviceName string, opts ...Option) (*Provider, err
 	}
 
 	if err := logger.Init(logger.Config{
-		Level:   cfg.Log.Level,
-		Path:    cfg.Log.Path,
-		Service: serviceName,
-		Console: cfg.Log.Console,
+		Level:      cfg.Log.Level,
+		Path:       cfg.Log.Path,
+		Service:    serviceName,
+		Console:    cfg.Log.Console,
+		MaxSizeMB:  cfg.Log.MaxSizeMB,
+		MaxAgeDays: cfg.Log.MaxAgeDays,
 	}); err != nil {
 		return nil, err
 	}

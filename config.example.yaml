@@ -20,7 +20,8 @@ log:
   level: info
   path: ./logs
   console: true
-  service: grove
+  max_size_mb: 100
+  max_age_days: 14
 
 databases:
   default:

@@ -46,6 +46,13 @@ type LogConfig struct {
 	Level   string `yaml:"level"`
 	Path    string `yaml:"path"`
 	Console bool   `yaml:"console"`
+	// MaxSizeMB rotates each service's log file once it reaches this size.
+	MaxSizeMB int `yaml:"max_size_mb"`
+	// MaxAgeDays deletes rotated files older than this; 0 keeps them.
+	MaxAgeDays int `yaml:"max_age_days"`
+	// Service is ignored: each process names its own file (api, console,
+	// worker). It stays so config files that still set it load under strict
+	// decoding; drop it once none do.
 	Service string `yaml:"service"`
 }
 

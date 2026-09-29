@@ -55,7 +55,7 @@ func LoadWithOptions(opts LoadOptions) (*Config, error) {
 	}
 
 	applyEnvironmentOverrides(&cfg)
-	cfg.normalize(opts.Service, debugConfigured || strings.TrimSpace(os.Getenv("APP_DEBUG")) != "")
+	cfg.normalize(debugConfigured || strings.TrimSpace(os.Getenv("APP_DEBUG")) != "")
 	if err := cfg.Validate(opts.Service); err != nil {
 		return nil, err
 	}
@@ -81,10 +81,11 @@ func defaultConfig() Config {
 			MaxBodyBytes:    32 * 1024 * 1024,
 		},
 		Log: LogConfig{
-			Level:   "info",
-			Path:    "./logs",
-			Console: true,
-			Service: "grove",
+			Level:      "info",
+			Path:       "./logs",
+			Console:    true,
+			MaxSizeMB:  100,
+			MaxAgeDays: 14,
 		},
 		Databases: DatabasesConfig{
 			Default: DatabaseConfig{
@@ -358,7 +359,7 @@ func parseInt64(value string, fallback int64) int64 {
 	return parsed
 }
 
-func (c *Config) normalize(service string, debugConfigured bool) {
+func (c *Config) normalize(debugConfigured bool) {
 	if strings.TrimSpace(c.App.Name) == "" {
 		c.App.Name = "grove"
 	}
@@ -373,13 +374,6 @@ func (c *Config) normalize(service string, debugConfigured bool) {
 	}
 	if strings.TrimSpace(c.Log.Path) == "" {
 		c.Log.Path = "./logs"
-	}
-	if strings.TrimSpace(c.Log.Service) == "" {
-		if strings.TrimSpace(service) != "" {
-			c.Log.Service = service
-		} else {
-			c.Log.Service = c.App.Name
-		}
 	}
 	if strings.TrimSpace(c.JWT.Issuer) == "" {
 		c.JWT.Issuer = c.App.Name
@@ -544,6 +538,9 @@ func (c Config) Validate(service string) error {
 	}
 	if err := validateServerConfig(c.Server); err != nil {
 		return err
+	}
+	if c.Log.MaxSizeMB <= 0 || c.Log.MaxAgeDays < 0 {
+		return fmt.Errorf("log.max_size_mb must be positive and log.max_age_days cannot be negative")
 	}
 	if c.API.DefaultPerPage <= 0 || c.API.MaxPerPage <= 0 || c.API.DefaultPerPage > c.API.MaxPerPage {
 		return fmt.Errorf("api pagination defaults must be positive and default_per_page cannot exceed max_per_page")

@@ -32,6 +32,43 @@ func TestInitWritesFileAndCloseIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestInitRotatesTheFileAtMaxSize(t *testing.T) {
+	t.Cleanup(func() { _ = Close() })
+	dir := t.TempDir()
+	if err := Init(Config{Level: "info", Path: dir, Service: "api", MaxSizeMB: 1}); err != nil {
+		t.Fatalf("init logger: %v", err)
+	}
+	line := strings.Repeat("x", 1024)
+	for range 1100 {
+		Info().Msg(line)
+	}
+	if err := Close(); err != nil {
+		t.Fatalf("close logger: %v", err)
+	}
+
+	files, err := filepath.Glob(filepath.Join(dir, "api*.log"))
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	if len(files) < 2 {
+		t.Fatalf("expected a rotated file next to api.log, got %v", files)
+	}
+}
+
+func TestInitFailsWhenTheLogDirectoryIsNotWritable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	t.Cleanup(func() { _ = Close() })
+	dir := filepath.Join(t.TempDir(), "logs")
+	if err := os.Mkdir(dir, 0o500); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := Init(Config{Level: "info", Path: dir, Service: "api"}); err == nil {
+		t.Fatal("expected init to fail on a read-only log directory")
+	}
+}
+
 func TestLoggerAccessIsSafeDuringReinitialization(t *testing.T) {
 	t.Cleanup(func() { _ = Close() })
 	dir := t.TempDir()

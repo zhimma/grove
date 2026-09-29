@@ -22,7 +22,7 @@ curl -fsS http://127.0.0.1:8081/metrics
 
 ## 日志与观测
 
-- 日志统一由 `pkg/logger` 管理。
+- 日志统一由 `pkg/logger` 管理，文件按 `log.max_size_mb` 轮转、按 `log.max_age_days` 清理，不需要再配 logrotate；见 [配置说明](guide/configuration.md#log)。
 - OTel runtime 由 Provider 持有并按逆序关闭。
 - HTTP、数据库、Redis、外部 HTTP 和 Job 支持 trace/metrics 扩展点。
 - 不记录 SQL、token、密码、Redis 参数或完整错误文本到高基数指标标签。
