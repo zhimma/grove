@@ -216,6 +216,8 @@ func commitGeneratedModule(sources []generatedSource, migrations map[string]migr
 		for _, edit := range applied {
 			_ = replaceFileAtomic(edit.path, edit.original)
 		}
+		// ponytail: directories MkdirAll created stay behind empty; git
+		// ignores them and a retry does not trip over them.
 		for _, path := range created {
 			_ = os.Remove(path)
 		}

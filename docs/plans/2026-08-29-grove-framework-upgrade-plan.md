@@ -21,9 +21,9 @@
 | API 强制 RBAC | `app/api/internal/router/router.go` `permissionSet.RequireRoute()` |
 | 存储默认私有 | `app/console/internal/server/server.go:58` `!disk.Public \|\| !disk.ServeStatic` |
 | Scheduler panic 隔离 | `pkg/scheduler/scheduler.go:127` `cron.Recover` + `:215` recover |
-| 装配层显式注入依赖 | `app/console/internal/router/router.go` 传 db/enforcer/pagePolicy/catalog，不再透传 Provider |
+| 装配层显式注入依赖 | `app/console/internal/router/router.go` 传 db/enforcer/pages/catalog，不再透传 Provider |
 | 日志前后端契约对齐 | 前后端均为 3 个只读接口 |
-| 分页配置生效 | `router.go:32` `NewPagePolicy(cfg.API.DefaultPerPage, cfg.API.MaxPerPage)` |
+| 分页配置生效 | `router.go` `pagination.Policy{Default: cfg.API.DefaultPerPage, Max: cfg.API.MaxPerPage}`（G3 起） |
 | 旧 log service 清理 | `operation_log.go` / `login_log.go` 已删除 |
 
 ## 2. 当前实测基线
@@ -236,6 +236,7 @@ Grove 的切法：
 | ~~P2~~ | ~~G7~~ | ~~`grove key:generate`：生成 `jwt.secret`、`config_encryption_key` 等强密钥~~ | ✅ 打印一段可直接粘贴的 YAML（32 字节随机，JWT 为 43 字符 base64url，加密密钥为 `base64:` 格式）；刻意不改写 `config.yaml`，避免覆盖正在使用的密钥。测试校验输出能被 secretbox 与生产 JWT 规则接受。`fork.md` 的 `load.go:行号` 引用改为函数名 | — |
 | ~~P2~~ | ~~G12~~ | ~~管理后台清掉 Vben 与旧项目遗留~~ | ✅ `index.html` 生产构建会注入 Vben 自己的百度统计（把每个部署的访问数据发给第三方），已删并加测试；`.env.production` 写死了旧业务域名，改为同域默认并在部署文档补前端发布说明；通知铃铛是写死的假数据且头像取自外部站点，后端也没有通知能力，已删并关掉偏好开关；个人资料的「新消息提醒」tab 什么都不保存，已删；`/account/center` 无入口可达且与 `/profile` 重复，连同专用的 `api/profile.ts` 删除；空的 `demos.ts`、`dashboard.ts` 路由模块删除，`vben.ts` 更名 `profile.ts`。遗留：图标按需走 iconify 在线 API，纯内网部署会缺图标，等有内网需求再离线化 | — |
 | ~~P2~~ | ~~G13~~ | ~~手写列表页收敛到 `resource-page`（C5 遗留的后半段）~~ | ✅ `resource-page` 增加 `#actions`（追加行操作）、`#cell`（接管单元格，未接管的列仍按布尔 / 原值回退）、`actionWidth`、表单字段 `help` / `placeholder` 与 `reload()`；计划任务页由 284 行改为基于它的约 150 行，行为不变。插槽回退与页面的执行、编辑载荷各有挂载测试并做过变异验证。会话页（概览指标、吊销当前设备需登出）与两个日志页（详情抽屉、时间区间筛选）定制程度高，硬迁会把组件撑成大杂烩，保持手写 | — |
+| ~~P1~~ | ~~G14~~ | ~~CI 门禁在本机可复现，依赖无已知漏洞~~ | ✅ `quality.go.lint` / `quality.govuln` 经 `go run` 固定为 CI 版本（本机装了 golangci-lint v2 时原目标因配置格式直接失败）；由此跑出一处 errcheck（`cmd/grove/module.go`）并修复。govulncheck 报 grpc、x/text、x/net、otel 四个模块的可达漏洞，升到修复版；CI 所用 Go 1.25.12 的标准库另有漏洞，工具链统一升到 1.25.14（go.mod、`.mise.toml`、Dockerfile、两份 CI、文档），在 1.25.14 下全量测试通过、govulncheck 0 漏洞。本轮 14 个提交经独立复审无高危问题，四条中低危已修（prettier 失败不再让已落地的生成报错、`page_size` 改由 `api.max_per_page` 截断而非固定 100 拒绝、路线图证据指向已删代码、用户下拉描述重复） | — |
 | P3 | G8 | 通用限流中间件（go-zero 内置、Laravel `throttle`），复用现有 `x/time/rate` 与 Redis | 按 IP/用户限流，429 走统一错误信封 | 等 api 服务有公开接口 |
 | P3 | G9 | `pkg/mail` | — | 等真实触发 |
 | ~~P3~~ | ~~G10~~ | ~~`make dev` 热重载（对应 nunu `run`、`gf run`），用 `go run` 固定版本的 air，不进 go.mod~~ | ✅ `make dev.api` / `dev.console` / `dev.worker`，air v1.67.4 经 `go run` 固定版本，参数全走命令行、不加 `.air.toml`；监听 `go`、`yaml`，排除 `web` 等目录防止 node_modules 耗尽文件监听。在临时目录实测改动后自动重新编译并重启 | — |

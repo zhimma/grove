@@ -65,7 +65,7 @@ watch(
         :avatar
         :menus
         :text="userStore.userInfo?.realName"
-        :description="userStore.userInfo?.username"
+        :description="userStore.userInfo?.desc"
         tag-text="Console"
         @logout="handleLogout"
       />

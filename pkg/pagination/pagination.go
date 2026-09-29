@@ -17,10 +17,11 @@ type Policy struct {
 }
 
 // Request is the pagination part of a list query: page and page_size, offset
-// and limit, or list_all for every row.
+// and limit, or list_all for every row. Sizes above the policy's Max are
+// capped, not rejected, so the limit follows api.max_per_page.
 type Request struct {
 	Page     int  `form:"page" binding:"omitempty,min=1" label:"页码"`
-	PageSize int  `form:"page_size" binding:"omitempty,min=1,max=100" label:"每页条数"`
+	PageSize int  `form:"page_size" binding:"omitempty,min=1" label:"每页条数"`
 	Offset   int  `form:"offset" label:"偏移量"`
 	Limit    int  `form:"limit" label:"限制条数"`
 	ListAll  bool `form:"list_all" label:"是否返回全部"`

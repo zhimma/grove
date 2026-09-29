@@ -431,10 +431,13 @@ func newMakeModuleCmd() *cobra.Command {
 			for _, path := range paths {
 				fmt.Println(path)
 			}
+			// Formatting runs after the files are committed, so a prettier
+			// failure is reported, not returned: failing here would suggest
+			// nothing was generated and a retry would hit "文件已存在".
 			if !hasConsoleFrontend() {
 				fmt.Println("未找到后台前端工程，已跳过前端生成。")
 			} else if formatted, err := formatFrontend(paths); err != nil {
-				return err
+				fmt.Printf("前端文件已生成但格式化失败，请在 web/admin-vben 运行 pnpm format：%v\n", err)
 			} else if !formatted {
 				fmt.Println("未安装前端依赖，前端文件未格式化：安装后在 web/admin-vben 运行 pnpm format。")
 			}
