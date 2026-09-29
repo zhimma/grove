@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // field is one column of a generated module, parsed from `name:type[:required]`
@@ -108,13 +109,55 @@ func (f field) ModelType() string {
 	}
 }
 
+// InputType is the create request and service input type. A time travels as
+// a string in the same layout responses use, so a value read from the API can
+// be sent back unchanged; the service parses it.
+func (f field) InputType() string {
+	if f.Type == "time" {
+		return "string"
+	}
+	return f.ModelType()
+}
+
 // PatchType is the update input type: a pointer, so "not sent" differs from
 // "set to the zero value".
 func (f field) PatchType() string {
-	if f.Type == "time" {
-		return "*time.Time"
+	return "*" + f.InputType()
+}
+
+// TimeVar names the parsed *time.Time local in generated create code.
+func (f field) TimeVar() string {
+	runes := []rune(f.GoName)
+	runes[0] = unicode.ToLower(runes[0])
+	return string(runes) + "Time"
+}
+
+// TSType is the field's type in the generated frontend API module.
+func (f field) TSType() string {
+	switch f.Type {
+	case "int":
+		return "number"
+	case "bool":
+		return "boolean"
+	default:
+		return "string"
 	}
-	return "*" + f.ModelType()
+}
+
+// FormType is the resource-page form control for the field.
+func (f field) FormType() string {
+	switch f.Type {
+	case "text":
+		return "textarea"
+	case "int":
+		return "number"
+	case "bool":
+		return "switch"
+	case "time":
+		return "datetime"
+	default:
+		return ""
+	}
 }
 
 func (f field) ResponseType() string {
@@ -208,7 +251,7 @@ func (f field) SampleValue() string {
 	case "bool":
 		return "true"
 	default:
-		return "&now"
+		return `"2026-10-01 10:00:00"`
 	}
 }
 
@@ -221,6 +264,6 @@ func (f field) UpdatedValue() string {
 	case "bool":
 		return "false"
 	default:
-		return "&later"
+		return `"2026-10-02 11:30:00"`
 	}
 }

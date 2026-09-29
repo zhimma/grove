@@ -36,7 +36,9 @@ type fileEdit struct {
 
 // generateConsoleModule writes a complete vertical slice: model, CRUD service
 // with its test, handler, response, OpenAPI operations and a migration in every
-// dialect, then registers the routes and operations. Either all of it lands or
+// dialect, then registers the routes and operations. When the admin app is
+// present it also writes the API module, a resource-page view and a route, and
+// registers the operations in the frontend contract. Either all of it lands or
 // none of it does, and the result has to pass make contracts as generated.
 func generateConsoleModule(input, fieldSpec, label string) ([]string, error) {
 	module, err := modulePath()
@@ -55,6 +57,14 @@ func generateConsoleModule(input, fieldSpec, label string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	withFrontend := hasConsoleFrontend()
+	if withFrontend {
+		frontend, err := renderFrontendSources(spec)
+		if err != nil {
+			return nil, err
+		}
+		sources = append(sources, frontend...)
+	}
 	migrations, err := renderMigrations(spec)
 	if err != nil {
 		return nil, err
@@ -67,7 +77,7 @@ func generateConsoleModule(input, fieldSpec, label string) ([]string, error) {
 				return err
 			}
 		}
-		edits, err := prepareEdits(spec)
+		edits, err := prepareEdits(spec, withFrontend)
 		if err != nil {
 			return err
 		}
@@ -127,7 +137,7 @@ func renderMigrations(spec moduleSpec) (map[string]migrate.SQL, error) {
 	return bodies, nil
 }
 
-func prepareEdits(spec moduleSpec) ([]fileEdit, error) {
+func prepareEdits(spec moduleSpec, withFrontend bool) ([]fileEdit, error) {
 	router, err := insertAtMarker(routerFile, routeMarker,
 		fmt.Sprintf("\thandler.Register%sRoutes(protected, r.p.DB, pagePolicies, catalog)\n", spec.Name))
 	if err != nil {
@@ -138,7 +148,15 @@ func prepareEdits(spec moduleSpec) ([]fileEdit, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []fileEdit{router, contract}, nil
+	edits := []fileEdit{router, contract}
+	if withFrontend {
+		registry, err := prepareContractEdit(spec)
+		if err != nil {
+			return nil, err
+		}
+		edits = append(edits, registry)
+	}
+	return edits, nil
 }
 
 func insertAtMarker(path, marker, line string) (fileEdit, error) {

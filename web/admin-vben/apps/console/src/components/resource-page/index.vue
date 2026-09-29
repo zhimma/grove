@@ -28,6 +28,7 @@ import {
 import FileUpload from '#/components/upload/FileUpload.vue';
 
 import { resolveCustomForm } from './custom-forms';
+import { loadFormModel, toSubmitPayload } from './form-model';
 
 defineOptions({ name: 'ConsoleResourcePage' });
 
@@ -139,9 +140,7 @@ function handleTableChange(p: TablePaginationConfig) {
 
 function openCreate() {
   editingId.value = '';
-  Object.keys(editModel).forEach((key) => {
-    editModel[key] = undefined;
-  });
+  loadFormModel(editModel, {});
   modalOpen.value = true;
 }
 
@@ -150,9 +149,7 @@ async function openEdit(record: any) {
   const source = props.getDetailApi
     ? await props.getDetailApi(record.id)
     : record;
-  Object.keys(source).forEach((key) => {
-    editModel[key] = source[key];
-  });
+  loadFormModel(editModel, source);
   modalOpen.value = true;
 }
 
@@ -162,7 +159,7 @@ async function submitEdit() {
     payload = componentRef.value.getFormStateData();
   } else {
     await editFormRef.value?.validate();
-    payload = { ...editModel };
+    payload = toSubmitPayload(props.formFields || [], editModel);
   }
   if (props.hasCustomSubmitFun) {
     payload = props.hasCustomSubmitFun(payload);

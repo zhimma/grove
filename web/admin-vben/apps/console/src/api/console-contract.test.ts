@@ -47,6 +47,18 @@ describe('console API endpoint registry', () => {
     );
   });
 
+  it('only calls operations the registry knows', () => {
+    for (const [filename, source] of Object.entries(apiModules)) {
+      if (filename.endsWith('.test.ts')) {
+        continue;
+      }
+      const calls = source.matchAll(/consoleEndpoint\(\s*'([^']+)'/g);
+      for (const [, operationId = ''] of calls) {
+        expect(() => consoleOperation(operationId), filename).not.toThrow();
+      }
+    }
+  });
+
   it('keeps Console API implementations free of inline endpoint guesses', () => {
     for (const [filename, source] of Object.entries(apiModules)) {
       if (filename.endsWith('.test.ts')) {

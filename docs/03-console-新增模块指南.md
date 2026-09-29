@@ -223,6 +223,12 @@ go run ./cmd/grove make:module Invoice --label 发票 \
 | 请求、响应与路由（含权限名 `发票.列表` 等） | `app/console/internal/handler/invoice.go`、`invoice_response.go` |
 | OpenAPI 操作 | `app/console/internal/docs/invoice.go` |
 | 路由与 OpenAPI 注册 | 写入 `router.go` 与 `contract.go` 中的 `grove:` 标记处 |
+| 前端接口模块 | `web/admin-vben/apps/console/src/api/invoice.ts` |
+| 基于 `resource-page` 的列表页 | `src/views/invoices/index.vue` |
+| 菜单路由（顶级菜单 + 列表页） | `src/router/routes/modules/invoices.ts` |
+| 前端契约登记 | 追加到 `src/api/console-contract.json` |
+
+前端部分只在 `console-contract.json` 存在时生成，删掉后台前端的 fork 只拿到后端切片。生成后会用 `web/admin-vben` 自带的 prettier 格式化前端文件；前端依赖还没装时会提示，装好后在 `web/admin-vben` 运行 `pnpm format`。菜单来自前端路由，角色授权页的菜单树直接列出新页面，无需后端登记。
 
 字段写法 `name:type[:required]`：
 
@@ -234,6 +240,7 @@ go run ./cmd/grove make:module Invoice --label 发票 \
 | `bool` | `bool` | `BOOLEAN` | `TINYINT(1)` |
 | `time` | `*time.Time` | `TIMESTAMPTZ NULL` | `DATETIME(6) NULL` |
 
+- `time` 在请求与响应里都是 `2006-01-02 15:04:05` 格式的字符串（请求也接受 RFC3339 和 `2006-01-02`）；更新时传 `""` 清空非必填时间，格式不对返回 422。
 - `required` 只用于 `string`、`text`、`time`。`int`、`bool` 的零值本身合法，validator 的 `required` 会误拒 0 和 `false`，需要约束请在 service 里写。
 - 省略 `--fields` 时默认 `name:string:required`；省略 `--label` 时显示名同模块名。
 - 字段来自命令行而不是读库，所以生成不需要数据库连接，两种方言的产物完全对称。
@@ -241,10 +248,10 @@ go run ./cmd/grove make:module Invoice --label 发票 \
 生成后通常还要做：
 
 1. `make migrate.up` 建表。
-2. 按业务补充校验（唯一性、状态流转等）与字段的中文 `label`。
-3. 写前端页面：在 `console-contract.json` 登记接口，用 `components/resource-page` 配置列表与表单。
+2. 按业务补充校验（唯一性、状态流转等）。
+3. 把页面里的列名、表单 `label` 换成中文，按需换菜单图标与排序（默认 `lucide:folder`、`order: 1000`）。
 
-生成器自身有回归测试：在仓库副本里生成模块后，必须同时通过 `go vet`、`make contracts`、生成出的 CRUD 测试和方言迁移规则。
+生成器自身有回归测试：在仓库副本里生成模块后，必须同时通过 `go vet`、`make contracts`（含前端契约与 OpenAPI 的比对）、生成出的 CRUD 测试和方言迁移规则，且前端接口模块只调用已登记的 operation。
 
 ## 常见错误
 

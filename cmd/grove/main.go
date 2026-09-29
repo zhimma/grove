@@ -47,7 +47,7 @@ func newRootCmd() *cobra.Command {
 3. 查看当前框架约定与环境信息
 
 make:module 一条命令生成可运行的后台模块：双方言迁移、模型、
-分页 CRUD 与测试、接口文档，并注册路由。前端页面暂需手写。`,
+分页 CRUD 与测试、接口文档、路由注册，以及后台前端的接口、页面与菜单。`,
 	}
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "配置文件路径")
 
@@ -73,7 +73,7 @@ func newAboutCmd() *cobra.Command {
 				"- CLI 入口：grove",
 				"- 默认日志：pkg/logger + zerolog",
 				"- 默认校验：make verify",
-				"- make:module 仅生成 console 后台后端模板，不生成迁移和前端页面",
+				"- make:module 生成 console 模块：迁移、模型、CRUD、接口文档与后台页面",
 			} {
 				if err := writeLine(out, line); err != nil {
 					return err
@@ -410,6 +410,8 @@ func newMakeModuleCmd() *cobra.Command {
 - app/console/internal/handler 请求、响应与路由（含权限名）
 - app/console/internal/docs OpenAPI 操作
 - 路由注册与 OpenAPI 注册
+- 存在后台前端时：api 模块、基于 resource-page 的页面、菜单路由，
+  并登记到 console-contract.json
 
 字段写法：name:type[:required]，逗号分隔。
 类型：string、text、int、bool、time；required 仅用于 string、text、time。
@@ -427,7 +429,14 @@ func newMakeModuleCmd() *cobra.Command {
 			for _, path := range paths {
 				fmt.Println(path)
 			}
-			fmt.Println("已注册路由与 OpenAPI 操作。下一步：make migrate.up，然后按业务补充校验规则与前端页面。")
+			if !hasConsoleFrontend() {
+				fmt.Println("未找到后台前端工程，已跳过前端生成。")
+			} else if formatted, err := formatFrontend(paths); err != nil {
+				return err
+			} else if !formatted {
+				fmt.Println("未安装前端依赖，前端文件未格式化：安装后在 web/admin-vben 运行 pnpm format。")
+			}
+			fmt.Println("已注册路由与 OpenAPI 操作。下一步：make migrate.up，然后按业务补充校验规则、字段中文名与菜单图标。")
 			return nil
 		},
 	}

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -294,10 +295,97 @@ func TestMakeModuleOutputPassesTheProjectGates(t *testing.T) {
 	}
 
 	runGo(t, root, "vet", "./internal/model/...", "./app/console/...")
+	// Contract includes TestConsoleFrontendContractMatchesOpenAPI, which holds
+	// the entries appended to console-contract.json against the generated docs.
 	runGo(t, root, "test",
 		"./app/console/internal/docs/", "./app/console/internal/service/", "./pkg/migrate/",
 		"-run", "Contract|InvoiceServiceCRUD|DialectMigrationVersionsMatch|EveryUpMigrationHasDown|MySQLMigrations",
 	)
+
+	api := mustRead(t, filepath.Join(root, consoleWebDir, "api/invoice.ts"))
+	registry := mustRead(t, filepath.Join(root, consoleContractJSON))
+	calls := regexp.MustCompile(`consoleEndpoint\(\s*'([^']+)'`).FindAllStringSubmatch(api, -1)
+	if len(calls) != 5 {
+		t.Fatalf("frontend api calls %d operations, want 5:\n%s", len(calls), api)
+	}
+	for _, call := range calls {
+		assertContains(t, registry, `"operationId": "`+call[1]+`"`)
+	}
+	view := mustRead(t, filepath.Join(root, consoleWebDir, "views/invoices/index.vue"))
+	assertContains(t, view, "from '#/api/invoice'")
+	assertContains(t, view, "{ key: 'due_at', label: 'due_at', type: 'datetime' }")
+	assertNotContains(t, view, "dataIndex: 'note'")
+	route := mustRead(t, filepath.Join(root, consoleWebDir, "router/routes/modules/invoices.ts"))
+	assertContains(t, route, "import('#/views/invoices/index.vue')")
+}
+
+// Single-field modules exercise the template branches the full field set hides:
+// no string to trim or search, no time to import, nothing sortable but the
+// timestamps. One repository copy holds all of them to keep the test cheap.
+func TestMakeModuleCompilesForEachFieldShape(t *testing.T) {
+	if testing.Short() {
+		t.Skip("copies the repository and runs go test; skipped in -short")
+	}
+	root := prepareRepositoryCopy(t)
+	chdir(t, root)
+
+	shapes := map[string]string{
+		"Counter": "hits:int",
+		"Flag":    "active:bool",
+		"Moment":  "happened_at:time:required",
+		"Memo":    "body:text:required",
+	}
+	crudTests := make([]string, 0, len(shapes))
+	for name, fields := range shapes {
+		cmd := newMakeModuleCmd()
+		cmd.SetArgs([]string{name, "--fields", fields})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("make:module %s --fields %s: %v", name, fields, err)
+		}
+		crudTests = append(crudTests, name+"ServiceCRUD")
+	}
+
+	runGo(t, root, "vet", "./internal/model/...", "./app/console/...")
+	runGo(t, root, "test", "./app/console/internal/docs/", "./app/console/internal/service/",
+		"-run", "Contract|"+strings.Join(crudTests, "|"))
+}
+
+// The generator re-encodes console-contract.json to append to it, so encoding
+// the untouched registry has to reproduce it exactly or every generation would
+// reformat entries it did not add.
+func TestContractRegistryRoundTripsByteForByte(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join("..", "..", consoleContractJSON))
+	if err != nil {
+		t.Fatalf("read registry: %v", err)
+	}
+	same, err := appendContractOperations(body, nil)
+	if err != nil {
+		t.Fatalf("round trip: %v", err)
+	}
+	if !bytes.Equal(same, body) {
+		t.Fatal("encoding the registry changed its layout")
+	}
+
+	spec, err := newModuleSpec("example.com/app", "Invoice", "", nil)
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	once, err := appendContractOperations(body, spec.Operations())
+	if err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	twice, err := appendContractOperations(once, spec.Operations())
+	if err != nil {
+		t.Fatalf("append again: %v", err)
+	}
+	if !bytes.Equal(once, twice) {
+		t.Fatal("appending the same operations twice duplicated them")
+	}
+	assertContains(t, string(once), `"path": "/invoices/{id}"`)
+
+	if _, err := appendContractOperations([]byte(`{"basePath":"/x","operations":[],"extra":1}`), nil); err == nil {
+		t.Fatal("unknown registry fields must fail instead of being dropped")
+	}
 }
 
 func TestMakeModuleWiresRoutesOperationsAndMigrations(t *testing.T) {
@@ -380,6 +468,7 @@ func TestMakeModuleRejectsInvalidInputBeforeWriting(t *testing.T) {
 		"sql keyword field":   {"Product", "--fields", "order:int"},
 		"required bool":       {"Product", "--fields", "active:bool:required"},
 		"label with a dot":    {"Product", "--label", "商品.管理"},
+		"label with a quote":  {"Product", "--label", "商品'管理"},
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {

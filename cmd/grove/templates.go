@@ -16,6 +16,7 @@ type moduleSpec struct {
 	Plural    string // Invoices
 	Var       string // invoice
 	Snake     string // invoice
+	Kebab     string // invoice, the frontend API file name
 	Table     string // invoices
 	RoutePath string // /invoices
 	Label     string // display name used for permissions and OpenAPI tags
@@ -36,6 +37,10 @@ func newModuleSpec(module, input, label string, fields []field) (moduleSpec, err
 	if strings.Contains(label, ".") {
 		return moduleSpec{}, fmt.Errorf("模块显示名 %q 不能包含 \".\"：权限名以它分隔模块与动作", label)
 	}
+	// The label is written verbatim into Go, TypeScript and Vue string literals.
+	if strings.ContainsAny(label, "\"'`\\<>") {
+		return moduleSpec{}, fmt.Errorf("模块显示名 %q 不能包含引号、反斜杠或尖括号", label)
+	}
 	runes := []rune(name)
 	runes[0] = unicode.ToLower(runes[0])
 	return moduleSpec{
@@ -44,6 +49,7 @@ func newModuleSpec(module, input, label string, fields []field) (moduleSpec, err
 		Plural:    toPascal(toSnakePlural(input)),
 		Var:       string(runes),
 		Snake:     snake,
+		Kebab:     strings.ReplaceAll(snake, "_", "-"),
 		Table:     toSnakePlural(input),
 		RoutePath: "/" + toKebabPlural(input),
 		Label:     label,
@@ -80,13 +86,23 @@ func (m moduleSpec) SearchWhere() string {
 	return strings.Join(clauses, " OR ")
 }
 
+// ColumnFields are the fields worth a list column and an ORDER BY: TEXT is
+// neither readable in a table cell nor cheap to sort.
+func (m moduleSpec) ColumnFields() []field {
+	var result []field
+	for _, f := range m.Fields {
+		if f.Type != "text" {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
 // SortCases is the ORDER BY whitelist, rendered as a switch case list.
 func (m moduleSpec) SortCases() string {
 	columns := make([]string, 0, len(m.Fields)+2)
-	for _, f := range m.Fields {
-		if f.Type != "text" {
-			columns = append(columns, fmt.Sprintf("%q", f.Name))
-		}
+	for _, f := range m.ColumnFields() {
+		columns = append(columns, fmt.Sprintf("%q", f.Name))
 	}
 	columns = append(columns, `"created_at"`, `"updated_at"`)
 	return strings.Join(columns, ", ")
@@ -191,7 +207,7 @@ type List{{.Plural}}Output struct {
 
 type Create{{.Name}}Input struct {
 {{- range .Fields}}
-	{{.GoName}} {{.ModelType}}
+	{{.GoName}} {{.InputType}}
 {{- end}}
 }
 
@@ -266,9 +282,19 @@ func (s *{{.Name}}Service) Create{{.Name}}(ctx context.Context, in Create{{.Name
 	if err != nil {
 		return nil, err
 	}
+{{- range .Fields}}{{if .IsTime}}
+	var {{.TimeVar}} *time.Time
+	if value := strings.TrimSpace(in.{{.GoName}}); value != "" {
+		parsed, err := parseTimeValue(value, false)
+		if err != nil {
+			return nil, invalid{{$.Name}}Params("{{.Name}} 时间格式不正确")
+		}
+		{{.TimeVar}} = &parsed
+	}
+{{- end}}{{end}}
 	item := &model.{{.Name}}{
 {{- range .Fields}}
-		{{.GoName}}: {{if .IsString}}strings.TrimSpace(in.{{.GoName}}){{else}}in.{{.GoName}}{{end}},
+		{{.GoName}}: {{if .IsTime}}{{.TimeVar}}{{else if .IsString}}strings.TrimSpace(in.{{.GoName}}){{else}}in.{{.GoName}}{{end}},
 {{- end}}
 	}
 {{- range .Fields}}{{if .Required}}
@@ -298,6 +324,21 @@ func (s *{{.Name}}Service) Update{{.Name}}(ctx context.Context, in Update{{.Name
 		updates["{{.Name}}"] = value
 	{{- else if .IsString}}
 		updates["{{.Name}}"] = strings.TrimSpace(*in.{{.GoName}})
+	{{- else if .IsTime}}
+		value := strings.TrimSpace(*in.{{.GoName}})
+		if value == "" {
+		{{- if .Required}}
+			return nil, invalid{{$.Name}}Params("{{.Name}} 不能为空")
+		{{- else}}
+			updates["{{.Name}}"] = nil
+		{{- end}}
+		} else {
+			parsed, err := parseTimeValue(value, false)
+			if err != nil {
+				return nil, invalid{{$.Name}}Params("{{.Name}} 时间格式不正确")
+			}
+			updates["{{.Name}}"] = parsed
+		}
 	{{- else}}
 		updates["{{.Name}}"] = *in.{{.GoName}}
 	{{- end}}
@@ -368,7 +409,7 @@ const serviceTestTemplate = `package service
 import (
 	"context"
 	"testing"
-{{- if .HasTime}}
+{{- if .FirstField.IsTime}}
 	"time"
 {{- end}}
 
@@ -389,9 +430,6 @@ func Test{{.Name}}ServiceCRUD(t *testing.T) {
 	}
 	svc := New{{.Name}}Service(database.NewConnectionsFromDBs(db, nil))
 	ctx := context.Background()
-{{- if .HasTime}}
-	now := time.Now().UTC().Truncate(time.Second)
-{{- end}}
 {{- with .FirstRequiredString}}
 
 	if _, err := svc.Create{{$.Name}}(ctx, Create{{$.Name}}Input{}); err == nil {
@@ -424,16 +462,17 @@ func Test{{.Name}}ServiceCRUD(t *testing.T) {
 		t.Fatalf("list total = %d, items = %d, want 1", list.Meta.Total, len(list.List))
 	}
 {{with .FirstField}}
-{{- if .IsTime}}
-	later := now.Add(time.Hour)
-{{- end}}
 	updatedValue := {{.UpdatedValue}}
-	updated, err := svc.Update{{$.Name}}(ctx, Update{{$.Name}}Input{ {{- $.Name}}ID: created.ID, {{.GoName}}: {{if .IsTime}}updatedValue{{else}}&updatedValue{{end}}})
+	updated, err := svc.Update{{$.Name}}(ctx, Update{{$.Name}}Input{ {{- $.Name}}ID: created.ID, {{.GoName}}: &updatedValue})
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
 {{- if .IsTime}}
-	if updated.{{.GoName}} == nil || !updated.{{.GoName}}.Equal(*updatedValue) {
+	want, err := time.ParseInLocation("2006-01-02 15:04:05", updatedValue, time.Local)
+	if err != nil {
+		t.Fatalf("parse expected time: %v", err)
+	}
+	if updated.{{.GoName}} == nil || !updated.{{.GoName}}.Equal(want) {
 {{- else}}
 	if updated.{{.GoName}} != updatedValue {
 {{- end}}
@@ -452,10 +491,6 @@ func Test{{.Name}}ServiceCRUD(t *testing.T) {
 const handlerTemplate = `package handler
 
 import (
-{{- if .HasTime}}
-	"time"
-
-{{end}}
 	"github.com/gin-gonic/gin"
 
 	consoleservice "{{.Module}}/app/console/internal/service"
@@ -480,7 +515,7 @@ type List{{.Plural}}Response struct {
 
 type Create{{.Name}}Request struct {
 {{- range .Fields}}
-	{{.GoName}} {{.ModelType}} {{tag (printf "json:%q binding:%q label:%q" .Name .CreateBinding .Name)}}
+	{{.GoName}} {{.InputType}} {{tag (printf "json:%q binding:%q label:%q" .Name .CreateBinding .Name)}}
 {{- end}}
 }
 
