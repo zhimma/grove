@@ -206,6 +206,10 @@ Grove 的切法：
 | go-zero | goctl「一份描述 → 全栈代码」、内置限流、ServiceContext 显式依赖 | 微服务注册发现（Grove 是单体） |
 | Huma | OpenAPI 与代码不能漂移 | 替换 gin handler 签名（Grove 已有契约测试兜底） |
 | Goravel | 仅作能力覆盖参照 | 它的 Facade 风格，正是要避免的 |
+| nunu | lumberjack 日志轮转、`run` 热重载、docker-compose 起本地依赖 | `google/wire`（2025-08-25 已归档）；`XxxService` 接口 + 唯一实现 + `*Service` 基类嵌入；Repository 层；gomock 与独立 `test/` 目录 |
+| go-gin-api | 生成器意识、限流、pprof | 连真实 MySQL 读表生成（凭据进 shell 历史、仅 MySQL）；handler 以带 `i()` 标记的接口声明 |
+| GoFrame | `gf run` 热重载、一条命令出代码 | 全局 `g.DB()` / `g.Log()` 单例 |
+| Rails / Phoenix（思想） | `scaffold Post title:string`：命令行字段直接生成迁移、模型、控制器与测试 | — |
 
 #### 实测结论
 
@@ -222,8 +226,8 @@ Grove 的切法：
 
 | 优先级 | ID | 任务 | 验收方向 | 阻塞 |
 | --- | --- | --- | --- | --- |
-| P0 | G1 | `make:module` 生成可用的纵向切片：双方言迁移 + 模型字段 + 分页 CRUD service + handler + 路由权限名 + OpenAPI 操作 + 前端契约/API/页面（复用 `resource-page`） | 回归测试：在临时仓库生成后 `go build` 与 `make contracts` 同时通过 | 无 |
-| P1 | G2 | 日志轮转：按大小切割 + 保留期，对应 Laravel daily channel | 配置 `log.max_size_mb`/`max_age_days`；超限后生成新文件 | 需引入 lumberjack（Go 事实标准） |
+| P0 | G1 | `make:module Invoice --fields "title:string,amount:int"` 生成可用的纵向切片：双方言迁移 + 模型字段 + 分页 CRUD service + handler + 路由权限名 + OpenAPI 操作 + 前端契约/API/页面（复用 `resource-page`）。字段走命令行（Rails/Phoenix 路线）而非读库：双方言下读库需连库且写两套自省，命令行字段可在 CI 回归 | 回归测试：在临时仓库生成后 `go build` 与 `make contracts` 同时通过 | 无 |
+| P1 | G2 | 日志轮转：按大小切割 + 保留期，对应 Laravel daily channel，做法同 nunu | 配置 `log.max_size_mb`/`max_age_days`；超限后生成新文件 | 需引入 lumberjack（Go 事实标准） |
 | P1 | G3 | 分页下沉到 `pkg/`，api 与 console 共用；去掉 `[]PagePolicy` 可变参数 | api 服务可直接用；`ListMeta` 只剩一份 | 无 |
 | P1 | G4 | `internal/testkit`：`OpenDB(t, models...)` 等，替换重复夹具 | 至少收敛 6 个建库函数 | 无 |
 | P2 | G5 | `app/api` 结构与 console/worker 对齐 | handler/service/middleware 移入 `internal/` | 无 |
@@ -231,6 +235,8 @@ Grove 的切法：
 | P2 | G7 | `grove key:generate`：生成 `jwt.secret`、`config_encryption_key` 等强密钥 | fork 后无需手工造密钥 | 无 |
 | P3 | G8 | 通用限流中间件（go-zero 内置、Laravel `throttle`），复用现有 `x/time/rate` 与 Redis | 按 IP/用户限流，429 走统一错误信封 | 等 api 服务有公开接口 |
 | P3 | G9 | `pkg/mail` | — | 等真实触发 |
+| P3 | G10 | `make dev` 热重载（对应 nunu `run`、`gf run`），用 `go run` 固定版本的 air，不进 go.mod | 改代码后服务自动重启 | 无 |
+| P3 | G11 | docker-compose 起本地 PostgreSQL + Redis | `make deps.up` 后 quickstart 直接可跑 | 本机无 Docker，只能静态校验 |
 
 #### 本阶段不做
 
@@ -238,6 +244,9 @@ Grove 的切法：
 - Repository/DAO 层、BaseService 继承、DTO/VO/BO 分层。
 - 部门/岗位/数据权限/多租户、字典表——需要下拉选项时用代码枚举或 `system_configs`。
 - 迁移到 Huma 或 `log/slog`——现有契约测试与 zerolog 已够用，迁移成本不抵收益。
+- `google/wire` 编译期注入——已归档；Grove 的手写 Options 装配在当前规模下更直观。
+- 读库生成代码（go-gin-api gormgen、GoFrame `gf gen dao`）——需要活数据库与方言自省，不适合双方言与 CI。
+- swag 注释生成文档——Grove 用代码声明 OpenAPI 并双向契约测试，更不易漂移。
 
 ## 5. 明确不做
 
