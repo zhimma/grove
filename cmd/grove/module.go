@@ -20,7 +20,7 @@ func modulePath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("读取 go.mod（请在仓库根目录执行）: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {

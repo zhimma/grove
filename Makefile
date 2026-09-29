@@ -10,8 +10,11 @@ GO ?= go
 # admin.* targets with ERR_PNPM_UNSUPPORTED_ENGINE.
 PNPM_SHIM_DIR := $(CURDIR)/.tooling/pnpm
 PNPM ?= PATH="$(PNPM_SHIM_DIR):$$PATH" pnpm
-GOLANGCI_LINT ?= golangci-lint
-GOVULNCHECK ?= govulncheck
+# Pinned to the versions CI installs and run through go run, so nobody has to
+# install them and a golangci-lint v2 on PATH (which cannot read this v1
+# config) does not break the target.
+GOLANGCI_LINT ?= $(GO) run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+GOVULNCHECK ?= $(GO) run golang.org/x/vuln/cmd/govulncheck@v1.6.0
 GROVE := $(GO) run ./cmd/grove
 # air is pinned and run through go run, so it stays out of go.mod and every
 # checkout reloads with the same version. web/ is excluded because watching
@@ -133,12 +136,10 @@ quality.go.fmt: ## 检查 Go 格式（不改写文件）
 quality.go.vet: ## 运行 Go vet
 	$(GO) vet ./...
 
-quality.go.lint: ## 运行 golangci-lint（需预先安装或在 CI 提供）
-	@command -v "$(GOLANGCI_LINT)" >/dev/null 2>&1 || { echo "缺少 $(GOLANGCI_LINT)：请安装后重试，或仅运行 quality。"; exit 127; }
+quality.go.lint: ## 运行 golangci-lint（与 CI 同版本，经 go run 固定，首次运行会下载）
 	$(GOLANGCI_LINT) run
 
-quality.govuln: ## 运行 govulncheck（需预先安装或在 CI 提供）
-	@command -v "$(GOVULNCHECK)" >/dev/null 2>&1 || { echo "缺少 $(GOVULNCHECK)：请安装后重试，或仅运行 quality。"; exit 127; }
+quality.govuln: ## 运行 govulncheck（与 CI 同版本，经 go run 固定，首次运行会下载）
 	$(GOVULNCHECK) ./...
 
 diff.check: ## 检查当前改动或 DIFF_BASE 到 HEAD 的空白错误
