@@ -1,7 +1,7 @@
 # Grove 框架升级计划
 
 > 事实来源：当前 checkout 的源码、测试与命令输出。与本文冲突时以代码为准。
-> 上次核对：2026-09-04。
+> 上次核对：2026-09-29。
 
 **Goal:** 把 Grove 从「可运行的模块化单体脚手架」收敛为可持续开发的 Go Web 框架基线——分层边界干净、多实例可部署、常用组件齐备。
 
@@ -29,24 +29,27 @@
 ## 2. 当前实测基线
 
 ```
-go build ./...   exit 0
-go vet ./...     exit 0
-gofmt -l         空
-go test ./...    exit 0（42 包 ok / 8 包无测试）
-make contracts   PASS（路由↔OpenAPI、前端↔OpenAPI 双向）
+go build ./...     exit 0
+go test ./...      exit 0（45 包 ok / 7 包无测试）
+go vet ./...       exit 0
+make quality       exit 0（fmt、any、password、vet、docs、diff、前端 lint 与循环依赖）
+make contracts     PASS（路由↔OpenAPI、前端↔OpenAPI 双向）
+前端单测            45 文件 / 328 测试
 ```
 
-规模：197 个 Go 文件 / 33,295 行 / 26 个 migration（postgres + mysql 各一份）。
+规模：211 个 Go 文件 / 36,007 行 / 14 个迁移（postgres 与 mysql 各一份，均含 down）。
 
-`pkg/` 已有 22 个组件：`auth` `rbac` `permission` `validation` `request` `response` `errx` `storage` `logger` `cache` `event` `job` `scheduler` `database` `migrate` `transaction` `ratelimit` `secretbox` `httpclient` `route` `ulid` `server`。
+`pkg/` 22 个基础层组件：`auth` `cache` `database` `errx` `event` `httpclient` `job` `logger` `migrate` `password` `permission` `ratelimit` `rbac` `request` `response` `route` `scheduler` `secretbox` `storage` `transaction` `ulid` `validation`。
+
+`server` 已于 T1 移入 `internal/`；`password` 由 D1 新增。
 
 ## 3. 剩余问题
 
 | # | 问题 | 位置 | 影响 |
 | --- | --- | --- | --- |
-| 1 | 缺 Mail / Notification | 全仓无 smtp 相关代码 | 注册、找回密码、告警无法交付 |
-| 2 | 业务纵深薄 | `app/api` 仅 starter+auth，`app/worker` 仅 default_job | 未验证「新增一个功能要改几处」 |
-| 3 | 定时任务调度写死在代码 | `pkg/scheduler` 仅支持代码内注册 | 改 cron 表达式要重新部署，见 Phase 5 |
+| 1 | 缺 Mail / Notification | 全仓无 smtp 相关代码 | 注册、找回密码、告警无法交付。按 YAGNI 等真实触发 |
+| 2 | 业务纵深薄 | `app/api` 仅 starter+auth，`app/worker` 仅 echo + 会话清理 | 未验证「新增一个功能要改几处」 |
+| 3 | 迁移未在真实库执行 | 本机无 Docker，`tests/integration/` 处于 skip | 需在 CI 或有 Docker 的机器确认 up/down |
 
 ## 4. 任务
 
@@ -78,7 +81,7 @@ make contracts   PASS（路由↔OpenAPI、前端↔OpenAPI 双向）
 | ID | 任务 | 验收 |
 | --- | --- | --- |
 | T9 | 用一个真实模块走完 `grove make:module` 全流程，记录改动点数量 | 产出改动清单，决定是否需要再收敛 |
-| T10 | 补 `pkg/request`、`app/api/service` 等 8 个无测试包 | `go test ./...` 无 `no test files` |
+| ~~T10~~ | ~~补无测试的基础包~~ | ✅ Phase 6 D2/D3。剩余 7 个是 3 个 `cmd`（main 包）、api/worker 示例模块、`pkg/ulid`（13 行），均不值得为覆盖率硬测 |
 
 ### Phase 5 — 计划任务后台管理
 
@@ -153,6 +156,46 @@ Grove 的切法：
 - Kafka / 独立执行器。
 - 完整执行历史表——先用行上的 `last_*` 字段；真要排查多次失败再单开 `console_scheduled_task_runs`。
 
+### Phase 6 — fork 质量治理
+
+产品形态定为 **fork / clone**：新项目整仓 fork 后自持，不做库化、不承诺 API 稳定、不提供升级通道。
+
+这个决定让一批问题直接失效，不再追：版本标签与 CHANGELOG、`pkg/` 的 doc.go 与 Example、`pkg/` 的 gin/gorm 解绑、升级机制。剩下的唯一产品是「你 fork 到手的这份代码」。
+
+核心判断：**问题里有一半是文档在说谎，不是代码有病。** `pkg/` 声称"不承载业务语义"却塞满 `UserTypeConsole`、`CheckConsolePermission`；`pkg/logger` 的全局单例对应用是惯例、只对发布库才是反模式。这类问题改声明比改代码便宜，也更诚实。
+
+| ID | 任务 | 验收 |
+| --- | --- | --- |
+| ~~A1~~ | ~~清掉文档里的个人机器路径~~ | ✅ `0392ce8` |
+| ~~A2~~ | ~~codegen 从目标仓库 go.mod 读 module path~~ | ✅ `fdc811b` |
+| ~~A3~~ | ~~dashboard 解除示例表依赖~~ | ✅ 前提有误，见实施记录，不改代码 |
+| ~~A4~~ | ~~新增 fork 指南~~ | ✅ `3df8766` |
+| ~~B1~~ | ~~删 `errx` 的坏 sentinel~~ | ✅ `12dfcba` |
+| ~~B2~~ | ~~`response.Fail` 改为接受 `error`~~ | ✅ `12dfcba` |
+| ~~B3~~ | ~~删重复的响应别名~~ | ✅ `12dfcba` |
+| ~~C1~~ | ~~修正 `pkg/` 定位声明~~ | ✅ `afeefeb` |
+| ~~C2~~ | ~~删单实现接口~~ | ✅ `53ddd8f` |
+| ~~C3~~ | ~~构造函数统一 `New(Config)`~~ | ✅ `3abce2b` |
+| ~~C4~~ | ~~`interface{}` → `any`~~ | ✅ `c002031` |
+| ~~C5~~ | ~~统一 `/system` 前端归属~~ | ✅ `a8c76a5` |
+| ~~D1~~ | ~~抽出 `pkg/password`~~ | ✅ `a0af363` |
+| ~~D2~~ | ~~补 `pkg/request` 测试~~ | ✅ `88aae4b` |
+| ~~D3~~ | ~~补 route / permission / errx 测试~~ | ✅ `34dda5a` |
+| ~~D4~~ | ~~工具链可复现~~ | ✅ `5adf9fb` |
+
+#### 本轮新增的 6 个守卫
+
+每个都做过变异验证（改坏后确认变红），都挂在 `make quality` 或 `make docs.check` 下：
+
+| 守卫 | 拦截什么 |
+| --- | --- |
+| 文档个人路径 | 文档里出现 `/Users/...` 或 `/home/...` |
+| 文档教已删 API | `response.OK(`、`httpclient.NewWithConfig(`、`event.NewDispatcher(` 等 |
+| `/system` 路由归属 | 出现第二个 `/system` 父路由或游离的 `/system/*` |
+| `interface{}` 回流 | 非测试代码出现 `interface{}` |
+| bcrypt 越界 | 非测试代码绕过 `pkg/password` 直接用 bcrypt |
+| 计划任务 schedule-only | 迁移里出现 command/script/payload 之类的列 |
+
 ## 5. 明确不做
 
 - 不拆微服务、不引入插件系统。
@@ -190,3 +233,33 @@ Grove 的切法：
 | 2026-09-04 | T4 Casbin 定时重载 | `85cac4c`。复用 `SyncedEnforcer.StartAutoLoadPolicy`，无新依赖；`auto_load_seconds` 默认 30，Provider 关闭时停 goroutine。代价：变更最多延迟一个间隔。 |
 | 2026-09-04 | T5 Scheduler 集群互斥 | `643d1a7`。复用 `pkg/cache.Store` 的 SETNX，无新依赖；Redis 启用时 Mutex 任务全局互斥，未启用时行为不变（仍限单 Worker）。释放为 Get+Delete 比对，非原子 CAS。 |
 | 2026-09-04 | Phase 5 计划任务后台管理（S1–S7） | `b7e687f` `87fd273` `2419ecc` `901ab35` `1677cd0` `66d38ed`。改调度不再需要重新部署。过程中由测试抓出两个真实缺陷：孤儿行的 `run_requested_at` 永远清不掉；GORM `default:true` 标签使 `Mutex: false` 被静默存成 `true`。四处关键逻辑做过变异验证。**迁移未在真实 PostgreSQL/MySQL 执行**（本机无 Docker），集成断言处于 skip。 |
+| 2026-09-29 | Phase 6 fork 质量治理（A/B/C/D） | 13 个提交 `0392ce8`…`5adf9fb`。详见下方「被代码推翻的判断」。全门禁绿：`build`/`test`/`vet`/`quality`/`contracts`/`docs.check` 与前端 typecheck/lint/circular/test/build。 |
+
+### 被代码推翻的判断
+
+Phase 6 的计划里有 6 条经不起查证，均以代码为准修正：
+
+| 计划原本写的 | 查证结果 |
+| --- | --- |
+| `dashboard.go` 依赖示例表 `users`，要解耦 | `users` 是框架能力（355 行 CRUD 的 C 端客户管理），`console_admins` 才是运营者。真正的示例只有 `articles` 和 `starter`。**不改代码** |
+| 删 `Success`/`Error` 别名，保留 `OK`/`Fail` | `OK` 与 `Error` 各 **0 调用**，`Success` 59 处、`Fail` 151 处。方向反了，改为删 `OK`/`Error` |
+| unexport `logger.InitForTest` | 被 `internal/bootstrap` 的测试跨包使用，不能 unexport |
+| 去掉 `zerolog.SetGlobalLevel` | 它是**唯一**应用 `log.level` 的地方，删掉配置直接失效。**此项会造成 regression** |
+| `ratelimit.NewLoginGuard` 应返回具体类型 | 它按有无 Redis 在两个实现间选，返回接口是正确的工厂 |
+| 在 `.mise.toml` 里钉 pnpm | 本机 `~/Library/pnpm` 在 PATH 中优先，钉了也不生效；且与 `packageManager` 构成两个真相源。改为 Makefile 走 corepack |
+
+### 删除死代码时的连锁发现
+
+删掉 `transaction.Manager` 后变异验证**没有变红**，查下去发现 `txKey` 的唯一写入方就是被删的 `Manager.Execute`，因此 `FromContext` 永远返回 nil、`GetDB` 的第一个分支不可达——测试覆盖的是一条走不到的路径。清理后该包从 86 行降到 33 行，两个测试才真正可被变异打红。
+
+同类情况：`SetIdentity` 把身份镜像进 std context，但 `GetIdentityFromContext` 零消费方，而正是这个镜像让 setter 解引用 `c.Request`，在 `gin.CreateTestContext` 给的 context 上 panic。
+
+### 覆盖率变化
+
+| 包 | 改前 | 改后 |
+| --- | --- | --- |
+| `pkg/request` | 0% | 97.0% |
+| `pkg/permission` | 33.9% | 96.6% |
+| `pkg/route` | 54.8% | 94.5% |
+| `pkg/errx` | 43.9% | 80.6% |
+| `pkg/password` | 新增 | 90.0% |
