@@ -8,6 +8,12 @@ export GOTOOLCHAIN=local
 make help
 ```
 
+## 本地依赖
+
+- `make deps.up`：用 `compose.yaml` 启动 PostgreSQL 与 Redis（端口只绑 `127.0.0.1`、免密登录，仅供本机开发），与 `config.example.yaml` 默认值一致
+- `make deps.down`：停止本地依赖，数据卷保留
+- MySQL 在 `mysql` profile 里：`docker compose --profile mysql up -d --wait mysql`
+
 ## 启动服务
 
 - `make run.api`：启动 API，默认监听 `:8080`

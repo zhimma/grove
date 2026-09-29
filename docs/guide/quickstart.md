@@ -19,13 +19,21 @@ export GOTOOLCHAIN=local   # 固定使用本机工具链，避免自动下载
 
 仓库带有 `.mise.toml`，用 [mise](https://mise.jdx.dev) 管理版本的话执行 `mise install` 即可装齐 Go 与 Node。
 
+本机装了 Docker 的话，数据库和 Redis 可以不手装：
+
+```bash
+make deps.up    # PostgreSQL 17 + Redis 7，端口只绑 127.0.0.1
+```
+
+`compose.yaml` 与 `config.example.yaml` 的默认值一致（`postgres@127.0.0.1:5432/grove_dev`、空密码），复制出来的 `config.yaml` 不用改数据库段，第 3 步的建库也可以跳过。要 MySQL 就执行 `docker compose --profile mysql up -d --wait mysql`，再把 `driver` 改成 `mysql`、端口改成 `3306`、用户改成 `root`。`make deps.down` 停止，数据卷保留。
+
 ## 2. 创建配置
 
 ```bash
 cp config.example.yaml config.yaml
 ```
 
-编辑 `config.yaml`（不要把凭据提交到 Git），开发环境至少填写：
+编辑 `config.yaml`（不要把凭据提交到 Git），开发环境至少填写（用 `make deps.up` 的话数据库段保持默认即可）：
 
 ```yaml
 app:

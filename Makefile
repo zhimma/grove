@@ -28,6 +28,7 @@ AIR_FLAGS := --build.include_ext "go,yaml" --build.exclude_dir "web,tmp,bin,.too
 	quality quality.go.fmt quality.go.vet quality.go.lint quality.govuln docs.check diff.check \
 	admin.install admin.dev admin.build admin.typecheck admin.lint admin.circular admin.test \
 	admin.contract \
+	deps.up deps.down \
 	migrate.up migrate.down migrate.status \
 	seed.bootstrap seed.demo
 
@@ -178,6 +179,12 @@ admin.circular: $(PNPM_SHIM_DIR)/pnpm ## 检查管理后台循环依赖
 
 admin.test: $(PNPM_SHIM_DIR)/pnpm ## 运行管理后台单元测试
 	cd $(ADMIN_DIR) && $(PNPM) test:unit
+
+deps.up: ## 用 docker compose 启动本地 PostgreSQL 与 Redis，与 config.example.yaml 默认值一致
+	docker compose up -d --wait postgres redis
+
+deps.down: ## 停止本地依赖，数据卷保留
+	docker compose down
 
 migrate.up: ## 执行数据库迁移
 	$(GROVE) migrate up

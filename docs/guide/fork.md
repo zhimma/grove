@@ -73,7 +73,7 @@ pkg/job/tasks.go              # TaskEcho / EchoPayload
 
 | 配置项 | 说明 |
 | --- | --- |
-| `databases.default` | driver / host / port / user / password / dbname。host、user、dbname 不能为空 |
+| `databases.default` | driver / host / port / user / password / dbname。host、user、dbname 不能为空。默认值对应 `make deps.up` 起的本地 PostgreSQL，用它就不用改 |
 | `jwt.secret` | 模板留空；不填无法签发 token。用 `go run ./cmd/grove key:generate` 生成 |
 | `security.initial_root_password` | 留空则 `make seed.bootstrap` 生成一次性随机密码并打印，注意从输出里抄走 |
 | `security.config_encryption_key` | 使用系统配置的加密字段时必填，同样由 `key:generate` 生成。上线后不要更换，否则已加密的配置无法解密 |

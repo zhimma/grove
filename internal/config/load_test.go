@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -51,6 +52,51 @@ func TestConfigExampleUsesLiteralDefaults(t *testing.T) {
 	}
 	if envPattern.Match(content) {
 		t.Fatal("config.example.yaml must not use uppercase environment placeholders for defaults")
+	}
+}
+
+// compose.yaml exists so config.example.yaml runs as shipped. Nothing in CI
+// starts Docker, so this is what notices the two drifting apart.
+func TestComposeServesTheExampleConfig(t *testing.T) {
+	var example Config
+	raw, err := os.ReadFile(filepath.Join("..", "..", "config.example.yaml"))
+	if err != nil {
+		t.Fatalf("read config example: %v", err)
+	}
+	if err := yaml.Unmarshal(raw, &example); err != nil {
+		t.Fatalf("parse config example: %v", err)
+	}
+	var compose struct {
+		Services map[string]struct {
+			Environment map[string]string `yaml:"environment"`
+			Ports       []string          `yaml:"ports"`
+		} `yaml:"services"`
+	}
+	raw, err = os.ReadFile(filepath.Join("..", "..", "compose.yaml"))
+	if err != nil {
+		t.Fatalf("read compose.yaml: %v", err)
+	}
+	if err := yaml.Unmarshal(raw, &compose); err != nil {
+		t.Fatalf("parse compose.yaml: %v", err)
+	}
+
+	db := example.Databases.Default
+	postgres := compose.Services["postgres"]
+	if db.Driver != "postgres" || postgres.Environment["POSTGRES_USER"] != db.User || postgres.Environment["POSTGRES_DB"] != db.DBName || db.Password != "" {
+		t.Fatalf("example database %s://%s@%s/%s does not match compose postgres %v", db.Driver, db.User, db.Port, db.DBName, postgres.Environment)
+	}
+	if !slices.Contains(postgres.Ports, db.Host+":"+db.Port+":5432") {
+		t.Fatalf("compose postgres ports %v do not publish %s:%s", postgres.Ports, db.Host, db.Port)
+	}
+	if redis := compose.Services["redis"]; !slices.Contains(redis.Ports, example.Redis.Addr+":6379") {
+		t.Fatalf("compose redis ports %v do not publish %s", redis.Ports, example.Redis.Addr)
+	}
+	for name, service := range compose.Services {
+		for _, port := range service.Ports {
+			if !strings.HasPrefix(port, "127.0.0.1:") {
+				t.Fatalf("compose %s publishes %s beyond localhost; its databases accept passwordless logins", name, port)
+			}
+		}
 	}
 }
 
