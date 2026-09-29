@@ -206,7 +206,7 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 		t.Fatalf("missing admin id: %#v", createAdminResp)
 	}
 
-	operatorSession, operatorTokenPair, err := consoleservice.NewSessionService(p.DB, p.TokenManager, pagination.Policy{}).Create(context.Background(), consoleservice.CreateSessionInput{
+	operatorSession, operatorTokenPair, err := consoleservice.NewSessionService(p.DB, p.Tokens, pagination.Policy{}).Create(context.Background(), consoleservice.CreateSessionInput{
 		AdminID:    adminID,
 		DeviceName: "router-test",
 	})

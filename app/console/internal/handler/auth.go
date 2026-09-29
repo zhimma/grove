@@ -68,9 +68,9 @@ type AuthorizationOverviewResponse struct {
 	MenuKeys       []string `json:"menu_keys"`
 }
 
-func RegisterAuthRoutes(public, authed *gin.RouterGroup, dbs *database.Connections, enforcer *rbac.Enforcer, tokenManager *auth.Manager, loginGuard ratelimit.LoginGuard, catalog *route.Catalog) {
+func RegisterAuthRoutes(public, authed *gin.RouterGroup, dbs *database.Connections, enforcer *rbac.Enforcer, tokens *auth.Tokens, loginGuard ratelimit.LoginGuard, catalog *route.Catalog) {
 	h := &AuthHandler{
-		authSvc: consoleservice.NewAuthService(dbs, enforcer, tokenManager, loginGuard),
+		authSvc: consoleservice.NewAuthService(dbs, enforcer, tokens, loginGuard),
 	}
 
 	publicAuth := wrapRoute(public.Group("/auth"), catalog)

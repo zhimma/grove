@@ -143,7 +143,7 @@ func newMigrateCmd() *cobra.Command {
 			}
 			defer cleanup()
 
-			m := migrate.NewManager(db, migrationPath)
+			m := migrate.NewMigrator(db, migrationPath)
 			count, err := m.Up()
 			if err != nil {
 				return err
@@ -163,7 +163,7 @@ func newMigrateCmd() *cobra.Command {
 			}
 			defer cleanup()
 
-			m := migrate.NewManager(db, migrationPath)
+			m := migrate.NewMigrator(db, migrationPath)
 			name, err := m.Down()
 			if err != nil {
 				return err
@@ -187,7 +187,7 @@ func newMigrateCmd() *cobra.Command {
 			}
 			defer cleanup()
 
-			m := migrate.NewManager(db, migrationPath)
+			m := migrate.NewMigrator(db, migrationPath)
 			statuses, err := m.Status()
 			if err != nil {
 				return err

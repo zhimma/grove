@@ -14,19 +14,19 @@ import (
 )
 
 type Router struct {
-	cfg          *config.Config
-	tokenManager *auth.Manager
-	db           *gorm.DB
-	jobClient    *job.Client
-	apiEnforcer  *rbac.Enforcer
-	catalog      *route.Catalog
-	userAuth     *apimiddleware.UserAuthSet
+	cfg         *config.Config
+	tokens      *auth.Tokens
+	db          *gorm.DB
+	jobClient   *job.Client
+	apiEnforcer *rbac.Enforcer
+	catalog     *route.Catalog
+	userAuth    *apimiddleware.UserAuthSet
 }
 
 func New(cfg *config.Config, p *provider.Provider) *Router {
 	r := &Router{cfg: cfg}
 	if p != nil {
-		r.tokenManager = p.TokenManager
+		r.tokens = p.Tokens
 		r.jobClient = p.JobClient
 		r.apiEnforcer = p.GetEnforcer("api")
 		r.catalog = p.RouteCatalog
@@ -37,7 +37,7 @@ func New(cfg *config.Config, p *provider.Provider) *Router {
 	if r.catalog == nil {
 		r.catalog = route.NewCatalog()
 	}
-	r.userAuth = apimiddleware.NewUserAuthSet(r.tokenManager)
+	r.userAuth = apimiddleware.NewUserAuthSet(r.tokens)
 	return r
 }
 

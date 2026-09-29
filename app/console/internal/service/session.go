@@ -19,9 +19,9 @@ import (
 const sessionActivityWriteInterval = 5 * time.Minute
 
 type SessionService struct {
-	dbs          *database.Connections
-	tokenManager *auth.Manager
-	pages        pagination.Policy
+	dbs    *database.Connections
+	tokens *auth.Tokens
+	pages  pagination.Policy
 }
 
 type CreateSessionInput struct {
@@ -44,8 +44,8 @@ type ListSessionsResult struct {
 	Meta pagination.Meta
 }
 
-func NewSessionService(dbs *database.Connections, tokenManager *auth.Manager, pages pagination.Policy) *SessionService {
-	return &SessionService{dbs: dbs, tokenManager: tokenManager, pages: pages}
+func NewSessionService(dbs *database.Connections, tokens *auth.Tokens, pages pagination.Policy) *SessionService {
+	return &SessionService{dbs: dbs, tokens: tokens, pages: pages}
 }
 
 func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (*model.ConsoleSession, *auth.TokenPair, error) {
@@ -53,7 +53,7 @@ func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (
 	if err != nil {
 		return nil, nil, err
 	}
-	if s.tokenManager == nil {
+	if s.tokens == nil {
 		return nil, nil, errx.ServiceUnavailable().WithMessage("令牌管理器未配置")
 	}
 
@@ -64,7 +64,7 @@ func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (
 
 	now := time.Now()
 	sessionID := ulid.New()
-	pair, err := s.tokenManager.GenerateAdminTokenPair(adminID, sessionID, "console")
+	pair, err := s.tokens.GenerateAdminTokenPair(adminID, sessionID, "console")
 	if err != nil {
 		return nil, nil, errx.Internal().WithCause(err)
 	}
@@ -85,7 +85,7 @@ func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (
 		ClientIP:         truncateLoginIP(strings.TrimSpace(input.ClientIP)),
 		UserAgent:        userAgent,
 		LastActiveAt:     now,
-		ExpiresAt:        now.Add(s.tokenManager.RefreshExpiry()),
+		ExpiresAt:        now.Add(s.tokens.RefreshExpiry()),
 	}
 	if err := db.Create(session).Error; err != nil {
 		return nil, nil, errx.Internal().WithCause(err)
@@ -98,7 +98,7 @@ func (s *SessionService) Rotate(ctx context.Context, refreshToken string) (*auth
 	if err != nil {
 		return nil, err
 	}
-	if s.tokenManager == nil {
+	if s.tokens == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("令牌管理器未配置")
 	}
 	refreshToken = strings.TrimSpace(refreshToken)
@@ -120,7 +120,7 @@ func (s *SessionService) Rotate(ctx context.Context, refreshToken string) (*auth
 		return nil, err
 	}
 
-	pair, err := s.tokenManager.GenerateAdminTokenPair(session.AdminID, session.ID, "console")
+	pair, err := s.tokens.GenerateAdminTokenPair(session.AdminID, session.ID, "console")
 	if err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}

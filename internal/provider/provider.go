@@ -32,12 +32,12 @@ type Provider struct {
 	Config        *config.Config
 	DB            *database.Connections
 	RedisClient   *redis.Client
-	TokenManager  *auth.Manager
+	Tokens        *auth.Tokens
 	JobClient     *job.Client
 	JobServer     *job.Server
 	Enforcers     map[string]*rbac.Enforcer
 	Storage       *storage.Manager
-	Cache         *cache.Manager
+	Cache         *cache.Stores
 	HTTPClient    *httpclient.Client
 	Event         *event.Dispatcher
 	Scheduler     *scheduler.Scheduler
@@ -311,7 +311,7 @@ func WithRedis() Option {
 
 func WithAuth() Option {
 	return func(p *Provider) error {
-		manager, err := auth.NewManager(auth.Config{
+		manager, err := auth.NewTokens(auth.Config{
 			Secret:        p.Config.JWT.Secret,
 			Issuer:        serviceTokenIssuer(p.Config.JWT.Issuer, p.serviceName),
 			AccessExpiry:  time.Duration(p.Config.JWT.AccessExpiryHours) * time.Hour,
@@ -320,7 +320,7 @@ func WithAuth() Option {
 		if err != nil {
 			return err
 		}
-		p.TokenManager = manager
+		p.Tokens = manager
 		return nil
 	}
 }
@@ -474,7 +474,7 @@ func WithStorage() Option {
 
 func WithCache() Option {
 	return func(p *Provider) error {
-		manager := cache.NewManager()
+		manager := cache.NewStores()
 
 		// 注册内存缓存
 		memoryStore := cache.NewMemoryStore()

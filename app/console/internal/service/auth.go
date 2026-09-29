@@ -21,11 +21,11 @@ import (
 )
 
 type AuthService struct {
-	dbs          *database.Connections
-	enforcer     *rbac.Enforcer
-	tokenManager *auth.Manager
-	sessions     *SessionService
-	loginGuard   ratelimit.LoginGuard
+	dbs        *database.Connections
+	enforcer   *rbac.Enforcer
+	tokens     *auth.Tokens
+	sessions   *SessionService
+	loginGuard ratelimit.LoginGuard
 }
 
 type LoginInput struct {
@@ -79,12 +79,12 @@ type GetAuthorizationOverviewOutput struct {
 	MenuKeys       []string `json:"menu_keys"`
 }
 
-func NewAuthService(dbs *database.Connections, enforcer *rbac.Enforcer, tm *auth.Manager, guards ...ratelimit.LoginGuard) *AuthService {
+func NewAuthService(dbs *database.Connections, enforcer *rbac.Enforcer, tm *auth.Tokens, guards ...ratelimit.LoginGuard) *AuthService {
 	service := &AuthService{
-		dbs:          dbs,
-		enforcer:     enforcer,
-		tokenManager: tm,
-		sessions:     NewSessionService(dbs, tm, pagination.Policy{}),
+		dbs:      dbs,
+		enforcer: enforcer,
+		tokens:   tm,
+		sessions: NewSessionService(dbs, tm, pagination.Policy{}),
 	}
 	if len(guards) > 0 {
 		service.loginGuard = guards[0]
@@ -96,7 +96,7 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (LoginOutput,
 	if s.dbs == nil || s.dbs.Default() == nil {
 		return LoginOutput{}, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
-	if s.tokenManager == nil {
+	if s.tokens == nil {
 		return LoginOutput{}, errx.ServiceUnavailable().WithMessage("令牌管理器未配置")
 	}
 
@@ -237,8 +237,8 @@ func (s *AuthService) RefreshToken(ctx context.Context, input RefreshTokenInput)
 
 func (s *AuthService) Logout(ctx context.Context, input LogoutInput) error {
 	sessionID := strings.TrimSpace(input.SessionID)
-	if sessionID == "" && s.tokenManager != nil && strings.TrimSpace(input.AccessToken) != "" {
-		claims, err := s.tokenManager.ParseAccessToken(strings.TrimSpace(input.AccessToken))
+	if sessionID == "" && s.tokens != nil && strings.TrimSpace(input.AccessToken) != "" {
+		claims, err := s.tokens.ParseAccessToken(strings.TrimSpace(input.AccessToken))
 		if err != nil {
 			return errx.Unauthorized().WithMessage("访问令牌无效").WithCause(err)
 		}

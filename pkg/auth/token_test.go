@@ -10,7 +10,7 @@ import (
 )
 
 func TestIssueAndParseAccessToken(t *testing.T) {
-	manager, err := NewManager(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: 0})
+	manager, err := NewTokens(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: 0})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestIssueAndParseAccessToken(t *testing.T) {
 }
 
 func TestIssueAndParseConsoleClaims(t *testing.T) {
-	manager, err := NewManager(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: 0})
+	manager, err := NewTokens(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: 0})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestIssueAndParseConsoleClaims(t *testing.T) {
 }
 
 func TestConsoleRefreshTokenIsOpaqueAndHashable(t *testing.T) {
-	manager, err := NewManager(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour, RefreshExpiry: 24 * time.Hour})
+	manager, err := NewTokens(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour, RefreshExpiry: 24 * time.Hour})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestConsoleRefreshTokenIsOpaqueAndHashable(t *testing.T) {
 }
 
 func TestValidateTokenRejectsUnexpectedSigningMethod(t *testing.T) {
-	manager, err := NewManager(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour})
+	manager, err := NewTokens(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestValidateTokenRejectsUnexpectedSigningMethod(t *testing.T) {
 }
 
 func TestValidateTokenRejectsHS384EvenThoughItIsHMAC(t *testing.T) {
-	manager, err := NewManager(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour})
+	manager, err := NewTokens(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestValidateTokenRejectsHS384EvenThoughItIsHMAC(t *testing.T) {
 }
 
 func TestValidateTokenRequiresIssuerAndExpirationAndSubject(t *testing.T) {
-	manager, err := NewManager(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour})
+	manager, err := NewTokens(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestValidateTokenRequiresIssuerAndExpirationAndSubject(t *testing.T) {
 }
 
 func TestValidateTokenRequiresIssuedAt(t *testing.T) {
-	manager, err := NewManager(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour})
+	manager, err := NewTokens(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestValidateTokenRequiresIssuedAt(t *testing.T) {
 }
 
 func TestValidateTokenRequiresExpectedAudience(t *testing.T) {
-	manager, err := NewManager(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour})
+	manager, err := NewTokens(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestValidateTokenRequiresExpectedAudience(t *testing.T) {
 }
 
 func TestParseAccessTokenForUserTypeRejectsCrossSurfaceToken(t *testing.T) {
-	manager, err := NewManager(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour})
+	manager, err := NewTokens(Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}

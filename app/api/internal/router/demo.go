@@ -15,6 +15,6 @@ func (r *Router) installDemoRoutes(public, protected *gin.RouterGroup) {
 	}
 	publicRoutes := route.Wrap(public, r.catalog)
 	protectedRoutes := route.Wrap(protected, r.catalog)
-	handler.RegisterDemoAuthRoutes(publicRoutes, r.tokenManager)
+	handler.RegisterDemoAuthRoutes(publicRoutes, r.tokens)
 	handler.RegisterDemoStarterRoutes(publicRoutes, protectedRoutes, r.db, r.jobClient)
 }

@@ -12,7 +12,7 @@
 
 ## Cache
 
-缓存组件由 `cache.Manager` 管理多个 store。
+缓存组件由 `cache.Stores` 管理多个具名 store，`Names()` 列出已注册的名字。
 
 推荐写法：
 

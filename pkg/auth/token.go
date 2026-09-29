@@ -67,7 +67,7 @@ type TokenPair struct {
 	TokenType    string `json:"token_type"`
 }
 
-type Manager struct {
+type Tokens struct {
 	secret        []byte
 	issuer        string
 	accessExpiry  time.Duration
@@ -93,7 +93,7 @@ func DefaultConfig() Config {
 	}
 }
 
-func NewManager(config Config) (*Manager, error) {
+func NewTokens(config Config) (*Tokens, error) {
 	if strings.TrimSpace(config.Secret) == "" {
 		return nil, errors.New("jwt secret is required")
 	}
@@ -109,7 +109,7 @@ func NewManager(config Config) (*Manager, error) {
 		config.RefreshExpiry = defaults.RefreshExpiry
 	}
 
-	return &Manager{
+	return &Tokens{
 		secret:        []byte(config.Secret),
 		issuer:        config.Issuer,
 		accessExpiry:  config.AccessExpiry,
@@ -117,18 +117,18 @@ func NewManager(config Config) (*Manager, error) {
 	}, nil
 }
 
-func (m *Manager) IssueAccessToken(userID string) (string, error) {
+func (m *Tokens) IssueAccessToken(userID string) (string, error) {
 	return m.IssueAccessTokenWithClaims(ClaimsInput{
 		UserID:   userID,
 		UserType: UserTypeAPI,
 	})
 }
 
-func (m *Manager) IssueAccessTokenWithClaims(input ClaimsInput) (string, error) {
+func (m *Tokens) IssueAccessTokenWithClaims(input ClaimsInput) (string, error) {
 	return m.issueToken(input, TokenTypeAccess, m.accessExpiry)
 }
 
-func (m *Manager) GenerateTokenPairWithClaims(input ClaimsInput) (*TokenPair, error) {
+func (m *Tokens) GenerateTokenPairWithClaims(input ClaimsInput) (*TokenPair, error) {
 	accessToken, err := m.issueToken(input, TokenTypeAccess, m.accessExpiry)
 	if err != nil {
 		return nil, err
@@ -146,7 +146,7 @@ func (m *Manager) GenerateTokenPairWithClaims(input ClaimsInput) (*TokenPair, er
 	}, nil
 }
 
-func (m *Manager) GenerateAdminTokenPair(adminID, sessionID, userType string) (*TokenPair, error) {
+func (m *Tokens) GenerateAdminTokenPair(adminID, sessionID, userType string) (*TokenPair, error) {
 	if strings.TrimSpace(sessionID) == "" {
 		return nil, errors.New("session id is required")
 	}
@@ -160,14 +160,14 @@ func (m *Manager) GenerateAdminTokenPair(adminID, sessionID, userType string) (*
 	})
 }
 
-func (m *Manager) RefreshExpiry() time.Duration {
+func (m *Tokens) RefreshExpiry() time.Duration {
 	if m == nil {
 		return 0
 	}
 	return m.refreshExpiry
 }
 
-func (m *Manager) ParseAccessToken(tokenString string) (*Claims, error) {
+func (m *Tokens) ParseAccessToken(tokenString string) (*Claims, error) {
 	claims, err := m.ValidateToken(tokenString)
 	if err != nil {
 		return nil, err
@@ -181,7 +181,7 @@ func (m *Manager) ParseAccessToken(tokenString string) (*Claims, error) {
 // ParseAccessTokenForUserType validates an access token for one security
 // surface. Keeping this check at the parser boundary prevents callers from
 // accidentally accepting a valid token issued for another application.
-func (m *Manager) ParseAccessTokenForUserType(tokenString, userType string) (*Claims, error) {
+func (m *Tokens) ParseAccessTokenForUserType(tokenString, userType string) (*Claims, error) {
 	claims, err := m.ValidateTokenForUserType(tokenString, userType)
 	if err != nil {
 		return nil, err
@@ -194,7 +194,7 @@ func (m *Manager) ParseAccessTokenForUserType(tokenString, userType string) (*Cl
 
 // ValidateTokenForUserType is the user-type-scoped counterpart of
 // ValidateToken. userType must be one of the known security surfaces.
-func (m *Manager) ValidateTokenForUserType(tokenString, userType string) (*Claims, error) {
+func (m *Tokens) ValidateTokenForUserType(tokenString, userType string) (*Claims, error) {
 	userType = normalizeUserType(userType)
 	if !isKnownUserType(userType) {
 		return nil, ErrInvalidUserType
@@ -212,7 +212,7 @@ func (m *Manager) ValidateTokenForUserType(tokenString, userType string) (*Claim
 	return claims, nil
 }
 
-func (m *Manager) ValidateToken(tokenString string) (*Claims, error) {
+func (m *Tokens) ValidateToken(tokenString string) (*Claims, error) {
 	claims, err := m.validateToken(tokenString)
 	if err != nil {
 		return nil, err
@@ -226,7 +226,7 @@ func (m *Manager) ValidateToken(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-func (m *Manager) validateToken(tokenString string) (*Claims, error) {
+func (m *Tokens) validateToken(tokenString string) (*Claims, error) {
 	if m == nil || len(m.secret) == 0 {
 		return nil, ErrInvalidToken
 	}
@@ -275,7 +275,7 @@ func (m *Manager) validateToken(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-func (m *Manager) issueToken(input ClaimsInput, tokenType string, expiry time.Duration) (string, error) {
+func (m *Tokens) issueToken(input ClaimsInput, tokenType string, expiry time.Duration) (string, error) {
 	if m == nil || len(m.secret) == 0 {
 		return "", ErrInvalidToken
 	}

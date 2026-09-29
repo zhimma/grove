@@ -82,7 +82,7 @@ func TestRouterPingAndProfile(t *testing.T) {
 		t.Fatalf("unexpected ping response: %s", resp.Body.String())
 	}
 
-	token, err := p.TokenManager.IssueAccessToken("api-user")
+	token, err := p.Tokens.IssueAccessToken("api-user")
 	if err != nil {
 		t.Fatalf("issue token: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestRouterReturnsFieldErrorsForInvalidRequests(t *testing.T) {
 	engine.ServeHTTP(resp, req)
 	assertFieldError(t, resp, http.StatusUnprocessableEntity, "user_id", "用户ID不能为空")
 
-	token, err := p.TokenManager.IssueAccessToken("api-user")
+	token, err := p.Tokens.IssueAccessToken("api-user")
 	if err != nil {
 		t.Fatalf("issue token: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestRouterProtectedRoutesFailClosedWithoutAPIEnforcer(t *testing.T) {
 	cfg.Demo.Enabled = true
 	engine, p := newRouterTestEngine(t, cfg)
 
-	token, err := p.TokenManager.IssueAccessToken("api-user")
+	token, err := p.Tokens.IssueAccessToken("api-user")
 	if err != nil {
 		t.Fatalf("issue token: %v", err)
 	}

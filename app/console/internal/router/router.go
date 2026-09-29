@@ -28,7 +28,7 @@ func (r *Router) InstallToEngine(engine *gin.Engine) {
 	v1 := engine.Group("/console/v1")
 	authStateResolver := consoleservice.NewAdminAuthStateResolver(r.p.DB)
 	pages := pagination.Policy{Default: r.cfg.API.DefaultPerPage, Max: r.cfg.API.MaxPerPage}
-	sessions := consoleservice.NewSessionService(r.p.DB, r.p.TokenManager, pages)
+	sessions := consoleservice.NewSessionService(r.p.DB, r.p.Tokens, pages)
 	runtimeCatalog := consoleservice.NewRuntimePermissionCatalog()
 	var loginGuard ratelimit.LoginGuard
 	if r.p.Config != nil && r.p.Config.Security.Login.Enabled {
@@ -43,20 +43,20 @@ func (r *Router) InstallToEngine(engine *gin.Engine) {
 
 	public := v1.Group("")
 	authed := v1.Group("")
-	authed.Use(consolemiddleware.AdminAuthn(r.p.TokenManager, sessions, authStateResolver))
+	authed.Use(consolemiddleware.AdminAuthn(r.p.Tokens, sessions, authStateResolver))
 	protected := v1.Group("")
 	var auditDB *gorm.DB
 	if r.p != nil && r.p.DB != nil {
 		auditDB = r.p.DB.Default()
 	}
 	protected.Use(
-		consolemiddleware.AdminAuthn(r.p.TokenManager, sessions, authStateResolver),
+		consolemiddleware.AdminAuthn(r.p.Tokens, sessions, authStateResolver),
 		consolemiddleware.AuditOperation(auditDB),
 		consolemiddleware.AdminPermission(r.p.GetEnforcer("console"), r.p.RouteCatalog),
 	)
 
 	catalog := r.p.RouteCatalog
-	handler.RegisterAuthRoutes(public, authed, r.p.DB, r.p.GetEnforcer("console"), r.p.TokenManager, loginGuard, catalog)
+	handler.RegisterAuthRoutes(public, authed, r.p.DB, r.p.GetEnforcer("console"), r.p.Tokens, loginGuard, catalog)
 	handler.RegisterDashboardRoutes(protected, r.p.DB, catalog)
 	handler.RegisterRoleRoutes(protected, r.p.DB, r.p.GetEnforcer("console"), runtimeCatalog, pages, catalog)
 	handler.RegisterPermissionRoutes(protected, runtimeCatalog, catalog)

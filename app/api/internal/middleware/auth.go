@@ -12,16 +12,16 @@ import (
 )
 
 type UserAuthSet struct {
-	tokenManager     *auth.Manager
+	tokens           *auth.Tokens
 	expectedUserType string
 }
 
-func NewUserAuthSet(tokenManager *auth.Manager, userType ...string) *UserAuthSet {
+func NewUserAuthSet(tokens *auth.Tokens, userType ...string) *UserAuthSet {
 	expected := auth.UserTypeAPI
 	if len(userType) > 0 && strings.TrimSpace(userType[0]) != "" {
 		expected = strings.ToLower(strings.TrimSpace(userType[0]))
 	}
-	return &UserAuthSet{tokenManager: tokenManager, expectedUserType: expected}
+	return &UserAuthSet{tokens: tokens, expectedUserType: expected}
 }
 
 func (s *UserAuthSet) Optional() gin.HandlerFunc {
@@ -58,7 +58,7 @@ func (s *UserAuthSet) authenticate(required bool) gin.HandlerFunc {
 		if tokenString == header && strings.HasPrefix(strings.ToLower(header), "bearer ") {
 			tokenString = strings.TrimSpace(header[7:])
 		}
-		if tokenString == "" || s.tokenManager == nil {
+		if tokenString == "" || s.tokens == nil {
 			if required {
 				response.Fail(c, errx.Unauthorized().WithMessage("访问令牌无效"))
 				c.Abort()
@@ -68,7 +68,7 @@ func (s *UserAuthSet) authenticate(required bool) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := s.tokenManager.ParseAccessTokenForUserType(tokenString, s.expectedUserType)
+		claims, err := s.tokens.ParseAccessTokenForUserType(tokenString, s.expectedUserType)
 		if err != nil {
 			if required {
 				response.Fail(c, errx.Unauthorized().WithMessage("访问令牌无效").WithCause(err))

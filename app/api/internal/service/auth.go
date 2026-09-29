@@ -9,7 +9,7 @@ import (
 )
 
 type DemoAuthService struct {
-	tokenManager *auth.Manager
+	tokens *auth.Tokens
 }
 
 type IssueAccessTokenInput struct {
@@ -22,12 +22,12 @@ type IssueAccessTokenOutput struct {
 	TokenType   string
 }
 
-func NewDemoAuthService(tokenManager *auth.Manager) *DemoAuthService {
-	return &DemoAuthService{tokenManager: tokenManager}
+func NewDemoAuthService(tokens *auth.Tokens) *DemoAuthService {
+	return &DemoAuthService{tokens: tokens}
 }
 
 func (s *DemoAuthService) IssueAccessToken(_ context.Context, input IssueAccessTokenInput) (IssueAccessTokenOutput, error) {
-	if s.tokenManager == nil {
+	if s.tokens == nil {
 		return IssueAccessTokenOutput{}, errx.ServiceUnavailable().WithMessage("令牌管理器未配置")
 	}
 
@@ -36,7 +36,7 @@ func (s *DemoAuthService) IssueAccessToken(_ context.Context, input IssueAccessT
 		userID = "api-user"
 	}
 
-	token, err := s.tokenManager.IssueAccessToken(userID)
+	token, err := s.tokens.IssueAccessToken(userID)
 	if err != nil {
 		return IssueAccessTokenOutput{}, errx.Internal().WithCause(err)
 	}

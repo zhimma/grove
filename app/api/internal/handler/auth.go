@@ -26,9 +26,9 @@ type IssueAccessTokenResponse struct {
 
 // RegisterDemoAuthRoutes registers the demo authentication endpoint with its
 // exact runtime dependency. Provider ownership stays in the API router.
-func RegisterDemoAuthRoutes(public *route.Group, tokenManager *auth.Manager) {
+func RegisterDemoAuthRoutes(public *route.Group, tokens *auth.Tokens) {
 	h := &DemoAuthHandler{
-		authSvc: service.NewDemoAuthService(tokenManager),
+		authSvc: service.NewDemoAuthService(tokens),
 	}
 	public.POST("/auth/access-token", h.IssueAccessToken).Name("示例.签发访问令牌").Ignore()
 }

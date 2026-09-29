@@ -121,7 +121,7 @@ func TestSessionRevokeInvalidatesAccessSession(t *testing.T) {
 	}
 }
 
-func newSessionTestService(t *testing.T) (*SessionService, *gorm.DB, *auth.Manager) {
+func newSessionTestService(t *testing.T) (*SessionService, *gorm.DB, *auth.Tokens) {
 	t.Helper()
 	db := testkit.OpenDB(t, &model.ConsoleRole{}, &model.ConsoleAdmin{}, &model.ConsoleSession{})
 	admin := model.ConsoleAdmin{
@@ -133,7 +133,7 @@ func newSessionTestService(t *testing.T) (*SessionService, *gorm.DB, *auth.Manag
 	if err := db.Create(&admin).Error; err != nil {
 		t.Fatalf("create admin: %v", err)
 	}
-	manager, err := auth.NewManager(auth.Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour, RefreshExpiry: 24 * time.Hour})
+	manager, err := auth.NewTokens(auth.Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour, RefreshExpiry: 24 * time.Hour})
 	if err != nil {
 		t.Fatalf("new token manager: %v", err)
 	}

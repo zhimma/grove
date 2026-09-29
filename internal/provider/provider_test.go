@@ -102,11 +102,11 @@ func TestWithAuthSeparatesAPIAndConsoleIssuers(t *testing.T) {
 		}
 	})
 
-	apiToken, err := api.TokenManager.IssueAccessToken("api-user")
+	apiToken, err := api.Tokens.IssueAccessToken("api-user")
 	if err != nil {
 		t.Fatalf("issue API token: %v", err)
 	}
-	if _, err := console.TokenManager.ValidateToken(apiToken); err == nil {
+	if _, err := console.Tokens.ValidateToken(apiToken); err == nil {
 		t.Fatal("Console token manager must reject API issuer")
 	}
 }
@@ -221,7 +221,7 @@ func TestWithConfigSecretsIsOptionalAndValidatesConfiguredKey(t *testing.T) {
 }
 
 func TestProviderCloseClosesCacheManager(t *testing.T) {
-	manager := cache.NewManager()
+	manager := cache.NewStores()
 	store := &providerCloseStore{}
 	manager.Register("tracking", store)
 	p := &Provider{Cache: manager}

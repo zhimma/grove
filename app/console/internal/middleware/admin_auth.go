@@ -38,7 +38,7 @@ func writeAdminIdentity(c *gin.Context, result adminAuthResult) {
 	})
 }
 
-func authenticateAdmin(c *gin.Context, tokenManager *auth.Manager, sessions *consoleservice.SessionService, resolver consoleservice.AdminAuthStateResolver) (*adminAuthResult, bool) {
+func authenticateAdmin(c *gin.Context, tokens *auth.Tokens, sessions *consoleservice.SessionService, resolver consoleservice.AdminAuthStateResolver) (*adminAuthResult, bool) {
 	header := strings.TrimSpace(c.GetHeader("Authorization"))
 	if header == "" {
 		response.Fail(c, errx.Unauthorized().WithMessage("缺少访问令牌"))
@@ -50,13 +50,13 @@ func authenticateAdmin(c *gin.Context, tokenManager *auth.Manager, sessions *con
 	if tokenString == header && strings.HasPrefix(strings.ToLower(header), "bearer ") {
 		tokenString = strings.TrimSpace(header[7:])
 	}
-	if tokenString == "" || tokenManager == nil {
+	if tokenString == "" || tokens == nil {
 		response.Fail(c, errx.Unauthorized().WithMessage("访问令牌无效"))
 		c.Abort()
 		return nil, false
 	}
 
-	claims, err := tokenManager.ParseAccessTokenForUserType(tokenString, auth.UserTypeConsole)
+	claims, err := tokens.ParseAccessTokenForUserType(tokenString, auth.UserTypeConsole)
 	if err != nil {
 		response.Fail(c, errx.Unauthorized().WithMessage("控制台令牌无效").WithCause(err))
 		c.Abort()
@@ -95,9 +95,9 @@ func authenticateAdmin(c *gin.Context, tokenManager *auth.Manager, sessions *con
 	}, true
 }
 
-func AdminAuthn(tokenManager *auth.Manager, sessions *consoleservice.SessionService, resolver consoleservice.AdminAuthStateResolver) gin.HandlerFunc {
+func AdminAuthn(tokens *auth.Tokens, sessions *consoleservice.SessionService, resolver consoleservice.AdminAuthStateResolver) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		result, ok := authenticateAdmin(c, tokenManager, sessions, resolver)
+		result, ok := authenticateAdmin(c, tokens, sessions, resolver)
 		if !ok {
 			return
 		}

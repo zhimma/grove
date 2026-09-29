@@ -22,7 +22,7 @@ type storeCloser interface {
 	Close() error
 }
 
-type Manager struct {
+type Stores struct {
 	mu           sync.RWMutex
 	stores       map[string]Store
 	defaultStore string
@@ -30,14 +30,14 @@ type Manager struct {
 	closeErr     error
 }
 
-func NewManager() *Manager {
-	return &Manager{
+func NewStores() *Stores {
+	return &Stores{
 		stores:       make(map[string]Store),
 		defaultStore: "default",
 	}
 }
 
-func (m *Manager) Register(name string, store Store) {
+func (m *Stores) Register(name string, store Store) {
 	if m == nil || store == nil {
 		return
 	}
@@ -50,12 +50,12 @@ func (m *Manager) Register(name string, store Store) {
 	m.mu.Unlock()
 }
 
-func (m *Manager) Store(name string) Store {
+func (m *Stores) Store(name string) Store {
 	store, _ := m.Get(name)
 	return store
 }
 
-func (m *Manager) Get(name string) (Store, error) {
+func (m *Stores) Get(name string) (Store, error) {
 	if m == nil {
 		return nil, fmt.Errorf("cache manager is nil")
 	}
@@ -72,7 +72,7 @@ func (m *Manager) Get(name string) (Store, error) {
 	return store, nil
 }
 
-func (m *Manager) MustStore(name string) Store {
+func (m *Stores) MustStore(name string) Store {
 	store, err := m.Get(name)
 	if err != nil {
 		panic(err)
@@ -80,11 +80,11 @@ func (m *Manager) MustStore(name string) Store {
 	return store
 }
 
-func (m *Manager) Default() Store {
+func (m *Stores) Default() Store {
 	return m.Store("")
 }
 
-func (m *Manager) SetDefault(name string) {
+func (m *Stores) SetDefault(name string) {
 	if m == nil {
 		return
 	}
@@ -97,7 +97,7 @@ func (m *Manager) SetDefault(name string) {
 	m.mu.Unlock()
 }
 
-func (m *Manager) Stores() []string {
+func (m *Stores) Names() []string {
 	if m == nil {
 		return nil
 	}
@@ -111,7 +111,7 @@ func (m *Manager) Stores() []string {
 	return names
 }
 
-func (m *Manager) Close() error {
+func (m *Stores) Close() error {
 	if m == nil {
 		return nil
 	}

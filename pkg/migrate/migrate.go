@@ -26,7 +26,7 @@ const (
 	migrationCreateLockTimeout = 5 * time.Second
 )
 
-type Manager struct {
+type Migrator struct {
 	db  *gorm.DB
 	dir string
 }
@@ -41,14 +41,14 @@ type migrationFile struct {
 	Name    string
 }
 
-func NewManager(db *gorm.DB, dir string) *Manager {
-	return &Manager{
+func NewMigrator(db *gorm.DB, dir string) *Migrator {
+	return &Migrator{
 		db:  db,
 		dir: dir,
 	}
 }
 
-func (m *Manager) Up() (int, error) {
+func (m *Migrator) Up() (int, error) {
 	dir, err := m.migrationDir()
 	if err != nil {
 		return 0, err
@@ -77,7 +77,7 @@ func (m *Manager) Up() (int, error) {
 	return countApplied(files, before, after), nil
 }
 
-func (m *Manager) Down() (string, error) {
+func (m *Migrator) Down() (string, error) {
 	dir, err := m.migrationDir()
 	if err != nil {
 		return "", err
@@ -129,7 +129,7 @@ func validateDownMigration(db *gorm.DB, name string) error {
 	return nil
 }
 
-func (m *Manager) Status() ([]Status, error) {
+func (m *Migrator) Status() ([]Status, error) {
 	dir, err := m.migrationDir()
 	if err != nil {
 		return nil, err
@@ -159,7 +159,7 @@ func (m *Manager) Status() ([]Status, error) {
 	return statuses, nil
 }
 
-func (m *Manager) openEngine() (*golangmigrate.Migrate, func(), error) {
+func (m *Migrator) openEngine() (*golangmigrate.Migrate, func(), error) {
 	if m.db == nil {
 		return nil, nil, fmt.Errorf("migration database is required")
 	}
@@ -212,7 +212,7 @@ func (m *Manager) openEngine() (*golangmigrate.Migrate, func(), error) {
 	}, nil
 }
 
-func (m *Manager) migrationDir() (string, error) {
+func (m *Migrator) migrationDir() (string, error) {
 	if m == nil || m.db == nil {
 		return "", fmt.Errorf("migration database is required")
 	}

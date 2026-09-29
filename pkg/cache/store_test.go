@@ -110,8 +110,8 @@ func TestMemoryStoreCloseIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestManagerGetAndCloseLifecycle(t *testing.T) {
-	manager := NewManager()
+func TestStoresGetAndCloseLifecycle(t *testing.T) {
+	manager := NewStores()
 	if _, err := manager.Get("missing"); err == nil {
 		t.Fatal("expected missing store error")
 	}
@@ -124,7 +124,7 @@ func TestManagerGetAndCloseLifecycle(t *testing.T) {
 	if store, err := manager.Get(""); err != nil || store != memory {
 		t.Fatalf("get default: store=%v err=%v", store, err)
 	}
-	names := manager.Stores()
+	names := manager.Names()
 	if !sort.StringsAreSorted(names) {
 		t.Fatalf("store names must be sorted: %#v", names)
 	}
