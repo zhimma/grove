@@ -117,7 +117,7 @@ func TestInstrumentGORMRecordsOperationWithoutSQL(t *testing.T) {
 	}
 	for _, span := range spans {
 		for _, attr := range span.Attributes() {
-			if strings.Contains(string(attr.Key), "statement") || strings.Contains(attr.Value.Emit(), "secret-value") {
+			if strings.Contains(string(attr.Key), "statement") || strings.Contains(attr.Value.String(), "secret-value") {
 				t.Fatalf("gorm span leaked SQL data: %#v", span.Attributes())
 			}
 		}
@@ -181,7 +181,7 @@ func TestRedisHookRecordsCommandNameWithoutArguments(t *testing.T) {
 		t.Fatalf("unexpected redis spans: %#v", spans)
 	}
 	for _, attr := range spans[0].Attributes() {
-		if strings.Contains(attr.Value.Emit(), "secret-value") || strings.Contains(attr.Value.Emit(), "token") {
+		if strings.Contains(attr.Value.String(), "secret-value") || strings.Contains(attr.Value.String(), "token") {
 			t.Fatalf("redis span leaked command arguments: %#v", spans[0].Attributes())
 		}
 	}

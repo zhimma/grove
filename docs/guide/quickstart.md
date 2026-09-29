@@ -4,7 +4,7 @@
 
 ## 1. 准备环境
 
-- Go 1.25.12+
+- Go 1.25.14+
 - PostgreSQL 14+ 或 MySQL 8.0.16+
 - Node.js 20.19+
 - pnpm 10.28.2（仅启动前端需要）
@@ -13,7 +13,7 @@
 确认 Go 环境：
 
 ```bash
-go version                 # 需要 1.25.12 及以上
+go version                 # 需要 1.25.14 及以上
 export GOTOOLCHAIN=local   # 固定使用本机工具链，避免自动下载
 ```
 

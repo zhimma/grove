@@ -4,5 +4,5 @@
 # takes the version from web/admin-vben/package.json's packageManager field.
 # Pinning it here too would be a second source of truth that can drift.
 [tools]
-go = "1.25.12"
+go = "1.25.14"
 node = "20.19.5"

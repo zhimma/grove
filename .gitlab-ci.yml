@@ -21,7 +21,7 @@ variables:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
 
 .go_job:
-  image: golang:1.25.12-bookworm
+  image: golang:1.25.14-bookworm
   cache:
     key: go-$CI_COMMIT_REF_SLUG
     paths:
