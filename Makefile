@@ -1,7 +1,10 @@
 BIN_DIR := bin
 ADMIN_DIR := web/admin-vben
 GO ?= go
-PNPM ?= pnpm
+# Run pnpm through corepack so the version comes from web/admin-vben's
+# packageManager field, the same way CI does. A globally installed pnpm of a
+# different major otherwise fails every admin.* target with ERR_PNPM_UNSUPPORTED_ENGINE.
+PNPM ?= corepack pnpm
 GOLANGCI_LINT ?= golangci-lint
 GOVULNCHECK ?= govulncheck
 GROVE := $(GO) run ./cmd/grove

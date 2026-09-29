@@ -1,2 +1,8 @@
+# Toolchain versions, matching CI. Run `mise install` after cloning.
+#
+# pnpm is deliberately absent: the Makefile runs it through corepack, which
+# takes the version from web/admin-vben/package.json's packageManager field.
+# Pinning it here too would be a second source of truth that can drift.
 [tools]
 go = "1.25.12"
+node = "20.19.5"
