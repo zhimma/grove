@@ -110,7 +110,7 @@ func (h *ArticleHandler) Create(c *gin.Context) {
 	}
 	article, err := h.articleSvc.CreateArticle(c.Request.Context(), consoleservice.CreateArticleInput{
 		Title: req.Title, Slug: req.Slug, Summary: req.Summary, Content: req.Content, Cover: req.Cover,
-		Category: req.Category, Status: req.Status, AuthorID: request.GetAdminID(c),
+		Category: req.Category, Status: req.Status, AuthorID: request.AdminID(c),
 	})
 	if err != nil {
 		response.Fail(c, err)

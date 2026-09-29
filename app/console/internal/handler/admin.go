@@ -243,7 +243,7 @@ func (h *AdminHandler) Delete(c *gin.Context) {
 
 	if err := h.adminSvc.DeleteAdmin(c.Request.Context(), consoleservice.DeleteAdminInput{
 		AdminID:    req.ID,
-		OperatorID: request.GetAdminID(c),
+		OperatorID: request.AdminID(c),
 	}); err != nil {
 		response.Fail(c, err)
 		return

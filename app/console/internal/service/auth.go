@@ -104,7 +104,7 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (LoginOutput,
 	if account == "" || strings.TrimSpace(input.Password) == "" {
 		return LoginOutput{}, errx.InvalidParams().WithHTTPStatus(422).WithMessage("账号和密码不能为空")
 	}
-	meta := request.GetRequestMetaFromContext(ctx)
+	meta := request.RequestMetaFromContext(ctx)
 	loginKey := ratelimit.LoginKey(account, meta.ClientIP)
 	if s.loginGuard != nil {
 		if err := s.loginGuard.Allow(ctx, loginKey); err != nil {
@@ -255,7 +255,7 @@ func (s *AuthService) writeLoginLog(ctx context.Context, adminID, account string
 			Msg("登录日志写入跳过：默认数据库未配置")
 		return
 	}
-	meta := request.GetRequestMetaFromContext(ctx)
+	meta := request.RequestMetaFromContext(ctx)
 	record := model.ConsoleLoginLog{
 		AdminID:       strings.TrimSpace(adminID),
 		Account:       strings.TrimSpace(account),

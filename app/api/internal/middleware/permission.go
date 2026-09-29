@@ -33,7 +33,7 @@ func (s *PermissionSet) Require(permission string) gin.HandlerFunc {
 			return
 		}
 
-		userID := request.GetUserID(c)
+		userID := request.UserID(c)
 		if userID == "" {
 			response.Fail(c, errx.Unauthorized().WithMessage("缺少用户身份信息"))
 			c.Abort()

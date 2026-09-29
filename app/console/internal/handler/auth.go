@@ -153,9 +153,9 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 
 	if err := h.authSvc.Logout(c.Request.Context(), consoleservice.LogoutInput{
-		AccessToken:  request.GetAuthToken(c),
+		AccessToken:  request.AuthToken(c),
 		RefreshToken: req.RefreshToken,
-		SessionID:    request.GetSessionID(c),
+		SessionID:    request.SessionID(c),
 	}); err != nil {
 		response.Fail(c, err)
 		return
@@ -164,7 +164,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 }
 
 func (h *AuthHandler) Me(c *gin.Context) {
-	admin, err := h.authSvc.GetCurrentAdmin(c.Request.Context(), request.GetAdminID(c))
+	admin, err := h.authSvc.GetCurrentAdmin(c.Request.Context(), request.AdminID(c))
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -180,7 +180,7 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 	}
 
 	admin, err := h.authSvc.UpdateCurrentAdmin(c.Request.Context(), consoleservice.UpdateCurrentAdminInput{
-		AdminID:     request.GetAdminID(c),
+		AdminID:     request.AdminID(c),
 		Account:     req.Account,
 		Username:    req.Username,
 		Email:       req.Email,
@@ -205,7 +205,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	}
 
 	if err := h.authSvc.ChangePassword(c.Request.Context(), consoleservice.ChangePasswordInput{
-		AdminID:     request.GetAdminID(c),
+		AdminID:     request.AdminID(c),
 		OldPassword: req.OldPassword,
 		NewPassword: req.NewPassword,
 	}); err != nil {
@@ -217,7 +217,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 
 func (h *AuthHandler) Permissions(c *gin.Context) {
 	overview, err := h.authSvc.GetAuthorizationOverview(c.Request.Context(), consoleservice.GetAuthorizationOverviewInput{
-		UserID: request.GetAdminID(c),
+		UserID: request.AdminID(c),
 	})
 	if err != nil {
 		response.Fail(c, err)

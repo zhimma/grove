@@ -63,7 +63,7 @@ func SetRequestID(c *gin.Context, requestID string) {
 	c.Set(RequestIDKey, requestID)
 }
 
-func GetRequestID(c *gin.Context) string {
+func RequestID(c *gin.Context) string {
 	if c == nil {
 		return ""
 	}
@@ -88,7 +88,7 @@ func SetRequestMeta(c *gin.Context, meta RequestMeta) {
 	}
 }
 
-func GetRequestMeta(c *gin.Context) RequestMeta {
+func RequestMetaOf(c *gin.Context) RequestMeta {
 	if c == nil {
 		return RequestMeta{}
 	}
@@ -104,7 +104,7 @@ func WithRequestMeta(ctx context.Context, meta RequestMeta) context.Context {
 	return context.WithValue(ctx, requestMetaStdKey, meta)
 }
 
-func GetRequestMetaFromContext(ctx context.Context) RequestMeta {
+func RequestMetaFromContext(ctx context.Context) RequestMeta {
 	if meta, ok := ctx.Value(requestMetaStdKey).(RequestMeta); ok {
 		return meta
 	}
@@ -118,7 +118,7 @@ func SetErrorMeta(c *gin.Context, meta ErrorMeta) {
 	c.Set(ErrorMetaKey, meta)
 }
 
-func GetErrorMeta(c *gin.Context) ErrorMeta {
+func ErrorMetaOf(c *gin.Context) ErrorMeta {
 	if c == nil {
 		return ErrorMeta{}
 	}
@@ -137,7 +137,7 @@ func SetIdentity(c *gin.Context, identity Identity) {
 	c.Set(IdentityKey, identity)
 }
 
-func GetIdentity(c *gin.Context) Identity {
+func IdentityOf(c *gin.Context) Identity {
 	if c == nil {
 		return Identity{}
 	}
@@ -157,20 +157,20 @@ func SetUserID(c *gin.Context, userID string) {
 	})
 }
 
-func GetUserID(c *gin.Context) string {
-	return GetIdentity(c).UserID
+func UserID(c *gin.Context) string {
+	return IdentityOf(c).UserID
 }
 
-func GetAdminID(c *gin.Context) string {
-	return GetIdentity(c).AdminID
+func AdminID(c *gin.Context) string {
+	return IdentityOf(c).AdminID
 }
 
-func GetSessionID(c *gin.Context) string {
-	return GetIdentity(c).SessionID
+func SessionID(c *gin.Context) string {
+	return IdentityOf(c).SessionID
 }
 
 func IsSuper(c *gin.Context) bool {
-	return GetIdentity(c).IsSuper
+	return IdentityOf(c).IsSuper
 }
 
 func SetAuthToken(c *gin.Context, token string) {
@@ -180,7 +180,7 @@ func SetAuthToken(c *gin.Context, token string) {
 	c.Set(AuthTokenKey, token)
 }
 
-func GetAuthToken(c *gin.Context) string {
+func AuthToken(c *gin.Context) string {
 	if c == nil {
 		return ""
 	}
@@ -199,7 +199,7 @@ func SetAuditMeta(c *gin.Context, meta AuditMeta) {
 	c.Set(AuditMetaKey, meta)
 }
 
-func GetAuditMeta(c *gin.Context) AuditMeta {
+func AuditMetaOf(c *gin.Context) AuditMeta {
 	if c == nil {
 		return AuditMeta{}
 	}

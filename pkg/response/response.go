@@ -80,7 +80,7 @@ func Fail(c *gin.Context, err error) {
 		Message:   message,
 		RequestID: requestID(c),
 	}
-	if data := buildErrorData(httpErr, status, code, request.GetRequestMeta(c).Debug); len(data) > 0 {
+	if data := buildErrorData(httpErr, status, code, request.RequestMetaOf(c).Debug); len(data) > 0 {
 		resp.Data = data
 	}
 
@@ -163,7 +163,7 @@ func logFailure(c *gin.Context, httpErr *errx.HTTPError, status int, code, messa
 	if httpErr.Cause != nil {
 		event = event.Err(httpErr.Cause).Str("cause", httpErr.Cause.Error())
 	}
-	identity := request.GetIdentity(c)
+	identity := request.IdentityOf(c)
 	method, path := "", ""
 	if c.Request != nil {
 		method = c.Request.Method
@@ -213,7 +213,7 @@ func requestID(c *gin.Context) string {
 	if c == nil {
 		return ""
 	}
-	if id := strings.TrimSpace(request.GetRequestID(c)); id != "" {
+	if id := strings.TrimSpace(request.RequestID(c)); id != "" {
 		return id
 	}
 	// Unit handlers and middleware-adjacent code may call response helpers

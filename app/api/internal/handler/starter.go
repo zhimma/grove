@@ -80,7 +80,7 @@ func (h *DemoStarterHandler) Ping(c *gin.Context) {
 
 func (h *DemoStarterHandler) Profile(c *gin.Context) {
 	out, err := h.starterSvc.Profile(c.Request.Context(), service.ProfileInput{
-		UserID: request.GetUserID(c),
+		UserID: request.UserID(c),
 	})
 	if err != nil {
 		response.Fail(c, err)
@@ -103,9 +103,9 @@ func (h *DemoStarterHandler) DispatchEchoJob(c *gin.Context) {
 	}
 
 	out, err := h.starterSvc.DispatchEchoJob(c.Request.Context(), service.DispatchEchoJobInput{
-		UserID:    request.GetUserID(c),
+		UserID:    request.UserID(c),
 		Message:   req.Message,
-		RequestID: request.GetRequestID(c),
+		RequestID: request.RequestID(c),
 	})
 	if err != nil {
 		response.Fail(c, err)

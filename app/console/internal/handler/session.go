@@ -74,7 +74,7 @@ func (h *SessionHandler) List(c *gin.Context) {
 		return
 	}
 	items := make([]SessionResponse, 0, len(result.List))
-	currentSessionID := request.GetSessionID(c)
+	currentSessionID := request.SessionID(c)
 	for _, session := range result.List {
 		item := SessionResponse{
 			ID: session.ID, AdminID: session.AdminID, DeviceName: session.DeviceName,

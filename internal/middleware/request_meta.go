@@ -13,7 +13,7 @@ func RequestMeta(serviceName string, debug ...bool) gin.HandlerFunc {
 			appDebug = debug[0]
 		}
 		request.SetRequestMeta(c, request.RequestMeta{
-			RequestID: request.GetRequestID(c),
+			RequestID: request.RequestID(c),
 			App:       serviceName,
 			Debug:     appDebug,
 			Method:    c.Request.Method,

@@ -200,6 +200,6 @@ func (h *UserHandler) Delete(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	setAuditMeta(c, "user", req.ID, map[string]any{"deleted": true, "operator_id": request.GetAdminID(c)})
+	setAuditMeta(c, "user", req.ID, map[string]any{"deleted": true, "operator_id": request.AdminID(c)})
 	response.Success(c, nil)
 }

@@ -32,14 +32,14 @@ func TestSetRequestMetaReachesTheStdContext(t *testing.T) {
 
 	SetRequestMeta(c, meta)
 
-	if got := GetRequestMeta(c); got != meta {
+	if got := RequestMetaOf(c); got != meta {
 		t.Fatalf("gin-side meta = %+v, want %+v", got, meta)
 	}
-	if got := GetRequestMetaFromContext(c.Request.Context()); got != meta {
+	if got := RequestMetaFromContext(c.Request.Context()); got != meta {
 		t.Fatalf("std-context meta = %+v, want %+v", got, meta)
 	}
 	// SetRequestMeta also publishes the ID on its own key.
-	if got := GetRequestID(c); got != "req-1" {
+	if got := RequestID(c); got != "req-1" {
 		t.Fatalf("request id = %q, want req-1", got)
 	}
 }
@@ -57,13 +57,13 @@ func TestSettersToleratePartiallyBuiltContexts(t *testing.T) {
 	SetErrorMeta(bare, ErrorMeta{HTTPStatus: 500})
 	SetAuditMeta(bare, AuditMeta{TargetType: "order"})
 
-	if got := GetIdentity(bare).AdminID; got != "admin-1" {
+	if got := IdentityOf(bare).AdminID; got != "admin-1" {
 		t.Fatalf("admin id = %q, want admin-1 even without a Request", got)
 	}
-	if got := GetRequestID(bare); got != "req-3" {
+	if got := RequestID(bare); got != "req-3" {
 		t.Fatalf("request id = %q, want req-3", got)
 	}
-	if got := GetAuthToken(bare); got != "token" {
+	if got := AuthToken(bare); got != "token" {
 		t.Fatalf("auth token = %q, want token", got)
 	}
 }
@@ -76,16 +76,16 @@ func TestSettersAndGettersIgnoreANilContext(t *testing.T) {
 	SetErrorMeta(nil, ErrorMeta{})
 	SetAuditMeta(nil, AuditMeta{})
 
-	if GetRequestID(nil) != "" || GetAuthToken(nil) != "" {
+	if RequestID(nil) != "" || AuthToken(nil) != "" {
 		t.Fatal("nil context must read as empty")
 	}
-	if GetRequestMeta(nil) != (RequestMeta{}) || GetErrorMeta(nil) != (ErrorMeta{}) {
+	if RequestMetaOf(nil) != (RequestMeta{}) || ErrorMetaOf(nil) != (ErrorMeta{}) {
 		t.Fatal("nil context must read as zero meta")
 	}
-	if GetIdentity(nil) != (Identity{}) {
+	if IdentityOf(nil) != (Identity{}) {
 		t.Fatal("nil context must read as zero identity")
 	}
-	if GetAuditMeta(nil).TargetType != "" {
+	if AuditMetaOf(nil).TargetType != "" {
 		t.Fatal("nil context must read as zero audit meta")
 	}
 }
@@ -101,16 +101,16 @@ func TestGettersReadZeroWhenAKeyHoldsTheWrongType(t *testing.T) {
 		c.Set(key, 12345)
 	}
 
-	if GetRequestID(c) != "" || GetAuthToken(c) != "" {
+	if RequestID(c) != "" || AuthToken(c) != "" {
 		t.Fatal("string getters must ignore a non-string value")
 	}
-	if GetRequestMeta(c) != (RequestMeta{}) || GetErrorMeta(c) != (ErrorMeta{}) {
+	if RequestMetaOf(c) != (RequestMeta{}) || ErrorMetaOf(c) != (ErrorMeta{}) {
 		t.Fatal("meta getters must ignore a mistyped value")
 	}
-	if GetIdentity(c) != (Identity{}) {
+	if IdentityOf(c) != (Identity{}) {
 		t.Fatal("identity getter must ignore a mistyped value")
 	}
-	if GetAuditMeta(c).Detail != nil {
+	if AuditMetaOf(c).Detail != nil {
 		t.Fatal("audit getter must ignore a mistyped value")
 	}
 }
@@ -124,13 +124,13 @@ func TestIdentityAccessorsReadTheStoredIdentity(t *testing.T) {
 		IsSuper:   true,
 	})
 
-	if got := GetAdminID(c); got != "admin-1" {
+	if got := AdminID(c); got != "admin-1" {
 		t.Errorf("admin id = %q", got)
 	}
-	if got := GetUserID(c); got != "user-1" {
+	if got := UserID(c); got != "user-1" {
 		t.Errorf("user id = %q", got)
 	}
-	if got := GetSessionID(c); got != "session-1" {
+	if got := SessionID(c); got != "session-1" {
 		t.Errorf("session id = %q", got)
 	}
 	if !IsSuper(c) {
@@ -145,7 +145,7 @@ func TestSetUserIDMarksAnAPISubject(t *testing.T) {
 	c := newTestContext(t)
 	SetUserID(c, "user-9")
 
-	identity := GetIdentity(c)
+	identity := IdentityOf(c)
 	if identity.UserID != "user-9" || identity.SubjectID != "user-9" {
 		t.Fatalf("identity = %+v, want the user id in both fields", identity)
 	}
@@ -158,7 +158,7 @@ func TestSetUserIDMarksAnAPISubject(t *testing.T) {
 }
 
 func TestRequestMetaFromABareContextIsZero(t *testing.T) {
-	if got := GetRequestMetaFromContext(context.Background()); got != (RequestMeta{}) {
+	if got := RequestMetaFromContext(context.Background()); got != (RequestMeta{}) {
 		t.Fatalf("meta = %+v, want zero", got)
 	}
 }

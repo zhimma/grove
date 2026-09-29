@@ -61,7 +61,7 @@ func (s *DemoStarterService) Ping(ctx context.Context, input PingInput) (PingOut
 		name = "world"
 	}
 
-	meta := request.GetRequestMetaFromContext(ctx)
+	meta := request.RequestMetaFromContext(ctx)
 	return PingOutput{
 		Message:   "pong, " + name,
 		Service:   meta.App,
@@ -75,7 +75,7 @@ func (s *DemoStarterService) Profile(ctx context.Context, input ProfileInput) (P
 		return ProfileOutput{}, err
 	}
 
-	meta := request.GetRequestMetaFromContext(ctx)
+	meta := request.RequestMetaFromContext(ctx)
 	return ProfileOutput{
 		ID:        user.ID,
 		Name:      user.Name,

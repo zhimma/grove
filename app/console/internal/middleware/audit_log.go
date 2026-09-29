@@ -69,8 +69,8 @@ func AuditOperation(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		meta := request.GetRequestMeta(c)
-		identity := request.GetIdentity(c)
+		meta := request.RequestMetaOf(c)
+		identity := request.IdentityOf(c)
 		route := meta.Route
 		if strings.TrimSpace(route) == "" {
 			route = c.FullPath()
@@ -82,7 +82,7 @@ func AuditOperation(db *gorm.DB) gin.HandlerFunc {
 		status := c.Writer.Status()
 		errorMessage := http.StatusText(status)
 		if status >= http.StatusBadRequest {
-			if errMeta := request.GetErrorMeta(c); strings.TrimSpace(errMeta.Message) != "" {
+			if errMeta := request.ErrorMetaOf(c); strings.TrimSpace(errMeta.Message) != "" {
 				errorMessage = errMeta.Message
 			}
 		}
@@ -103,7 +103,7 @@ func AuditOperation(db *gorm.DB) gin.HandlerFunc {
 			UserAgent:    truncateString(meta.UserAgent, maxAuditUserAgentLength),
 			RequestQuery: auditRequestQuery(route, c.Request.URL.RawQuery),
 		}
-		if auditMeta := request.GetAuditMeta(c); strings.TrimSpace(auditMeta.TargetType) != "" || strings.TrimSpace(auditMeta.TargetID) != "" || len(auditMeta.Detail) > 0 {
+		if auditMeta := request.AuditMetaOf(c); strings.TrimSpace(auditMeta.TargetType) != "" || strings.TrimSpace(auditMeta.TargetID) != "" || len(auditMeta.Detail) > 0 {
 			record.TargetType = truncateString(strings.TrimSpace(auditMeta.TargetType), maxAuditTargetTypeLength)
 			record.TargetID = truncateString(strings.TrimSpace(auditMeta.TargetID), maxAuditTargetIDLength)
 			if detailJSON, ok := marshalAuditDetail(redactAuditDetail(auditMeta.Detail)); ok {

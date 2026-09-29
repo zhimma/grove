@@ -108,7 +108,7 @@ func TestFailHidesInternalCauseWhenDebugDisabled(t *testing.T) {
 		t.Fatalf("expected debug data to be hidden, got %#v", data["debug"])
 	}
 
-	meta := request.GetErrorMeta(c)
+	meta := request.ErrorMetaOf(c)
 	if meta.HTTPStatus != http.StatusInternalServerError {
 		t.Fatalf("unexpected error meta status: %#v", meta)
 	}

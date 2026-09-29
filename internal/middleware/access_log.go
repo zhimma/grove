@@ -24,8 +24,8 @@ func AccessLog() gin.HandlerFunc {
 		} else if status >= http.StatusBadRequest {
 			level = zerolog.WarnLevel
 		}
-		meta := request.GetErrorMeta(c)
-		identity := request.GetIdentity(c)
+		meta := request.ErrorMetaOf(c)
+		identity := request.IdentityOf(c)
 		spanContext := trace.SpanContextFromContext(c.Request.Context())
 		traceID, spanID := "", ""
 		if spanContext.IsValid() {
@@ -34,7 +34,7 @@ func AccessLog() gin.HandlerFunc {
 		}
 		log := logger.Logger()
 		log.WithLevel(level).
-			Str("request_id", request.GetRequestID(c)).
+			Str("request_id", request.RequestID(c)).
 			Str("trace_id", traceID).
 			Str("span_id", spanID).
 			Str("method", c.Request.Method).

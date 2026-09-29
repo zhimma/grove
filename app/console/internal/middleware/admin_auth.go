@@ -113,7 +113,7 @@ func AdminPermission(enforcer *rbac.Enforcer, catalog *pkgroute.Catalog) gin.Han
 			return
 		}
 
-		adminID := request.GetAdminID(c)
+		adminID := request.AdminID(c)
 		if adminID == "" {
 			response.Fail(c, errx.Unauthorized().WithMessage("缺少管理员身份信息"))
 			c.Abort()
