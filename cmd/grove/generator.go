@@ -139,7 +139,7 @@ func renderMigrations(spec moduleSpec) (map[string]migrate.SQL, error) {
 
 func prepareEdits(spec moduleSpec, withFrontend bool) ([]fileEdit, error) {
 	router, err := insertAtMarker(routerFile, routeMarker,
-		fmt.Sprintf("\thandler.Register%sRoutes(protected, r.p.DB, pagePolicies, catalog)\n", spec.Name))
+		fmt.Sprintf("\thandler.Register%sRoutes(protected, r.p.DB, pages, catalog)\n", spec.Name))
 	if err != nil {
 		return nil, err
 	}

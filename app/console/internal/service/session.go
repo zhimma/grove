@@ -11,6 +11,7 @@ import (
 	"github.com/zhimma/grove/pkg/auth"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/transaction"
 	"github.com/zhimma/grove/pkg/ulid"
 )
@@ -20,7 +21,7 @@ const sessionActivityWriteInterval = 5 * time.Minute
 type SessionService struct {
 	dbs          database.Connections
 	tokenManager *auth.Manager
-	pagePolicy   PagePolicy
+	pages        pagination.Policy
 }
 
 type CreateSessionInput struct {
@@ -40,11 +41,11 @@ type ListSessionsInput struct {
 
 type ListSessionsResult struct {
 	List []model.ConsoleSession
-	Meta ListMeta
+	Meta pagination.Meta
 }
 
-func NewSessionService(dbs database.Connections, tokenManager *auth.Manager, policies ...PagePolicy) *SessionService {
-	return &SessionService{dbs: dbs, tokenManager: tokenManager, pagePolicy: pagePolicyFromArgs(policies)}
+func NewSessionService(dbs database.Connections, tokenManager *auth.Manager, pages pagination.Policy) *SessionService {
+	return &SessionService{dbs: dbs, tokenManager: tokenManager, pages: pages}
 }
 
 func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (*model.ConsoleSession, *auth.TokenPair, error) {
@@ -217,7 +218,7 @@ func (s *SessionService) List(ctx context.Context, input ListSessionsInput) (*Li
 	if err != nil {
 		return nil, err
 	}
-	page, pageSize := resolvePageWithPolicy(ListRequest{Page: input.Page, PageSize: input.PageSize}, s.pagePolicy)
+	page := s.pages.Resolve(pagination.Request{Page: input.Page, PageSize: input.PageSize})
 	now := time.Now()
 	query := db.Model(&model.ConsoleSession{}).Preload("Admin")
 	if adminID := strings.TrimSpace(input.AdminID); adminID != "" {
@@ -242,14 +243,11 @@ func (s *SessionService) List(ctx context.Context, input ListSessionsInput) (*Li
 		return nil, errx.Internal().WithCause(err)
 	}
 	var sessions []model.ConsoleSession
-	query = query.Order("console_sessions.last_active_at DESC")
-	if pageSize > 0 {
-		query = query.Offset((page - 1) * pageSize).Limit(pageSize)
-	}
+	query = page.Apply(query.Order("console_sessions.last_active_at DESC"))
 	if err := query.Find(&sessions).Error; err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}
-	return &ListSessionsResult{List: sessions, Meta: NewListMeta(total, page, pageSize)}, nil
+	return &ListSessionsResult{List: sessions, Meta: pagination.NewMeta(total, page)}, nil
 }
 
 func (s *SessionService) db(ctx context.Context) (*gorm.DB, error) {

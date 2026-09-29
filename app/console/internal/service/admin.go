@@ -10,6 +10,7 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/pagination"
 	pkgpassword "github.com/zhimma/grove/pkg/password"
 	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/transaction"
@@ -18,7 +19,7 @@ import (
 type AdminService struct {
 	dbs          database.Connections
 	roleBindings adminRoleBindings
-	pagePolicy   PagePolicy
+	pages        pagination.Policy
 }
 
 type adminRoleBindings interface {
@@ -26,11 +27,7 @@ type adminRoleBindings interface {
 }
 
 type ListAdminsInput struct {
-	Page        int
-	PageSize    int
-	Offset      int
-	Limit       int
-	ListAll     bool
+	pagination.Request
 	Keyword     string
 	OrderBy     []string
 	RoleID      string
@@ -41,7 +38,7 @@ type ListAdminsInput struct {
 
 type ListAdminsResult struct {
 	List []model.ConsoleAdmin
-	Meta ListMeta
+	Meta pagination.Meta
 }
 
 type GetAdminInput struct {
@@ -92,8 +89,8 @@ type ResetAdminPasswordInput struct {
 	Password string
 }
 
-func NewAdminService(dbs database.Connections, enforcer *rbac.Enforcer, policies ...PagePolicy) *AdminService {
-	return &AdminService{dbs: dbs, roleBindings: enforcer, pagePolicy: pagePolicyFromArgs(policies)}
+func NewAdminService(dbs database.Connections, enforcer *rbac.Enforcer, pages pagination.Policy) *AdminService {
+	return &AdminService{dbs: dbs, roleBindings: enforcer, pages: pages}
 }
 
 func (s *AdminService) ListAdmins(ctx context.Context, in ListAdminsInput) (*ListAdminsResult, error) {
@@ -101,13 +98,7 @@ func (s *AdminService) ListAdmins(ctx context.Context, in ListAdminsInput) (*Lis
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
 
-	page, pageSize := resolvePageWithPolicy(ListRequest{
-		Page:     in.Page,
-		PageSize: in.PageSize,
-		Offset:   in.Offset,
-		Limit:    in.Limit,
-		ListAll:  in.ListAll,
-	}, s.pagePolicy)
+	page := s.pages.Resolve(in.Request)
 
 	query := s.dbs.Default().WithContext(ctx).Model(&model.ConsoleAdmin{}).Preload("Role")
 	if keyword := strings.TrimSpace(in.Keyword); keyword != "" {
@@ -147,13 +138,7 @@ func (s *AdminService) ListAdmins(ctx context.Context, in ListAdminsInput) (*Lis
 		}
 	}
 
-	if !in.ListAll {
-		offset := in.Offset
-		if offset <= 0 {
-			offset = (page - 1) * pageSize
-		}
-		query = query.Offset(offset).Limit(pageSize)
-	}
+	query = page.Apply(query)
 
 	var list []model.ConsoleAdmin
 	if err := query.Find(&list).Error; err != nil {
@@ -165,7 +150,7 @@ func (s *AdminService) ListAdmins(ctx context.Context, in ListAdminsInput) (*Lis
 
 	return &ListAdminsResult{
 		List: list,
-		Meta: NewListMeta(total, page, pageSize),
+		Meta: pagination.NewMeta(total, page),
 	}, nil
 }
 
@@ -417,7 +402,7 @@ func (s *AdminService) ResetPassword(ctx context.Context, in ResetAdminPasswordI
 			}).Error; err != nil {
 			return errx.Internal().WithCause(err)
 		}
-		return NewSessionService(s.dbs, nil).RevokeAdmin(transaction.WithDB(ctx, tx), in.AdminID, "password_reset")
+		return NewSessionService(s.dbs, nil, pagination.Policy{}).RevokeAdmin(transaction.WithDB(ctx, tx), in.AdminID, "password_reset")
 	})
 }
 

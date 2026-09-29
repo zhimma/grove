@@ -11,20 +11,17 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/ulid"
 )
 
 type ArticleService struct {
-	dbs        database.Connections
-	pagePolicy PagePolicy
+	dbs   database.Connections
+	pages pagination.Policy
 }
 
 type ListArticlesInput struct {
-	Page        int
-	PageSize    int
-	Offset      int
-	Limit       int
-	ListAll     bool
+	pagination.Request
 	Keyword     string
 	Category    string
 	Status      *int
@@ -35,7 +32,7 @@ type ListArticlesInput struct {
 
 type ListArticlesOutput struct {
 	List []model.Article
-	Meta ListMeta
+	Meta pagination.Meta
 }
 
 type GetArticleInput struct{ ArticleID string }
@@ -64,8 +61,8 @@ type UpdateArticleInput struct {
 
 type DeleteArticleInput struct{ ArticleID string }
 
-func NewArticleService(dbs database.Connections, policies ...PagePolicy) *ArticleService {
-	return &ArticleService{dbs: dbs, pagePolicy: pagePolicyFromArgs(policies)}
+func NewArticleService(dbs database.Connections, pages pagination.Policy) *ArticleService {
+	return &ArticleService{dbs: dbs, pages: pages}
 }
 
 func (s *ArticleService) ListArticles(ctx context.Context, in ListArticlesInput) (*ListArticlesOutput, error) {
@@ -73,9 +70,7 @@ func (s *ArticleService) ListArticles(ctx context.Context, in ListArticlesInput)
 	if err != nil {
 		return nil, err
 	}
-	page, pageSize := resolvePageWithPolicy(ListRequest{
-		Page: in.Page, PageSize: in.PageSize, Offset: in.Offset, Limit: in.Limit, ListAll: in.ListAll,
-	}, s.pagePolicy)
+	page := s.pages.Resolve(in.Request)
 
 	query := db.WithContext(ctx).Model(&model.Article{})
 	// 列表不读取 Markdown 正文，避免后台分页接口把大字段重复传输。
@@ -113,19 +108,13 @@ func (s *ArticleService) ListArticles(ctx context.Context, in ListArticlesInput)
 			}
 		}
 	}
-	if !in.ListAll {
-		offset := in.Offset
-		if offset <= 0 {
-			offset = (page - 1) * pageSize
-		}
-		query = query.Offset(offset).Limit(pageSize)
-	}
+	query = page.Apply(query)
 
 	list := make([]model.Article, 0)
 	if err := query.Find(&list).Error; err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}
-	return &ListArticlesOutput{List: list, Meta: NewListMeta(total, page, pageSize)}, nil
+	return &ListArticlesOutput{List: list, Meta: pagination.NewMeta(total, page)}, nil
 }
 
 func (s *ArticleService) GetArticle(ctx context.Context, in GetArticleInput) (*model.Article, error) {

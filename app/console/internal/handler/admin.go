@@ -5,6 +5,7 @@ import (
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
 	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"
@@ -28,7 +29,7 @@ type ListAdminsRequest struct {
 
 type ListAdminsResponse struct {
 	List []AdminResponse `json:"list"`
-	Meta ListMeta        `json:"meta"`
+	Meta pagination.Meta `json:"meta"`
 }
 
 type CreateAdminRequest struct {
@@ -71,9 +72,9 @@ type AdminPathRequest struct {
 	ID string `uri:"id" binding:"required" label:"管理员ID"`
 }
 
-func RegisterAdminRoutes(protected *gin.RouterGroup, dbs database.Connections, enforcer *rbac.Enforcer, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
+func RegisterAdminRoutes(protected *gin.RouterGroup, dbs database.Connections, enforcer *rbac.Enforcer, pages pagination.Policy, catalog *route.Catalog) {
 	h := &AdminHandler{
-		adminSvc: consoleservice.NewAdminService(dbs, enforcer, policies...),
+		adminSvc: consoleservice.NewAdminService(dbs, enforcer, pages),
 	}
 
 	admins := wrapRoute(protected.Group("/admins"), catalog)
@@ -94,11 +95,7 @@ func (h *AdminHandler) List(c *gin.Context) {
 	}
 
 	result, err := h.adminSvc.ListAdmins(c.Request.Context(), consoleservice.ListAdminsInput{
-		Page:        req.Page,
-		PageSize:    req.PageSize,
-		Offset:      req.Offset,
-		Limit:       req.Limit,
-		ListAll:     req.ListAll,
+		Request:     req.Request,
 		Keyword:     req.Keyword,
 		OrderBy:     req.OrderBy,
 		RoleID:      req.RoleID,
@@ -118,7 +115,7 @@ func (h *AdminHandler) List(c *gin.Context) {
 
 	response.Success(c, ListAdminsResponse{
 		List: items,
-		Meta: ListMeta(result.Meta),
+		Meta: result.Meta,
 	})
 }
 

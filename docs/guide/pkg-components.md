@@ -157,6 +157,31 @@ if errors.Is(err, gorm.ErrRecordNotFound) {
 - `Verify` 返回 `bool` 而非 error：调用方只关心凭据对不对，哈希本身损坏也属校验失败。
 - 测试可直接用 `bcrypt.MinCost` 生成 fixture 保持快速，`make quality` 只约束非测试代码。
 
+## Pagination
+
+列表分页只在 `pkg/pagination` 实现，api 与 console 共用，对应 Laravel 的 `paginate()`。
+
+推荐写法：
+
+```go
+type ListInvoicesInput struct {
+    pagination.Request            // page/page_size、offset/limit、list_all
+    Keyword string
+}
+
+page := s.pages.Resolve(in.Request)          // 按 Policy 截断，limit 优先于 page_size
+if err := query.Count(&total).Error; err != nil { ... }
+query = query.Order("created_at DESC")
+if err := page.Apply(query).Find(&list).Error; err != nil { ... }
+return ListInvoicesOutput{List: list, Meta: pagination.NewMeta(total, page)}
+```
+
+约定：
+
+- `pagination.Policy` 的零值即默认值（每页 20、上限 100）。service 构造函数显式接收 `pages pagination.Policy`；console 在 router 里用 `api.default_per_page` / `api.max_per_page` 建一份，所有列表共享。
+- `list_all=true` 时 `Page.Size` 为 0，`Apply` 不加 LIMIT；`Meta` 的 `page_size` 与 `total_pages` 也为 0。
+- handler 的列表查询嵌入 `pagination.Request`（`handler.ListQuery` 已嵌入），响应直接用 `pagination.Meta`，不要再定义第二份 meta 结构。
+
 ## 不照搬 Laravel 的边界
 
 - 不引入隐式容器解析。

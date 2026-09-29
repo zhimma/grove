@@ -10,6 +10,7 @@ import (
 
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/rbac"
 )
 
@@ -125,7 +126,7 @@ func TestUpdateAdminRoleSynchronizesDatabaseAndGrouping(t *testing.T) {
 	if err := enforcer.ReplaceConsoleRoleForUser(admin.ID, oldRoleID); err != nil {
 		t.Fatalf("seed old grouping: %v", err)
 	}
-	service := NewAdminService(dbs, enforcer)
+	service := NewAdminService(dbs, enforcer, pagination.Policy{})
 
 	if _, err := service.UpdateAdmin(context.Background(), UpdateAdminInput{AdminID: admin.ID, RoleID: &newRoleID}); err != nil {
 		t.Fatalf("update admin role: %v", err)

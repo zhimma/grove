@@ -16,6 +16,7 @@ import (
 	"github.com/zhimma/grove/pkg/auth"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/pagination"
 )
 
 func TestPostgresConcurrentRefreshOnlySucceedsOnce(t *testing.T) {
@@ -51,7 +52,7 @@ func TestPostgresConcurrentRefreshOnlySucceedsOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new token manager: %v", err)
 	}
-	sessions := NewSessionService(database.NewConnectionsFromDBs(db, nil), manager)
+	sessions := NewSessionService(database.NewConnectionsFromDBs(db, nil), manager, pagination.Policy{})
 	_, pair, err := sessions.Create(context.Background(), CreateSessionInput{AdminID: admin.ID})
 	if err != nil {
 		t.Fatalf("create session: %v", err)

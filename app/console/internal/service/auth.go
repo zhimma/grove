@@ -12,6 +12,7 @@ import (
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/logger"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/password"
 	"github.com/zhimma/grove/pkg/ratelimit"
 	"github.com/zhimma/grove/pkg/rbac"
@@ -83,7 +84,7 @@ func NewAuthService(dbs database.Connections, enforcer *rbac.Enforcer, tm *auth.
 		dbs:          dbs,
 		enforcer:     enforcer,
 		tokenManager: tm,
-		sessions:     NewSessionService(dbs, tm),
+		sessions:     NewSessionService(dbs, tm, pagination.Policy{}),
 	}
 	if len(guards) > 0 {
 		service.loginGuard = guards[0]

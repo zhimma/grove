@@ -10,23 +10,20 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/secretbox"
 )
 
 const SecretMask = "********"
 
 type SystemConfigService struct {
-	dbs        database.Connections
-	secretBox  *secretbox.Box
-	pagePolicy PagePolicy
+	dbs       database.Connections
+	secretBox *secretbox.Box
+	pages     pagination.Policy
 }
 
 type ListSystemConfigsInput struct {
-	Page        int
-	PageSize    int
-	Offset      int
-	Limit       int
-	ListAll     bool
+	pagination.Request
 	Keyword     string
 	OrderBy     []string
 	ConfigGroup string
@@ -37,7 +34,7 @@ type ListSystemConfigsInput struct {
 
 type ListSystemConfigsOutput struct {
 	List []model.SystemConfig
-	Meta ListMeta
+	Meta pagination.Meta
 }
 
 type CreateSystemConfigInput struct {
@@ -64,9 +61,9 @@ type GetGroupConfigsInput struct {
 	Group string
 }
 
-func NewSystemConfigService(dbs database.Connections, secretBox *secretbox.Box, policies ...PagePolicy) *SystemConfigService {
+func NewSystemConfigService(dbs database.Connections, secretBox *secretbox.Box, pages pagination.Policy) *SystemConfigService {
 	return &SystemConfigService{
-		dbs: dbs, secretBox: secretBox, pagePolicy: pagePolicyFromArgs(policies),
+		dbs: dbs, secretBox: secretBox, pages: pages,
 	}
 }
 
@@ -93,13 +90,7 @@ func (s *SystemConfigService) ListConfigs(ctx context.Context, in ListSystemConf
 		return nil, errx.InvalidParams().WithMessage("时间范围格式不正确")
 	}
 
-	page, pageSize := resolvePageWithPolicy(ListRequest{
-		Page:     in.Page,
-		PageSize: in.PageSize,
-		Offset:   in.Offset,
-		Limit:    in.Limit,
-		ListAll:  in.ListAll,
-	}, s.pagePolicy)
+	page := s.pages.Resolve(in.Request)
 
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
@@ -118,13 +109,7 @@ func (s *SystemConfigService) ListConfigs(ctx context.Context, in ListSystemConf
 		}
 	}
 
-	if !in.ListAll {
-		offset := in.Offset
-		if offset <= 0 {
-			offset = (page - 1) * pageSize
-		}
-		query = query.Offset(offset).Limit(pageSize)
-	}
+	query = page.Apply(query)
 
 	var list []model.SystemConfig
 	if err := query.Find(&list).Error; err != nil {
@@ -135,7 +120,7 @@ func (s *SystemConfigService) ListConfigs(ctx context.Context, in ListSystemConf
 	}
 	return &ListSystemConfigsOutput{
 		List: list,
-		Meta: NewListMeta(total, page, pageSize),
+		Meta: pagination.NewMeta(total, page),
 	}, nil
 }
 

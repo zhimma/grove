@@ -11,6 +11,7 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/pagination"
 )
 
 // Console and the worker's cron must agree on what a schedule is, or an edit
@@ -150,6 +151,21 @@ func TestScheduledTaskListFiltersByEnabledAndKeyword(t *testing.T) {
 	}
 }
 
+// list_all used to reach the query as LIMIT 0 and return no rows.
+func TestScheduledTaskListAllReturnsEveryTask(t *testing.T) {
+	service, _ := newScheduledTaskFixture(t)
+
+	result, err := service.List(context.Background(), ListScheduledTasksInput{
+		Request: pagination.Request{ListAll: true},
+	})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(result.List) != 1 || result.Meta.Total != 1 {
+		t.Fatalf("list_all returned %d of %d tasks, want 1 of 1", len(result.List), result.Meta.Total)
+	}
+}
+
 func newScheduledTaskFixture(t *testing.T) (*ScheduledTaskService, model.ConsoleScheduledTask) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/scheduled-tasks.db"), &gorm.Config{})
@@ -170,7 +186,7 @@ func newScheduledTaskFixture(t *testing.T) (*ScheduledTaskService, model.Console
 	if err := db.Create(&task).Error; err != nil {
 		t.Fatalf("seed task: %v", err)
 	}
-	return NewScheduledTaskService(database.NewConnectionsFromDBs(db, nil), NewPagePolicy(20, 100)), task
+	return NewScheduledTaskService(database.NewConnectionsFromDBs(db, nil), pagination.Policy{}), task
 }
 
 func reloadScheduledTask(t *testing.T, service *ScheduledTaskService, taskID string) model.ConsoleScheduledTask {

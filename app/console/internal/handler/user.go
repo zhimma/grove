@@ -5,6 +5,7 @@ import (
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
 	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
@@ -21,8 +22,8 @@ type ListUsersRequest struct {
 }
 
 type ListUsersResponse struct {
-	List []UserResponse `json:"list"`
-	Meta ListMeta       `json:"meta"`
+	List []UserResponse  `json:"list"`
+	Meta pagination.Meta `json:"meta"`
 }
 
 type CreateUserRequest struct {
@@ -51,9 +52,9 @@ type UserPathRequest struct {
 	ID string `uri:"id" binding:"required" label:"用户ID"`
 }
 
-func RegisterUserRoutes(protected *gin.RouterGroup, dbs database.Connections, catalog *route.Catalog) {
+func RegisterUserRoutes(protected *gin.RouterGroup, dbs database.Connections, pages pagination.Policy, catalog *route.Catalog) {
 	h := &UserHandler{
-		userSvc: consoleservice.NewUserService(dbs),
+		userSvc: consoleservice.NewUserService(dbs, pages),
 	}
 	users := wrapRoute(protected.Group("/users"), catalog)
 	users.GET("", h.List).Name("用户管理.用户列表")
@@ -71,11 +72,7 @@ func (h *UserHandler) List(c *gin.Context) {
 		return
 	}
 	result, err := h.userSvc.ListUsers(c.Request.Context(), consoleservice.ListUsersInput{
-		Page:        req.Page,
-		PageSize:    req.PageSize,
-		Offset:      req.Offset,
-		Limit:       req.Limit,
-		ListAll:     req.ListAll,
+		Request:     req.Request,
 		Keyword:     req.Keyword,
 		OrderBy:     req.OrderBy,
 		Status:      req.Status,
@@ -90,7 +87,7 @@ func (h *UserHandler) List(c *gin.Context) {
 	for i := range result.List {
 		items = append(items, newUserResponse(&result.List[i]))
 	}
-	response.Success(c, ListUsersResponse{List: items, Meta: ListMeta(result.Meta)})
+	response.Success(c, ListUsersResponse{List: items, Meta: result.Meta})
 }
 
 func (h *UserHandler) Detail(c *gin.Context) {

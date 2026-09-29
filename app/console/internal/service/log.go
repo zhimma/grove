@@ -10,19 +10,16 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/pagination"
 )
 
 type LogService struct {
-	dbs        database.Connections
-	pagePolicy PagePolicy
+	dbs   database.Connections
+	pages pagination.Policy
 }
 
 type ListOperationLogsInput struct {
-	Page        int
-	PageSize    int
-	Offset      int
-	Limit       int
-	ListAll     bool
+	pagination.Request
 	Keyword     string
 	OrderBy     []string
 	Method      string
@@ -35,7 +32,7 @@ type ListOperationLogsInput struct {
 
 type ListOperationLogsOutput struct {
 	List []model.ConsoleOperationLog
-	Meta ListMeta
+	Meta pagination.Meta
 }
 
 type GetOperationLogDetailInput struct {
@@ -43,11 +40,7 @@ type GetOperationLogDetailInput struct {
 }
 
 type ListLoginLogsInput struct {
-	Page        int
-	PageSize    int
-	Offset      int
-	Limit       int
-	ListAll     bool
+	pagination.Request
 	Keyword     string
 	OrderBy     []string
 	Success     *bool
@@ -58,7 +51,7 @@ type ListLoginLogsInput struct {
 
 type ListLoginLogsOutput struct {
 	List []model.ConsoleLoginLog
-	Meta ListMeta
+	Meta pagination.Meta
 }
 
 type OperationLogDetail struct {
@@ -66,8 +59,8 @@ type OperationLogDetail struct {
 	Detail map[string]any
 }
 
-func NewLogService(dbs database.Connections, policies ...PagePolicy) *LogService {
-	return &LogService{dbs: dbs, pagePolicy: pagePolicyFromArgs(policies)}
+func NewLogService(dbs database.Connections, pages pagination.Policy) *LogService {
+	return &LogService{dbs: dbs, pages: pages}
 }
 
 func (s *LogService) ListOperationLogs(ctx context.Context, in ListOperationLogsInput) (*ListOperationLogsOutput, error) {
@@ -99,9 +92,9 @@ func (s *LogService) ListOperationLogs(ctx context.Context, in ListOperationLogs
 		return nil, errx.InvalidParams().WithMessage("时间范围格式不正确")
 	}
 
-	return queryConsoleLogs(query, s.pagePolicy, in.Page, in.PageSize, in.Offset, in.Limit, in.ListAll, in.OrderBy, func(db *gorm.DB) *gorm.DB {
+	return queryConsoleLogs(query, s.pages.Resolve(in.Request), in.OrderBy, func(db *gorm.DB) *gorm.DB {
 		return db.Order("created_at DESC")
-	}, func(result []model.ConsoleOperationLog, meta ListMeta) *ListOperationLogsOutput {
+	}, func(result []model.ConsoleOperationLog, meta pagination.Meta) *ListOperationLogsOutput {
 		return &ListOperationLogsOutput{List: result, Meta: meta}
 	})
 }
@@ -129,9 +122,9 @@ func (s *LogService) ListLoginLogs(ctx context.Context, in ListLoginLogsInput) (
 		return nil, errx.InvalidParams().WithMessage("时间范围格式不正确")
 	}
 
-	return queryConsoleLogs(query, s.pagePolicy, in.Page, in.PageSize, in.Offset, in.Limit, in.ListAll, in.OrderBy, func(db *gorm.DB) *gorm.DB {
+	return queryConsoleLogs(query, s.pages.Resolve(in.Request), in.OrderBy, func(db *gorm.DB) *gorm.DB {
 		return db.Order("created_at DESC")
-	}, func(result []model.ConsoleLoginLog, meta ListMeta) *ListLoginLogsOutput {
+	}, func(result []model.ConsoleLoginLog, meta pagination.Meta) *ListLoginLogsOutput {
 		return &ListLoginLogsOutput{List: result, Meta: meta}
 	})
 }
@@ -166,25 +159,12 @@ func (s *LogService) GetOperationLogDetail(ctx context.Context, in GetOperationL
 
 func queryConsoleLogs[T any, R any](
 	query *gorm.DB,
-	policy PagePolicy,
-	page int,
-	pageSize int,
-	offset int,
-	limit int,
-	listAll bool,
+	page pagination.Page,
 	orderBy []string,
 	defaultOrder func(*gorm.DB) *gorm.DB,
-	assemble func([]T, ListMeta) R,
+	assemble func([]T, pagination.Meta) R,
 ) (R, error) {
 	var zero R
-
-	page, pageSize = resolvePageWithPolicy(ListRequest{
-		Page:     page,
-		PageSize: pageSize,
-		Offset:   offset,
-		Limit:    limit,
-		ListAll:  listAll,
-	}, policy)
 
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
@@ -203,13 +183,7 @@ func queryConsoleLogs[T any, R any](
 		}
 	}
 
-	if !listAll {
-		resolvedOffset := offset
-		if resolvedOffset <= 0 {
-			resolvedOffset = (page - 1) * pageSize
-		}
-		query = query.Offset(resolvedOffset).Limit(pageSize)
-	}
+	query = page.Apply(query)
 
 	// Return an empty JSON array rather than null when no records match. The
 	// console client treats list as a stable array in both list endpoints.
@@ -217,7 +191,7 @@ func queryConsoleLogs[T any, R any](
 	if err := query.Find(&list).Error; err != nil {
 		return zero, errx.Internal().WithCause(err)
 	}
-	return assemble(list, NewListMeta(total, page, pageSize)), nil
+	return assemble(list, pagination.NewMeta(total, page)), nil
 }
 
 func (s *LogService) defaultDB(ctx context.Context) (*gorm.DB, error) {

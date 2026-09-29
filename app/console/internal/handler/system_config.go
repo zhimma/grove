@@ -5,6 +5,7 @@ import (
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
 	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
 	"github.com/zhimma/grove/pkg/secretbox"
@@ -23,7 +24,7 @@ type ListSystemConfigsRequest struct {
 
 type ListSystemConfigsResponse struct {
 	List []SystemConfigItem `json:"list"`
-	Meta ListMeta           `json:"meta"`
+	Meta pagination.Meta    `json:"meta"`
 }
 
 type CreateSystemConfigRequest struct {
@@ -53,9 +54,9 @@ type SystemConfigGroupPathRequest struct {
 	Group string `uri:"group" binding:"required" label:"配置分组"`
 }
 
-func RegisterSystemConfigRoutes(protected *gin.RouterGroup, dbs database.Connections, secrets *secretbox.Box, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
+func RegisterSystemConfigRoutes(protected *gin.RouterGroup, dbs database.Connections, secrets *secretbox.Box, pages pagination.Policy, catalog *route.Catalog) {
 	h := &SystemConfigHandler{
-		service: consoleservice.NewSystemConfigService(dbs, secrets, policies...),
+		service: consoleservice.NewSystemConfigService(dbs, secrets, pages),
 	}
 
 	group := wrapRoute(protected.Group("/system-configs"), catalog)
@@ -73,11 +74,7 @@ func (h *SystemConfigHandler) List(c *gin.Context) {
 		return
 	}
 	result, err := h.service.ListConfigs(c.Request.Context(), consoleservice.ListSystemConfigsInput{
-		Page:        req.Page,
-		PageSize:    req.PageSize,
-		Offset:      req.Offset,
-		Limit:       req.Limit,
-		ListAll:     req.ListAll,
+		Request:     req.Request,
 		Keyword:     req.Keyword,
 		OrderBy:     req.OrderBy,
 		ConfigGroup: req.ConfigGroup,
@@ -96,7 +93,7 @@ func (h *SystemConfigHandler) List(c *gin.Context) {
 	}
 	response.Success(c, ListSystemConfigsResponse{
 		List: items,
-		Meta: ListMeta(result.Meta),
+		Meta: result.Meta,
 	})
 }
 

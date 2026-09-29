@@ -11,6 +11,7 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/scheduler"
 )
 
@@ -18,32 +19,28 @@ import (
 // It deliberately has no create or delete: rows mirror the Worker's code
 // registry, so a row Console invented would name a task with no handler.
 type ScheduledTaskService struct {
-	dbs        database.Connections
-	pagePolicy PagePolicy
-	now        func() time.Time
+	dbs   database.Connections
+	pages pagination.Policy
+	now   func() time.Time
 }
 
-func NewScheduledTaskService(dbs database.Connections, policies ...PagePolicy) *ScheduledTaskService {
+func NewScheduledTaskService(dbs database.Connections, pages pagination.Policy) *ScheduledTaskService {
 	return &ScheduledTaskService{
-		dbs:        dbs,
-		pagePolicy: pagePolicyFromArgs(policies),
-		now:        time.Now,
+		dbs:   dbs,
+		pages: pages,
+		now:   time.Now,
 	}
 }
 
 type ListScheduledTasksInput struct {
-	Page     int
-	PageSize int
-	Offset   int
-	Limit    int
-	ListAll  bool
-	Keyword  string
-	Enabled  *bool
+	pagination.Request
+	Keyword string
+	Enabled *bool
 }
 
 type ListScheduledTasksOutput struct {
 	List []model.ConsoleScheduledTask
-	Meta ListMeta
+	Meta pagination.Meta
 }
 
 type UpdateScheduledTaskInput struct {
@@ -82,26 +79,15 @@ func (s *ScheduledTaskService) List(ctx context.Context, in ListScheduledTasksIn
 		return nil, errx.Internal().WithCause(err)
 	}
 
-	page, pageSize := resolvePageWithPolicy(ListRequest{
-		Page:     in.Page,
-		PageSize: in.PageSize,
-		Offset:   in.Offset,
-		Limit:    in.Limit,
-		ListAll:  in.ListAll,
-	}, s.pagePolicy)
-
+	page := s.pages.Resolve(in.Request)
 	var tasks []model.ConsoleScheduledTask
-	if err := query.
-		Order("name ASC").
-		Offset((page - 1) * pageSize).
-		Limit(pageSize).
-		Find(&tasks).Error; err != nil {
+	if err := page.Apply(query.Order("name ASC")).Find(&tasks).Error; err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}
 
 	return &ListScheduledTasksOutput{
 		List: tasks,
-		Meta: NewListMeta(total, page, pageSize),
+		Meta: pagination.NewMeta(total, page),
 	}, nil
 }
 

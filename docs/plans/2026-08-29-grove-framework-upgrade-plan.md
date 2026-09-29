@@ -229,7 +229,7 @@ Grove 的切法：
 | ~~P0~~ | ~~G1~~ | ~~`make:module --fields` 生成可用纵向切片（后端）~~ | ✅ 双方言迁移 + 模型 + 分页 CRUD + 自带测试 + handler + OpenAPI；回归测试在仓库副本里生成后跑 `go vet`、契约、生成的 CRUD 测试、方言规则，三处变异均被抓到。顺带修复 `grove migrate create` 只建单方言的问题 | — |
 | ~~P0~~ | ~~G1b~~ | ~~生成前端：`console-contract.json` 条目 + `api/*.ts` + 基于 `resource-page` 的页面 + 路由~~ | ✅ 在真实仓库生成 Invoice 后 `admin.typecheck` / `quality`（含 `admin.lint`）/ `admin.test` / `admin.build` / `contracts` / 全量 `go test` 通过；回归测试校验前端只调用已登记的 operation，契约 JSON 往返逐字节不变，两处变异均被抓到。time 字段改为与响应同格式的字符串入参，`""` 清空。顺带修 `resource-page` 编辑时沿用上一条记录 `omitempty` 字段的旧值、清空日期提交 `null` 被后端忽略两个问题 | — |
 | ~~P1~~ | ~~G2~~ | ~~日志轮转：按大小切割 + 保留期，对应 Laravel daily channel，做法同 nunu~~ | ✅ lumberjack v2.2.1；`log.max_size_mb`（默认 100）/ `max_age_days`（默认 14，`0` 不清理），显式非法值启动即拒绝；启动时即打开文件，坏目录不会拖到第一条日志才暴露。轮转与急切打开各做一次变异验证。未被读取的 `log.service` 保留为兼容字段（严格解码下删掉会让旧配置启动失败） | — |
-| P1 | G3 | 分页下沉到 `pkg/`，api 与 console 共用；去掉 `[]PagePolicy` 可变参数 | api 服务可直接用；`ListMeta` 只剩一份 | 无 |
+| ~~P1~~ | ~~G3~~ | ~~分页下沉到 `pkg/`，api 与 console 共用；去掉 `[]PagePolicy` 可变参数~~ | ✅ `pkg/pagination`：`Policy`（零值可用）/ `Request` / `Page.Apply` / `Meta`，三份分页结构与两份 `ListMeta` 合一；8 个列表 service 的构造函数改为显式 `pages pagination.Policy`，`NewRoleServiceWithPolicy` 删除；router 只建一份 policy 与一份 `SessionService`。重构前后 OpenAPI 逐字节一致。顺带修复：计划任务 `list_all` 生成 `LIMIT 0` 返回空列表（加回归测试并变异验证）、用户列表从未接收配置的分页上限 | — |
 | P1 | G4 | `internal/testkit`：`OpenDB(t, models...)` 等，替换重复夹具 | 至少收敛 6 个建库函数 | 无 |
 | P2 | G5 | `app/api` 结构与 console/worker 对齐 | handler/service/middleware 移入 `internal/` | 无 |
 | P2 | G6 | 去 Java 味：`request.GetAdminID` → `request.AdminID` 等；`database.Connections` 返回具体类型；`Manager` 改为表意名 | 行为不变，调用点机械替换 | 改名面较大，可分批 |

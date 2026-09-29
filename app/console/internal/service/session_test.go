@@ -13,6 +13,7 @@ import (
 	"github.com/zhimma/grove/pkg/auth"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/pagination"
 )
 
 func TestSessionCreateStoresOnlyRefreshTokenHash(t *testing.T) {
@@ -142,5 +143,5 @@ func newSessionTestService(t *testing.T) (*SessionService, *gorm.DB, *auth.Manag
 	if err != nil {
 		t.Fatalf("new token manager: %v", err)
 	}
-	return NewSessionService(database.NewConnectionsFromDBs(db, nil), manager), db, manager
+	return NewSessionService(database.NewConnectionsFromDBs(db, nil), manager, pagination.Policy{}), db, manager
 }

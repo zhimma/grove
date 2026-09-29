@@ -11,6 +11,7 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/secretbox"
 )
 
@@ -47,7 +48,7 @@ func TestSystemConfigSecretLifecycleEncryptsMasksAndResolves(t *testing.T) {
 		t.Fatalf("resolve current secret: value=%q err=%v", resolved, err)
 	}
 
-	listed, err := service.ListConfigs(context.Background(), ListSystemConfigsInput{ListAll: true})
+	listed, err := service.ListConfigs(context.Background(), ListSystemConfigsInput{Request: pagination.Request{ListAll: true}})
 	if err != nil {
 		t.Fatalf("list configs: %v", err)
 	}
@@ -157,13 +158,13 @@ func newSystemConfigSecretService(t *testing.T, withBox bool) (*SystemConfigServ
 	}
 	dbs := database.NewConnectionsFromDBs(db, nil)
 	if !withBox {
-		return NewSystemConfigService(dbs, nil), db
+		return NewSystemConfigService(dbs, nil, pagination.Policy{}), db
 	}
 	box, err := secretbox.New("0123456789abcdef0123456789abcdef")
 	if err != nil {
 		t.Fatalf("new secret box: %v", err)
 	}
-	return NewSystemConfigService(dbs, box), db
+	return NewSystemConfigService(dbs, box, pagination.Policy{}), db
 }
 
 func assertMaskedSystemConfig(t *testing.T, config *model.SystemConfig) {

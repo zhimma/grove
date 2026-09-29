@@ -11,6 +11,7 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/rbac"
 )
 
@@ -18,7 +19,7 @@ type RoleService struct {
 	dbs               database.Connections
 	rolePolicies      rolePolicyStore
 	runtimePermission *RuntimePermissionCatalog
-	pagePolicy        PagePolicy
+	pages             pagination.Policy
 }
 
 type rolePolicyStore interface {
@@ -27,11 +28,7 @@ type rolePolicyStore interface {
 }
 
 type ListRolesInput struct {
-	Page        int
-	PageSize    int
-	Offset      int
-	Limit       int
-	ListAll     bool
+	pagination.Request
 	Keyword     string
 	OrderBy     []string
 	Status      *int
@@ -41,7 +38,7 @@ type ListRolesInput struct {
 
 type ListRolesOutput struct {
 	List []Role
-	Meta ListMeta
+	Meta pagination.Meta
 }
 
 type Role struct {
@@ -102,23 +99,13 @@ type SetRoleMenusInput struct {
 	MenuKeys []string
 }
 
-func NewRoleService(dbs database.Connections, enforcer *rbac.Enforcer, runtimePermission ...*RuntimePermissionCatalog) *RoleService {
-	var catalog *RuntimePermissionCatalog
-	if len(runtimePermission) > 0 {
-		catalog = runtimePermission[0]
-	}
+func NewRoleService(dbs database.Connections, enforcer *rbac.Enforcer, catalog *RuntimePermissionCatalog, pages pagination.Policy) *RoleService {
 	return &RoleService{
 		dbs:               dbs,
 		rolePolicies:      enforcer,
 		runtimePermission: catalog,
-		pagePolicy:        NewPagePolicy(20, 100),
+		pages:             pages,
 	}
-}
-
-func NewRoleServiceWithPolicy(dbs database.Connections, enforcer *rbac.Enforcer, catalog *RuntimePermissionCatalog, policy PagePolicy) *RoleService {
-	service := NewRoleService(dbs, enforcer, catalog)
-	service.pagePolicy = pagePolicyFromArgs([]PagePolicy{policy})
-	return service
 }
 
 func (s *RoleService) ListRoles(ctx context.Context, in ListRolesInput) (*ListRolesOutput, error) {
@@ -144,13 +131,7 @@ func (s *RoleService) ListRoles(ctx context.Context, in ListRolesInput) (*ListRo
 		return nil, errx.InvalidParams().WithMessage("时间范围格式不正确")
 	}
 
-	page, pageSize := resolvePageWithPolicy(ListRequest{
-		Page:     in.Page,
-		PageSize: in.PageSize,
-		Offset:   in.Offset,
-		Limit:    in.Limit,
-		ListAll:  in.ListAll,
-	}, s.pagePolicy)
+	page := s.pages.Resolve(in.Request)
 
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
@@ -174,13 +155,7 @@ func (s *RoleService) ListRoles(ctx context.Context, in ListRolesInput) (*ListRo
 		}
 	}
 
-	if !in.ListAll {
-		offset := in.Offset
-		if offset <= 0 {
-			offset = (page - 1) * pageSize
-		}
-		query = query.Offset(offset).Limit(pageSize)
-	}
+	query = page.Apply(query)
 
 	var roles []model.ConsoleRole
 	if err := query.Find(&roles).Error; err != nil {
@@ -194,7 +169,7 @@ func (s *RoleService) ListRoles(ctx context.Context, in ListRolesInput) (*ListRo
 
 	return &ListRolesOutput{
 		List: list,
-		Meta: NewListMeta(total, page, pageSize),
+		Meta: pagination.NewMeta(total, page),
 	}, nil
 }
 

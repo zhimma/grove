@@ -399,7 +399,7 @@ func TestMakeModuleWiresRoutesOperationsAndMigrations(t *testing.T) {
 	}
 
 	router := mustRead(t, filepath.Join(root, routerFile))
-	assertContains(t, router, "\thandler.RegisterProductCategoryRoutes(protected, r.p.DB, pagePolicies, catalog)\n")
+	assertContains(t, router, "\thandler.RegisterProductCategoryRoutes(protected, r.p.DB, pages, catalog)\n")
 	contract := mustRead(t, filepath.Join(root, contractFile))
 	assertContains(t, contract, "\taddProductCategoryOperations(&doc)\n")
 
@@ -534,7 +534,7 @@ func TestMakeModuleConcurrentGenerationsPreserveBothRegistrations(t *testing.T) 
 	router := mustRead(t, filepath.Join(root, routerFile))
 	contract := mustRead(t, filepath.Join(root, contractFile))
 	for _, name := range []string{"ProductCategory", "OrderItem"} {
-		assertContains(t, router, "handler.Register"+name+"Routes(protected, r.p.DB, pagePolicies, catalog)")
+		assertContains(t, router, "handler.Register"+name+"Routes(protected, r.p.DB, pages, catalog)")
 		assertContains(t, contract, "add"+name+"Operations(&doc)")
 	}
 }

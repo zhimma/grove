@@ -5,6 +5,7 @@ import (
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
 	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
 	"github.com/zhimma/grove/pkg/validation"
@@ -25,7 +26,7 @@ type ListScheduledTasksRequest struct {
 
 type ListScheduledTasksResponse struct {
 	List []ScheduledTaskItem `json:"list"`
-	Meta ListMeta            `json:"meta"`
+	Meta pagination.Meta     `json:"meta"`
 }
 
 type UpdateScheduledTaskRequest struct {
@@ -41,9 +42,9 @@ type SetScheduledTaskStatusRequest struct {
 // RegisterScheduledTaskRoutes exposes editing only. Rows mirror the Worker's
 // code registry, so there is deliberately no create or delete: a task Console
 // invented would have no handler to run.
-func RegisterScheduledTaskRoutes(protected *gin.RouterGroup, dbs database.Connections, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
+func RegisterScheduledTaskRoutes(protected *gin.RouterGroup, dbs database.Connections, pages pagination.Policy, catalog *route.Catalog) {
 	h := &ScheduledTaskHandler{
-		scheduledTaskSvc: consoleservice.NewScheduledTaskService(dbs, policies...),
+		scheduledTaskSvc: consoleservice.NewScheduledTaskService(dbs, pages),
 	}
 	group := wrapRoute(protected.Group("/scheduled-tasks"), catalog)
 	group.GET("", h.List).Name("计划任务.任务列表")
@@ -59,13 +60,9 @@ func (h *ScheduledTaskHandler) List(c *gin.Context) {
 		return
 	}
 	result, err := h.scheduledTaskSvc.List(c.Request.Context(), consoleservice.ListScheduledTasksInput{
-		Page:     req.Page,
-		PageSize: req.PageSize,
-		Offset:   req.Offset,
-		Limit:    req.Limit,
-		ListAll:  req.ListAll,
-		Keyword:  req.Keyword,
-		Enabled:  req.Enabled,
+		Request: req.Request,
+		Keyword: req.Keyword,
+		Enabled: req.Enabled,
 	})
 	if err != nil {
 		response.Fail(c, err)
@@ -77,7 +74,7 @@ func (h *ScheduledTaskHandler) List(c *gin.Context) {
 	}
 	response.Success(c, ListScheduledTasksResponse{
 		List: items,
-		Meta: ListMeta(result.Meta),
+		Meta: result.Meta,
 	})
 }
 

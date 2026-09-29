@@ -5,6 +5,7 @@ import (
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
 	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
@@ -21,8 +22,8 @@ type ListRolesRequest struct {
 }
 
 type ListRolesResponse struct {
-	List []RoleResponse `json:"list"`
-	Meta ListMeta       `json:"meta"`
+	List []RoleResponse  `json:"list"`
+	Meta pagination.Meta `json:"meta"`
 }
 
 type CreateRoleRequest struct {
@@ -55,12 +56,9 @@ type RolePathRequest struct {
 	ID string `uri:"id" binding:"required" label:"角色ID"`
 }
 
-func RegisterRoleRoutes(protected *gin.RouterGroup, dbs database.Connections, enforcer *rbac.Enforcer, runtimeCatalog *consoleservice.RuntimePermissionCatalog, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
+func RegisterRoleRoutes(protected *gin.RouterGroup, dbs database.Connections, enforcer *rbac.Enforcer, runtimeCatalog *consoleservice.RuntimePermissionCatalog, pages pagination.Policy, catalog *route.Catalog) {
 	h := &RoleHandler{
-		roleSvc: consoleservice.NewRoleService(dbs, enforcer, runtimeCatalog),
-	}
-	if len(policies) > 0 {
-		h.roleSvc = consoleservice.NewRoleServiceWithPolicy(dbs, enforcer, runtimeCatalog, policies[0])
+		roleSvc: consoleservice.NewRoleService(dbs, enforcer, runtimeCatalog, pages),
 	}
 
 	roles := wrapRoute(protected.Group("/roles"), catalog)
@@ -83,11 +81,7 @@ func (h *RoleHandler) List(c *gin.Context) {
 	}
 
 	result, err := h.roleSvc.ListRoles(c.Request.Context(), consoleservice.ListRolesInput{
-		Page:        req.Page,
-		PageSize:    req.PageSize,
-		Offset:      req.Offset,
-		Limit:       req.Limit,
-		ListAll:     req.ListAll,
+		Request:     req.Request,
 		Keyword:     req.Keyword,
 		OrderBy:     req.OrderBy,
 		Status:      req.Status,
@@ -106,7 +100,7 @@ func (h *RoleHandler) List(c *gin.Context) {
 
 	response.Success(c, ListRolesResponse{
 		List: items,
-		Meta: ListMeta(result.Meta),
+		Meta: result.Meta,
 	})
 }
 

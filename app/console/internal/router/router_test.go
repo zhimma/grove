@@ -22,6 +22,7 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/internal/provider"
 	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/rbac"
 )
 
@@ -205,7 +206,7 @@ func TestConsoleRouterManagementFlow(t *testing.T) {
 		t.Fatalf("missing admin id: %#v", createAdminResp)
 	}
 
-	operatorSession, operatorTokenPair, err := consoleservice.NewSessionService(p.DB, p.TokenManager).Create(context.Background(), consoleservice.CreateSessionInput{
+	operatorSession, operatorTokenPair, err := consoleservice.NewSessionService(p.DB, p.TokenManager, pagination.Policy{}).Create(context.Background(), consoleservice.CreateSessionInput{
 		AdminID:    adminID,
 		DeviceName: "router-test",
 	})
@@ -677,8 +678,8 @@ func TestConsoleRouterCreatedAdminCanReadPermissionsAndMenus(t *testing.T) {
 	enforcer := openConsoleTestEnforcer(t, db)
 	seedConsoleTestData(t, db, enforcer)
 
-	adminSvc := consoleservice.NewAdminService(database.NewConnectionsFromDBs(db, nil), enforcer)
-	roleSvc := consoleservice.NewRoleService(database.NewConnectionsFromDBs(db, nil), enforcer)
+	adminSvc := consoleservice.NewAdminService(database.NewConnectionsFromDBs(db, nil), enforcer, pagination.Policy{})
+	roleSvc := consoleservice.NewRoleService(database.NewConnectionsFromDBs(db, nil), enforcer, nil, pagination.Policy{})
 
 	role, err := roleSvc.CreateRole(context.Background(), consoleservice.CreateRoleInput{
 		Name:        "Support",

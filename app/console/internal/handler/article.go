@@ -5,6 +5,7 @@ import (
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
 	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
@@ -23,7 +24,7 @@ type ListArticlesRequest struct {
 
 type ListArticlesResponse struct {
 	List []ArticleListItemResponse `json:"list"`
-	Meta ListMeta                  `json:"meta"`
+	Meta pagination.Meta           `json:"meta"`
 }
 
 type CreateArticleRequest struct {
@@ -54,8 +55,8 @@ type ArticlePathRequest struct {
 	ID string `uri:"id" binding:"required" label:"文章ID"`
 }
 
-func RegisterArticleRoutes(protected *gin.RouterGroup, dbs database.Connections, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
-	h := &ArticleHandler{articleSvc: consoleservice.NewArticleService(dbs, policies...)}
+func RegisterArticleRoutes(protected *gin.RouterGroup, dbs database.Connections, pages pagination.Policy, catalog *route.Catalog) {
+	h := &ArticleHandler{articleSvc: consoleservice.NewArticleService(dbs, pages)}
 	articles := wrapRoute(protected.Group("/articles"), catalog)
 	articles.GET("", h.List).Name("内容管理.文章列表")
 	articles.GET("/:id", h.Detail).Name("内容管理.文章详情")
@@ -72,7 +73,7 @@ func (h *ArticleHandler) List(c *gin.Context) {
 		return
 	}
 	result, err := h.articleSvc.ListArticles(c.Request.Context(), consoleservice.ListArticlesInput{
-		Page: req.Page, PageSize: req.PageSize, Offset: req.Offset, Limit: req.Limit, ListAll: req.ListAll,
+		Request: req.Request,
 		Keyword: req.Keyword, Category: req.Category, Status: req.Status, OrderBy: req.OrderBy,
 		CreatedFrom: req.CreatedFrom, CreatedTo: req.CreatedTo,
 	})
@@ -84,7 +85,7 @@ func (h *ArticleHandler) List(c *gin.Context) {
 	for i := range result.List {
 		items = append(items, newArticleListItemResponse(&result.List[i]))
 	}
-	response.Success(c, ListArticlesResponse{List: items, Meta: ListMeta(result.Meta)})
+	response.Success(c, ListArticlesResponse{List: items, Meta: result.Meta})
 }
 
 func (h *ArticleHandler) Detail(c *gin.Context) {

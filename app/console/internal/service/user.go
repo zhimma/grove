@@ -10,19 +10,16 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/pagination"
 )
 
 type UserService struct {
-	dbs        database.Connections
-	pagePolicy PagePolicy
+	dbs   database.Connections
+	pages pagination.Policy
 }
 
 type ListUsersInput struct {
-	Page        int
-	PageSize    int
-	Offset      int
-	Limit       int
-	ListAll     bool
+	pagination.Request
 	Keyword     string
 	OrderBy     []string
 	Status      *int
@@ -32,7 +29,7 @@ type ListUsersInput struct {
 
 type ListUsersOutput struct {
 	List []model.User
-	Meta ListMeta
+	Meta pagination.Meta
 }
 
 type GetUserInput struct {
@@ -67,8 +64,8 @@ type DeleteUserInput struct {
 	UserID string
 }
 
-func NewUserService(dbs database.Connections, policies ...PagePolicy) *UserService {
-	return &UserService{dbs: dbs, pagePolicy: pagePolicyFromArgs(policies)}
+func NewUserService(dbs database.Connections, pages pagination.Policy) *UserService {
+	return &UserService{dbs: dbs, pages: pages}
 }
 
 func (s *UserService) ListUsers(ctx context.Context, in ListUsersInput) (*ListUsersOutput, error) {
@@ -77,13 +74,7 @@ func (s *UserService) ListUsers(ctx context.Context, in ListUsersInput) (*ListUs
 		return nil, err
 	}
 
-	page, pageSize := resolvePageWithPolicy(ListRequest{
-		Page:     in.Page,
-		PageSize: in.PageSize,
-		Offset:   in.Offset,
-		Limit:    in.Limit,
-		ListAll:  in.ListAll,
-	}, s.pagePolicy)
+	page := s.pages.Resolve(in.Request)
 
 	query := db.WithContext(ctx).Model(&model.User{})
 	if keyword := strings.TrimSpace(in.Keyword); keyword != "" {
@@ -119,19 +110,13 @@ func (s *UserService) ListUsers(ctx context.Context, in ListUsersInput) (*ListUs
 		}
 	}
 
-	if !in.ListAll {
-		offset := in.Offset
-		if offset <= 0 {
-			offset = (page - 1) * pageSize
-		}
-		query = query.Offset(offset).Limit(pageSize)
-	}
+	query = page.Apply(query)
 
 	list := make([]model.User, 0)
 	if err := query.Find(&list).Error; err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}
-	return &ListUsersOutput{List: list, Meta: NewListMeta(total, page, pageSize)}, nil
+	return &ListUsersOutput{List: list, Meta: pagination.NewMeta(total, page)}, nil
 }
 
 func (s *UserService) GetUser(ctx context.Context, in GetUserInput) (*model.User, error) {

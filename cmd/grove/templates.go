@@ -181,19 +181,16 @@ import (
 	"{{.Module}}/internal/model"
 	"{{.Module}}/pkg/database"
 	"{{.Module}}/pkg/errx"
+	"{{.Module}}/pkg/pagination"
 )
 
 type {{.Name}}Service struct {
-	dbs        database.Connections
-	pagePolicy PagePolicy
+	dbs   database.Connections
+	pages pagination.Policy
 }
 
 type List{{.Plural}}Input struct {
-	Page        int
-	PageSize    int
-	Offset      int
-	Limit       int
-	ListAll     bool
+	pagination.Request
 	Keyword     string
 	OrderBy     []string
 	CreatedFrom string
@@ -202,7 +199,7 @@ type List{{.Plural}}Input struct {
 
 type List{{.Plural}}Output struct {
 	List []model.{{.Name}}
-	Meta ListMeta
+	Meta pagination.Meta
 }
 
 type Create{{.Name}}Input struct {
@@ -219,8 +216,8 @@ type Update{{.Name}}Input struct {
 {{- end}}
 }
 
-func New{{.Name}}Service(dbs database.Connections, policies ...PagePolicy) *{{.Name}}Service {
-	return &{{.Name}}Service{dbs: dbs, pagePolicy: pagePolicyFromArgs(policies)}
+func New{{.Name}}Service(dbs database.Connections, pages pagination.Policy) *{{.Name}}Service {
+	return &{{.Name}}Service{dbs: dbs, pages: pages}
 }
 
 func (s *{{.Name}}Service) List{{.Plural}}(ctx context.Context, in List{{.Plural}}Input) (*List{{.Plural}}Output, error) {
@@ -228,9 +225,7 @@ func (s *{{.Name}}Service) List{{.Plural}}(ctx context.Context, in List{{.Plural
 	if err != nil {
 		return nil, err
 	}
-	page, pageSize := resolvePageWithPolicy(ListRequest{
-		Page: in.Page, PageSize: in.PageSize, Offset: in.Offset, Limit: in.Limit, ListAll: in.ListAll,
-	}, s.pagePolicy)
+	page := s.pages.Resolve(in.Request)
 
 	query := db.WithContext(ctx).Model(&model.{{.Name}}{})
 {{- if .SearchFields}}
@@ -258,19 +253,12 @@ func (s *{{.Name}}Service) List{{.Plural}}(ctx context.Context, in List{{.Plural
 			query = query.Order(column + " " + direction)
 		}
 	}
-	if !in.ListAll {
-		offset := in.Offset
-		if offset <= 0 {
-			offset = (page - 1) * pageSize
-		}
-		query = query.Offset(offset).Limit(pageSize)
-	}
 
 	list := make([]model.{{.Name}}, 0)
-	if err := query.Find(&list).Error; err != nil {
+	if err := page.Apply(query).Find(&list).Error; err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}
-	return &List{{.Plural}}Output{List: list, Meta: NewListMeta(total, page, pageSize)}, nil
+	return &List{{.Plural}}Output{List: list, Meta: pagination.NewMeta(total, page)}, nil
 }
 
 func (s *{{.Name}}Service) Get{{.Name}}(ctx context.Context, id string) (*model.{{.Name}}, error) {
@@ -418,6 +406,7 @@ import (
 
 	"{{.Module}}/internal/model"
 	"{{.Module}}/pkg/database"
+	"{{.Module}}/pkg/pagination"
 )
 
 func Test{{.Name}}ServiceCRUD(t *testing.T) {
@@ -428,7 +417,7 @@ func Test{{.Name}}ServiceCRUD(t *testing.T) {
 	if err := db.AutoMigrate(&model.{{.Name}}{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	svc := New{{.Name}}Service(database.NewConnectionsFromDBs(db, nil))
+	svc := New{{.Name}}Service(database.NewConnectionsFromDBs(db, nil), pagination.Policy{})
 	ctx := context.Background()
 {{- with .FirstRequiredString}}
 
@@ -495,6 +484,7 @@ import (
 
 	consoleservice "{{.Module}}/app/console/internal/service"
 	"{{.Module}}/pkg/database"
+	"{{.Module}}/pkg/pagination"
 	"{{.Module}}/pkg/response"
 	"{{.Module}}/pkg/route"
 	"{{.Module}}/pkg/validation"
@@ -510,7 +500,7 @@ type List{{.Plural}}Request struct {
 
 type List{{.Plural}}Response struct {
 	List []{{.Name}}Response {{tag "json:\"list\""}}
-	Meta ListMeta {{tag "json:\"meta\""}}
+	Meta pagination.Meta {{tag "json:\"meta\""}}
 }
 
 type Create{{.Name}}Request struct {
@@ -529,8 +519,8 @@ type {{.Name}}PathRequest struct {
 	ID string {{tag "uri:\"id\" binding:\"required\" label:\"ID\""}}
 }
 
-func Register{{.Name}}Routes(protected *gin.RouterGroup, dbs database.Connections, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
-	h := &{{.Name}}Handler{ {{- .Var}}Svc: consoleservice.New{{.Name}}Service(dbs, policies...)}
+func Register{{.Name}}Routes(protected *gin.RouterGroup, dbs database.Connections, pages pagination.Policy, catalog *route.Catalog) {
+	h := &{{.Name}}Handler{ {{- .Var}}Svc: consoleservice.New{{.Name}}Service(dbs, pages)}
 	group := wrapRoute(protected.Group("{{.RoutePath}}"), catalog)
 	group.GET("", h.List).Name("{{.Label}}.列表")
 	group.GET("/:id", h.Detail).Name("{{.Label}}.详情")
@@ -546,8 +536,8 @@ func (h *{{.Name}}Handler) List(c *gin.Context) {
 		return
 	}
 	result, err := h.{{.Var}}Svc.List{{.Plural}}(c.Request.Context(), consoleservice.List{{.Plural}}Input{
-		Page: req.Page, PageSize: req.PageSize, Offset: req.Offset, Limit: req.Limit, ListAll: req.ListAll,
-		Keyword: req.Keyword, OrderBy: req.OrderBy, CreatedFrom: req.CreatedFrom, CreatedTo: req.CreatedTo,
+		Request: req.Request, Keyword: req.Keyword, OrderBy: req.OrderBy,
+		CreatedFrom: req.CreatedFrom, CreatedTo: req.CreatedTo,
 	})
 	if err != nil {
 		response.Fail(c, err)
@@ -557,7 +547,7 @@ func (h *{{.Name}}Handler) List(c *gin.Context) {
 	for i := range result.List {
 		items = append(items, new{{.Name}}Response(&result.List[i]))
 	}
-	response.Success(c, List{{.Plural}}Response{List: items, Meta: ListMeta(result.Meta)})
+	response.Success(c, List{{.Plural}}Response{List: items, Meta: result.Meta})
 }
 
 func (h *{{.Name}}Handler) Detail(c *gin.Context) {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/pagination"
 )
 
 func TestChangePasswordClearsMustChangePassword(t *testing.T) {
@@ -100,7 +101,7 @@ func TestResetPasswordRevokesSessions(t *testing.T) {
 		t.Fatalf("create session: %v", err)
 	}
 
-	service := NewAdminService(database.NewConnectionsFromDBs(db, nil), nil)
+	service := NewAdminService(database.NewConnectionsFromDBs(db, nil), nil, pagination.Policy{})
 	if err := service.ResetPassword(context.Background(), ResetAdminPasswordInput{AdminID: admin.ID, Password: "new-password"}); err != nil {
 		t.Fatalf("reset password: %v", err)
 	}

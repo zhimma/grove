@@ -10,6 +10,7 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/pagination"
 )
 
 func TestArticleServiceCRUDAndPublishing(t *testing.T) {
@@ -20,7 +21,7 @@ func TestArticleServiceCRUDAndPublishing(t *testing.T) {
 	if err := db.AutoMigrate(&model.Article{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
-	service := NewArticleService(database.NewConnectionsFromDBs(db, nil), NewPagePolicy(10, 100))
+	service := NewArticleService(database.NewConnectionsFromDBs(db, nil), pagination.Policy{Default: 10, Max: 100})
 	ctx := context.Background()
 
 	draft, err := service.CreateArticle(ctx, CreateArticleInput{
@@ -53,7 +54,7 @@ func TestArticleServiceCRUDAndPublishing(t *testing.T) {
 	if err := service.DeleteArticle(ctx, DeleteArticleInput{ArticleID: draft.ID}); err != nil {
 		t.Fatalf("delete article: %v", err)
 	}
-	result, err = service.ListArticles(ctx, ListArticlesInput{ListAll: true})
+	result, err = service.ListArticles(ctx, ListArticlesInput{Request: pagination.Request{ListAll: true}})
 	if err != nil || len(result.List) != 0 {
 		t.Fatalf("soft deleted article should be hidden: len=%d err=%v", len(result.List), err)
 	}
@@ -67,7 +68,7 @@ func TestArticleServiceRejectsInvalidInput(t *testing.T) {
 	if err := db.AutoMigrate(&model.Article{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
-	service := NewArticleService(database.NewConnectionsFromDBs(db, nil))
+	service := NewArticleService(database.NewConnectionsFromDBs(db, nil), pagination.Policy{})
 	for _, input := range []CreateArticleInput{
 		{Title: "", Content: "正文"},
 		{Title: "标题", Content: ""},

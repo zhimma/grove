@@ -7,9 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
-	"github.com/zhimma/grove/pkg/auth"
-	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
@@ -51,11 +50,11 @@ type SessionResponse struct {
 
 type ListSessionsResponse struct {
 	List []SessionResponse `json:"list"`
-	Meta ListMeta          `json:"meta"`
+	Meta pagination.Meta   `json:"meta"`
 }
 
-func RegisterSessionRoutes(protected *gin.RouterGroup, dbs database.Connections, tokens *auth.Manager, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
-	h := &SessionHandler{sessions: consoleservice.NewSessionService(dbs, tokens, policies...)}
+func RegisterSessionRoutes(protected *gin.RouterGroup, sessionSvc *consoleservice.SessionService, catalog *route.Catalog) {
+	h := &SessionHandler{sessions: sessionSvc}
 	sessions := wrapRoute(protected.Group("/sessions"), catalog)
 	sessions.GET("", h.List).Name("系统管理.会话列表")
 	sessions.DELETE("/:id", h.Revoke).Name("系统管理.强制下线")
@@ -98,7 +97,7 @@ func (h *SessionHandler) List(c *gin.Context) {
 	}
 	response.Success(c, ListSessionsResponse{
 		List: items,
-		Meta: ListMeta{Total: result.Meta.Total, Page: result.Meta.Page, PageSize: result.Meta.PageSize, TotalPages: result.Meta.TotalPages},
+		Meta: result.Meta,
 	})
 }
 

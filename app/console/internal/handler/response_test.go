@@ -27,7 +27,7 @@ func TestEmbeddedListQueryBinding(t *testing.T) {
 		t.Fatalf("bind query: %v", err)
 	}
 	if query.Page != 2 || query.PageSize != 25 || query.Offset != 3 || query.Limit != 4 || !query.ListAll {
-		t.Fatalf("unexpected pagination query: %#v", query.PaginationQuery)
+		t.Fatalf("unexpected pagination query: %#v", query.Request)
 	}
 	if query.Keyword != "ops" || len(query.OrderBy) != 1 || query.OrderBy[0] != "created_at desc" {
 		t.Fatalf("unexpected list query: %#v", query.ListQuery)

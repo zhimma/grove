@@ -11,11 +11,12 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/pagination"
 )
 
 func TestUserServiceCRUDAndStatus(t *testing.T) {
 	dbs, db := openUserServiceDB(t)
-	service := NewUserService(dbs, NewPagePolicy(2, 10))
+	service := NewUserService(dbs, pagination.Policy{Default: 2, Max: 10})
 	ctx := context.Background()
 
 	created, err := service.CreateUser(ctx, CreateUserInput{
@@ -73,7 +74,7 @@ func TestUserServiceCRUDAndStatus(t *testing.T) {
 
 func TestUserServiceRejectsInvalidInput(t *testing.T) {
 	dbs, _ := openUserServiceDB(t)
-	service := NewUserService(dbs)
+	service := NewUserService(dbs, pagination.Policy{})
 
 	for _, input := range []CreateUserInput{
 		{Email: "missing-name@example.com"},

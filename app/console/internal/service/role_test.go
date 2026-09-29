@@ -12,6 +12,7 @@ import (
 	"github.com/zhimma/grove/internal/datatype"
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/rbac"
 	"github.com/zhimma/grove/pkg/route"
 )
@@ -41,7 +42,7 @@ func (r *recordingRolePolicies) ReplaceConsolePoliciesForRole(_ string, permissi
 
 func TestRoleServicePreservesHistoricalAndAcceptsNewMenuKeys(t *testing.T) {
 	dbs, _, roleID := openRoleServiceTestContext(t)
-	service := NewRoleService(dbs, nil)
+	service := NewRoleService(dbs, nil, nil, pagination.Policy{})
 
 	if err := dbs.Default().
 		Model(&model.ConsoleRole{}).
@@ -90,7 +91,7 @@ func TestRoleServiceValidatesRuntimeAPIPermissions(t *testing.T) {
 	catalog := NewRuntimePermissionCatalog()
 	catalog.LoadRoutes(engine.Routes(), route.NewCatalog())
 
-	service := NewRoleService(dbs, enforcer, catalog)
+	service := NewRoleService(dbs, enforcer, catalog, pagination.Policy{})
 	if err := service.SetRolePermissions(context.Background(), SetRolePermissionsInput{
 		RoleID:         roleID,
 		APIPermissions: []string{"GET /console/v1/roles", "POST /console/v1/unknown"},

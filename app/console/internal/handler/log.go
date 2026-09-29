@@ -5,6 +5,7 @@ import (
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
 	"github.com/zhimma/grove/pkg/database"
+	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"
 	"github.com/zhimma/grove/pkg/validation"
@@ -28,7 +29,7 @@ type ListOperationLogsRequest struct {
 
 type ListOperationLogsResponse struct {
 	List []OperationLogItem `json:"list"`
-	Meta ListMeta           `json:"meta"`
+	Meta pagination.Meta    `json:"meta"`
 }
 
 type ListLoginLogsRequest struct {
@@ -38,13 +39,13 @@ type ListLoginLogsRequest struct {
 }
 
 type ListLoginLogsResponse struct {
-	List []LoginLogItem `json:"list"`
-	Meta ListMeta       `json:"meta"`
+	List []LoginLogItem  `json:"list"`
+	Meta pagination.Meta `json:"meta"`
 }
 
-func RegisterLogRoutes(protected *gin.RouterGroup, dbs database.Connections, policies []consoleservice.PagePolicy, catalog *route.Catalog) {
+func RegisterLogRoutes(protected *gin.RouterGroup, dbs database.Connections, pages pagination.Policy, catalog *route.Catalog) {
 	h := &LogHandler{
-		logSvc: consoleservice.NewLogService(dbs, policies...),
+		logSvc: consoleservice.NewLogService(dbs, pages),
 	}
 	group := wrapRoute(protected.Group("/logs"), catalog)
 	group.GET("/operations", h.OperationLogs).Name("系统日志.操作日志列表")
@@ -59,11 +60,7 @@ func (h *LogHandler) OperationLogs(c *gin.Context) {
 		return
 	}
 	result, err := h.logSvc.ListOperationLogs(c.Request.Context(), consoleservice.ListOperationLogsInput{
-		Page:        req.Page,
-		PageSize:    req.PageSize,
-		Offset:      req.Offset,
-		Limit:       req.Limit,
-		ListAll:     req.ListAll,
+		Request:     req.Request,
 		Keyword:     req.Keyword,
 		OrderBy:     req.OrderBy,
 		Method:      req.Method,
@@ -83,7 +80,7 @@ func (h *LogHandler) OperationLogs(c *gin.Context) {
 	}
 	response.Success(c, ListOperationLogsResponse{
 		List: items,
-		Meta: ListMeta(result.Meta),
+		Meta: result.Meta,
 	})
 }
 
@@ -94,11 +91,7 @@ func (h *LogHandler) LoginLogs(c *gin.Context) {
 		return
 	}
 	result, err := h.logSvc.ListLoginLogs(c.Request.Context(), consoleservice.ListLoginLogsInput{
-		Page:        req.Page,
-		PageSize:    req.PageSize,
-		Offset:      req.Offset,
-		Limit:       req.Limit,
-		ListAll:     req.ListAll,
+		Request:     req.Request,
 		Keyword:     req.Keyword,
 		OrderBy:     req.OrderBy,
 		Success:     req.Success,
@@ -116,7 +109,7 @@ func (h *LogHandler) LoginLogs(c *gin.Context) {
 	}
 	response.Success(c, ListLoginLogsResponse{
 		List: items,
-		Meta: ListMeta(result.Meta),
+		Meta: result.Meta,
 	})
 }
 
