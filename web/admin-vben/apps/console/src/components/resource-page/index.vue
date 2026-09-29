@@ -12,7 +12,7 @@ import { computed, defineAsyncComponent, reactive, ref, watch } from 'vue';
 import {
   Button,
   Card,
-  Cascader,
+  DatePicker,
   Form,
   Input,
   InputNumber,
@@ -21,51 +21,38 @@ import {
   Radio,
   Select,
   Space,
+  Switch,
   Table,
 } from 'ant-design-vue';
 
 import FileUpload from '#/components/upload/FileUpload.vue';
 
+import { resolveCustomForm } from './custom-forms';
+
 defineOptions({ name: 'ConsoleResourcePage' });
 
 const props = defineProps<{
   columns: ConsoleColumn[];
-  // 自定义组件名称，需放在 src/views/custom 目录下
+  // 自定义编辑表单组件名，文件放在 src/views/console/custom/ 下
   componentName?: string;
   createApi?: (data: Record<string, any>) => Promise<any>;
-  // 自定义列表主键id
-  customerId?: string;
-  // 接口返回数据列表的key，默认为list
-  dataKey?: string;
   deleteApi?: (id: string) => Promise<any>;
   fetchApi: (params: Record<string, any>) => Promise<any>;
   formFields?: ConsoleFormField[];
   getDetailApi?: (id: string) => Promise<any>;
-  // 是否有自定义提交函数，若有则会在默认的提交函数前调用，参数为当前表单数据，需返回一个对象作为最终提交数据
-  hasCustomSubmitFun?: Function;
-  // 初次加载列表时是否需要收入加入固定参数
+  // 提交前改写表单数据：接收当前表单数据，返回最终提交的数据
+  hasCustomSubmitFun?: (data: Record<string, any>) => Record<string, any>;
+  // 每次加载列表都带上的固定查询参数，优先于搜索条件
   hasListParams?: Record<string, any>;
-  // 是否有自定义搜索提交函数，若有则会在默认的搜索提交函数前调用，参数为当前搜索表单数据，需返回一个对象作为最终搜索提交数据
-  hasSearchSubmitFun?: Function;
-  // 是否需要编辑组织架构数据，
-  isNeedEditOrganizaFun?: Function;
-  modalWidth?: number;
   searchFields?: ConsoleSearchField[];
-  // 设置级联选择器数据的函数，只有当编辑或搜索需要选择组织架构时才需要传入，参数为当前编辑或搜索数据
-  setCascaderData?: Function;
-  showSendButton?: boolean;
   statusApi?: (id: string, status: number) => Promise<any>;
   title: string;
   updateApi?: (id: string, data: Record<string, any>) => Promise<any>;
-  useDefault?: boolean;
-}>();
-
-const emit = defineEmits<{
-  send: [record: any];
 }>();
 
 const searchFormRef = ref<FormInstance>();
 const editFormRef = ref<FormInstance>();
+const componentRef = ref<any>(null);
 const loading = ref(false);
 const modalOpen = ref(false);
 const editingId = ref('');
@@ -97,25 +84,31 @@ const canCreate = computed(
     !!props.createApi && (!!props.formFields?.length || !!props.componentName),
 );
 
+const customForm = computed(() => {
+  const loader = props.componentName
+    ? resolveCustomForm(props.componentName)
+    : undefined;
+  return loader ? defineAsyncComponent(loader) : null;
+});
+
+// Vue renders a bare boolean as nothing, which would leave the cell empty.
+function booleanCell(record: any, column: { dataIndex?: unknown }) {
+  const value =
+    typeof column.dataIndex === 'string' ? record[column.dataIndex] : undefined;
+  return typeof value === 'boolean' ? value : undefined;
+}
+
 async function fetchList() {
   loading.value = true;
   try {
-    if (props.hasListParams) {
-      Object.assign(searchModel, props.hasListParams);
-    }
-    let payload = { ...searchModel };
-    if (props.hasSearchSubmitFun) {
-      payload = props.hasSearchSubmitFun(payload);
-    }
     const res = await props.fetchApi({
       page: pagination.current,
       page_size: pagination.pageSize,
-      ...payload,
+      ...searchModel,
+      ...props.hasListParams,
     });
     const meta = res.meta || {};
-    dataSource.value = props.dataKey
-      ? res[props.dataKey] || []
-      : res.list || [];
+    dataSource.value = res.list || [];
     pagination.total = meta.total || 0;
     pagination.current = meta.page || pagination.current;
     pagination.pageSize = meta.page_size || pagination.pageSize;
@@ -153,48 +146,24 @@ function openCreate() {
 }
 
 async function openEdit(record: any) {
-  // 如果有customerId，则说明需要使用record[customerId]作为编辑接口的id参数，否则使用record.id
-  editingId.value = props.customerId ? record[props.customerId] : record.id;
-  let source = record;
-  if (props.getDetailApi && editingId.value) {
-    source = await props.getDetailApi(editingId.value);
-  }
-  if (props.isNeedEditOrganizaFun) {
-    const organizedData = props.isNeedEditOrganizaFun(source);
-    Object.assign(editModel, organizedData);
-    if (props.setCascaderData) {
-      props.setCascaderData(editModel);
-    }
-  } else {
-    Object.keys(source).forEach((key) => {
-      editModel[key] = source[key];
-    });
-  }
+  editingId.value = record.id;
+  const source = props.getDetailApi
+    ? await props.getDetailApi(record.id)
+    : record;
+  Object.keys(source).forEach((key) => {
+    editModel[key] = source[key];
+  });
   modalOpen.value = true;
 }
 
 async function submitEdit() {
+  let payload: Record<string, any>;
   if (props.componentName && componentRef.value?.getFormStateData) {
-    // 自定义组件获取数据
-    let payload = componentRef.value.getFormStateData();
-    if (props.hasCustomSubmitFun) {
-      payload = props.hasCustomSubmitFun(payload);
-    }
-    if (editingId.value && props.updateApi) {
-      await props.updateApi(editingId.value, payload);
-      message.success('更新成功');
-    } else if (props.createApi) {
-      await props.createApi(payload);
-      message.success('创建成功');
-    }
-    modalOpen.value = false;
-    fetchList();
-    return;
+    payload = componentRef.value.getFormStateData();
+  } else {
+    await editFormRef.value?.validate();
+    payload = { ...editModel };
   }
-
-  await editFormRef.value?.validate();
-  let payload = { ...editModel };
-
   if (props.hasCustomSubmitFun) {
     payload = props.hasCustomSubmitFun(payload);
   }
@@ -215,15 +184,7 @@ function handleDelete(record: any) {
   }
   Modal.confirm({
     title: '确认删除',
-    content: `确定删除 ${
-      record.name ||
-      record.title ||
-      record.order_no ||
-      record.aftersale_no ||
-      record.statement_no ||
-      record.account ||
-      '该记录'
-    } 吗？`,
+    content: `确定删除 ${record.name || record.title || record.account || '该记录'} 吗？`,
     onOk: async () => {
       await props.deleteApi?.(record.id);
       message.success('删除成功');
@@ -242,51 +203,6 @@ async function handleToggleStatus(record: any) {
   fetchList();
 }
 
-// 状态
-const loadedCustomComponent = ref<any>(null);
-const componentRef = ref<any>(null);
-const modalLoading = ref(false);
-const error = ref<Error | null>(null);
-
-// 异步加载自定义组件
-const loadCustomComponent = async (componentName?: string) => {
-  if (!componentName) {
-    loadedCustomComponent.value = null;
-    return;
-  }
-
-  modalLoading.value = true;
-  error.value = null;
-
-  try {
-    const componentModule = await import(
-      /* webpackChunkName: "custom-[request]" */
-      `../custom/${componentName}.vue`
-    );
-
-    loadedCustomComponent.value = defineAsyncComponent(() =>
-      Promise.resolve(componentModule.default || componentModule),
-    );
-  } catch (error_) {
-    console.error(`加载组件 ${componentName} 失败:`, error_);
-    error.value = error_ instanceof Error ? error_ : new Error(String(error_));
-    loadedCustomComponent.value = null;
-  } finally {
-    modalLoading.value = false;
-  }
-};
-
-// 监听组件名称变化
-watch(
-  () => props.componentName,
-  (newName, oldName) => {
-    if (newName !== oldName && newName && !props.useDefault) {
-      loadCustomComponent(newName);
-    }
-  },
-  { immediate: true },
-);
-
 watch(
   () => props.fetchApi,
   () => {
@@ -301,31 +217,19 @@ watch(
     <Form ref="searchFormRef" :model="searchModel" layout="inline" class="mb-4">
       <template v-for="field in searchFields || []" :key="field.key">
         <Form.Item :label="field.label" :name="field.key">
+          <Select
+            v-if="field.type === 'select'"
+            v-model:value="searchModel[field.key]"
+            allow-clear
+            style="width: 180px"
+            :options="field.options"
+            :placeholder="`请选择${field.label}`"
+          />
           <Input
-            v-if="!field.type || field.type === 'input'"
+            v-else
             v-model:value="searchModel[field.key]"
             allow-clear
             :placeholder="`请输入${field.label}`"
-          />
-          <Select
-            v-else-if="field.type === 'select'"
-            v-model:value="searchModel[field.key]"
-            allow-clear
-            style="width: 180px"
-            :options="field.options"
-            :placeholder="`请选择${field.label}`"
-            @change="
-              field.haschange ? field.onChange?.(searchModel[field.key]) : null
-            "
-          />
-          <Cascader
-            v-else-if="field.type === 'cascader'"
-            style="width: 180px"
-            v-model:value="searchModel[field.key]"
-            :options="field.options"
-            :load-data="field.loadData"
-            :placeholder="`请选择${field.label}`"
-            change-on-select
           />
         </Form.Item>
       </template>
@@ -380,35 +284,35 @@ watch(
             >
               删除
             </Button>
-            <Button
-              v-if="showSendButton"
-              type="link"
-              size="small"
-              @click="emit('send', record)"
-            >
-              发送
-            </Button>
           </Space>
+        </template>
+        <template v-else-if="booleanCell(record, column) !== undefined">
+          {{ booleanCell(record, column) ? '是' : '否' }}
         </template>
       </template>
     </Table>
 
     <Modal
       v-model:open="modalOpen"
-      :width="props.modalWidth || 1000"
+      :width="1000"
       :title="editingId ? `编辑${title}` : `新增${title}`"
       @ok="submitEdit"
     >
-      <component
-        v-if="props.componentName"
-        :is="loadedCustomComponent"
-        :edit-model="editModel"
-        ref="componentRef"
-      />
+      <template v-if="componentName">
+        <component
+          :is="customForm"
+          v-if="customForm"
+          ref="componentRef"
+          :edit-model="editModel"
+        />
+        <p v-else class="text-red-500">
+          未找到自定义表单组件 {{ componentName }}，请放在
+          src/views/console/custom/ 下
+        </p>
+      </template>
       <Form v-else ref="editFormRef" :model="editModel" layout="vertical">
         <template v-for="field in formFields || []" :key="field.key">
           <Form.Item
-            v-if="!field.isNotShow"
             :label="field.label"
             :name="field.key"
             :rules="
@@ -417,12 +321,8 @@ watch(
                 : []
             "
           >
-            <Input
-              v-if="!field.type || field.type === 'input'"
-              v-model:value="editModel[field.key]"
-            />
             <Input.TextArea
-              v-else-if="field.type === 'textarea'"
+              v-if="field.type === 'textarea'"
               v-model:value="editModel[field.key]"
               :rows="4"
             />
@@ -435,11 +335,7 @@ watch(
               v-else-if="field.type === 'select'"
               v-model:value="editModel[field.key]"
               :options="field.options"
-              @change="
-                field.haschange ? field.onChange?.(editModel[field.key]) : null
-              "
             />
-
             <Radio.Group
               v-else-if="field.type === 'radio'"
               v-model:value="editModel[field.key]"
@@ -452,16 +348,17 @@ watch(
                 {{ option.label }}
               </Radio>
             </Radio.Group>
-
-            <Cascader
-              v-else-if="field.type === 'cascader'"
-              v-model:value="editModel[field.key]"
-              :options="field.options"
-              :load-data="field.loadData"
-              placeholder="请选择"
-              change-on-select
+            <Switch
+              v-else-if="field.type === 'switch'"
+              v-model:checked="editModel[field.key]"
             />
-
+            <DatePicker
+              v-else-if="field.type === 'datetime'"
+              v-model:value="editModel[field.key]"
+              show-time
+              value-format="YYYY-MM-DD HH:mm:ss"
+              style="width: 100%"
+            />
             <FileUpload
               v-else-if="field.type === 'uploadImg'"
               v-model:value="editModel[field.key]"
@@ -473,6 +370,7 @@ watch(
               list-type="picture-card"
               :upload-text="field.uploadText || '上传图片'"
             />
+            <Input v-else v-model:value="editModel[field.key]" />
           </Form.Item>
         </template>
       </Form>

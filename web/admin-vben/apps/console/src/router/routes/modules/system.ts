@@ -3,6 +3,9 @@ import type { RouteRecordRaw } from 'vue-router';
 // Route modules are concatenated, not merged by path, so every /system child
 // has to live in this one array. Declaring some of them in another module put
 // them outside the 系统管理 group and rendered them as top-level menu items.
+//
+// Menu visibility comes from the role's menu keys (route names); API access is
+// enforced by backend RBAC. A route meta cannot grant or deny either.
 const routes: RouteRecordRaw[] = [
   {
     meta: { icon: 'lucide:settings', order: 9999, title: '系统管理' },
@@ -33,7 +36,6 @@ const routes: RouteRecordRaw[] = [
         component: () => import('#/views/system/sessions/index.vue'),
         meta: {
           title: '在线会话',
-          permissions: ['系统管理.会话列表'],
         },
       },
       {
@@ -43,7 +45,6 @@ const routes: RouteRecordRaw[] = [
         meta: {
           icon: 'lucide:clock',
           title: '计划任务',
-          permissions: ['计划任务.任务列表'],
         },
       },
       {
@@ -53,7 +54,6 @@ const routes: RouteRecordRaw[] = [
         meta: {
           icon: 'lucide:file-text',
           title: '操作日志',
-          permissions: ['系统日志.操作日志列表'],
         },
       },
       {
@@ -63,7 +63,6 @@ const routes: RouteRecordRaw[] = [
         meta: {
           icon: 'lucide:log-in',
           title: '登录日志',
-          permissions: ['系统日志.登录日志列表'],
         },
       },
     ],

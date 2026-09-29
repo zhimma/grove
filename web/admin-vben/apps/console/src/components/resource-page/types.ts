@@ -5,37 +5,32 @@ export interface ConsoleColumn {
   width?: number;
 }
 
+export interface ConsoleOption {
+  label: string;
+  value: number | string;
+}
+
 export interface ConsoleSearchField {
   key: string;
   label: string;
-  type?: 'cascader' | 'input' | 'select';
-  haschange?: boolean;
-  onChange?: (value: any) => void;
-  options?: Array<{ label: string; value: number | string }>;
-  loadData?: (selectedOptions: any[]) => void;
+  type?: 'input' | 'select';
+  options?: ConsoleOption[];
 }
 
 export interface ConsoleFormField {
   key: string;
   label: string;
   type?:
-    | 'cascader'
+    | 'datetime'
     | 'input'
     | 'number'
     | 'radio'
     | 'select'
+    | 'switch'
     | 'textarea'
     | 'uploadImg';
   required?: boolean;
-  options?: Array<{ label: string; value: number | string }>;
-  /** 是否不显示 */
-  isNotShow?: boolean;
-  /** 是否有值变化事件 */
-  haschange?: boolean;
-  /** 值变化回调 */
-  onChange?: (value: any) => void;
-  /** 加载数据（级联选择器用） */
-  loadData?: (selectedOptions: any[]) => void;
+  options?: ConsoleOption[];
   /** 后端存储磁盘（上传组件用） */
   disk?: string;
   /** 后端命名上传策略（上传组件用） */
