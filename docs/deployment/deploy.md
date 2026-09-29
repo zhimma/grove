@@ -174,6 +174,15 @@ bin/grove --config /opt/grove/config.yaml seed bootstrap
 
 Worker 默认在 `worker_port`（`8082`）启动仅用于 health 与 metrics 的内部 HTTP 监听，不提供业务接口。
 
+### 5. 发布管理后台前端
+
+```bash
+make admin.install
+make admin.build
+```
+
+产物在 `web/admin-vben/apps/console/dist`，按静态站点部署。默认同域：`.env.production` 的 `VITE_GLOB_API_URL` 留空，前端直接请求 `/console/v1/...`，由网关反向代理到 Console（`:8081`）。前后端分域部署时，把 `dist/_app.config.js` 里的 `VITE_GLOB_API_URL` 改成 Console 地址（不用重新构建），并把前端域名加进 `cors.allowed_origins`。
+
 ## systemd 示例
 
 ### `console`

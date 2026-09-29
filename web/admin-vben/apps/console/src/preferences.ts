@@ -11,4 +11,8 @@ export const overridesPreferences = defineOverridesPreferences({
     accessMode: 'frontend',
     name: import.meta.env.VITE_APP_TITLE,
   },
+  // 后端没有站内通知，不显示通知铃铛
+  widget: {
+    notification: false,
+  },
 });
