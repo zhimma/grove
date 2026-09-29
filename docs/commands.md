@@ -13,6 +13,7 @@ make help
 - `make run.api`：启动 API，默认监听 `:8080`
 - `make run.console`：启动 Console，默认监听 `:8081`
 - `make run.worker`：启动 Worker，默认监听 `:8082`
+- `make dev.api` / `make dev.console` / `make dev.worker`：同上，但改 Go 代码或 `config.yaml` 后自动重新编译并重启。用 `go run` 固定版本的 air，不进 `go.mod`；首次运行会下载 air，编译产物在 `tmp/`（已忽略）
 - `make admin.dev`：启动管理后台前端，开发配置默认监听 `:5666`
 
 Worker 只有在启用 Job 或 Scheduler 后才应启动；默认配置不会让 Worker 空运行。

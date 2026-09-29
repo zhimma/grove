@@ -101,6 +101,8 @@ Console：
 make run.console
 ```
 
+开发时改成 `make dev.console`（`dev.api`、`dev.worker` 同理），保存代码后自动重新编译并重启。
+
 API（可选）：
 
 ```bash

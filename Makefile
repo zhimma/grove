@@ -13,12 +13,17 @@ PNPM ?= PATH="$(PNPM_SHIM_DIR):$$PATH" pnpm
 GOLANGCI_LINT ?= golangci-lint
 GOVULNCHECK ?= govulncheck
 GROVE := $(GO) run ./cmd/grove
+# air is pinned and run through go run, so it stays out of go.mod and every
+# checkout reloads with the same version. web/ is excluded because watching
+# node_modules would exhaust file watchers.
+AIR ?= $(GO) run github.com/air-verse/air@v1.67.4
+AIR_FLAGS := --build.include_ext "go,yaml" --build.exclude_dir "web,tmp,bin,.tooling,docs,logs,storage,database"
 
 .DEFAULT_GOAL := help
 
 .PHONY: \
 	help \
-	run.api run.console run.worker \
+	run.api run.console run.worker dev.api dev.console dev.worker \
 	test test.race contracts fmt tidy build verify ci \
 	quality quality.go.fmt quality.go.vet quality.go.lint quality.govuln docs.check diff.check \
 	admin.install admin.dev admin.build admin.typecheck admin.lint admin.circular admin.test \
@@ -37,6 +42,15 @@ run.console: ## 启动 Console 服务（:8081）
 
 run.worker: ## 启动 Worker 服务（:8082）
 	$(GO) run ./app/worker/cmd
+
+dev.api: ## 热重载启动 API 服务：改 Go 代码或 config.yaml 后自动重新编译并重启
+	$(AIR) --build.cmd "$(GO) build -o ./tmp/api ./app/api/cmd" --build.entrypoint ./tmp/api $(AIR_FLAGS)
+
+dev.console: ## 热重载启动 Console 服务
+	$(AIR) --build.cmd "$(GO) build -o ./tmp/console ./app/console/cmd" --build.entrypoint ./tmp/console $(AIR_FLAGS)
+
+dev.worker: ## 热重载启动 Worker 服务
+	$(AIR) --build.cmd "$(GO) build -o ./tmp/worker ./app/worker/cmd" --build.entrypoint ./tmp/worker $(AIR_FLAGS)
 
 test: ## 运行全部 Go 测试
 	$(GO) test ./...

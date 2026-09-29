@@ -236,7 +236,7 @@ Grove 的切法：
 | ~~P2~~ | ~~G7~~ | ~~`grove key:generate`：生成 `jwt.secret`、`config_encryption_key` 等强密钥~~ | ✅ 打印一段可直接粘贴的 YAML（32 字节随机，JWT 为 43 字符 base64url，加密密钥为 `base64:` 格式）；刻意不改写 `config.yaml`，避免覆盖正在使用的密钥。测试校验输出能被 secretbox 与生产 JWT 规则接受。`fork.md` 的 `load.go:行号` 引用改为函数名 | — |
 | P3 | G8 | 通用限流中间件（go-zero 内置、Laravel `throttle`），复用现有 `x/time/rate` 与 Redis | 按 IP/用户限流，429 走统一错误信封 | 等 api 服务有公开接口 |
 | P3 | G9 | `pkg/mail` | — | 等真实触发 |
-| P3 | G10 | `make dev` 热重载（对应 nunu `run`、`gf run`），用 `go run` 固定版本的 air，不进 go.mod | 改代码后服务自动重启 | 无 |
+| ~~P3~~ | ~~G10~~ | ~~`make dev` 热重载（对应 nunu `run`、`gf run`），用 `go run` 固定版本的 air，不进 go.mod~~ | ✅ `make dev.api` / `dev.console` / `dev.worker`，air v1.67.4 经 `go run` 固定版本，参数全走命令行、不加 `.air.toml`；监听 `go`、`yaml`，排除 `web` 等目录防止 node_modules 耗尽文件监听。在临时目录实测改动后自动重新编译并重启 | — |
 | P3 | G11 | docker-compose 起本地 PostgreSQL + Redis | `make deps.up` 后 quickstart 直接可跑 | 本机无 Docker，只能静态校验 |
 
 #### 本阶段不做
