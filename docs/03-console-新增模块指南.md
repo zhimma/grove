@@ -126,17 +126,20 @@ Console 的文档入口是：
 web/admin-vben/apps/console/src/api/
 ```
 
-复用 `requestClient`，不要在页面中直接创建 Axios 实例。请求路径使用后端完整 Console 前缀，例如 `/console/v1/articles`。
+复用 `requestClient`，不要在页面中直接创建 Axios 实例。路径不手写：先在 `api/console-contract.json` 登记 operation，再用 `consoleEndpoint('consoleListArticles')` 取地址，契约测试会拒绝写死的 `/console/v1` 路径和未登记的 operationId。
 
 ### 2. 页面
 
-页面放在：
+页面放在 `web/admin-vben/apps/console/src/views/` 下按业务领域组织，例如 `views/console/content/articles.vue`；生成器放在 `views/<模块复数>/index.vue`。
 
-```text
-web/admin-vben/apps/console/src/views/console/
-```
+列表页优先用 `components/resource-page`：列、搜索、表单和增删改接口都用配置声明。页面特有的部分用插槽补，不必整页手写：
 
-目录按业务领域组织，例如 `views/console/content/articles.vue`。
+- `#cell="{ column, record }"`：接管某些列的渲染（如状态 Tag）；没接管的列仍按布尔（是/否）或原值显示。
+- `#actions="{ record }"`：在操作列追加按钮，按钮多时配合 `action-width`。
+- 表单字段的 `help`、`placeholder`：字段说明与占位提示。
+- 组件 ref 的 `reload()`：自定义操作完成后刷新列表。
+
+参考 `views/system/scheduled-task/index.vue`。只有需要概览区、详情抽屉等明显不同的交互时才手写页面。
 
 ### 3. 本地路由和菜单
 
@@ -164,7 +167,6 @@ web/admin-vben/apps/console/src/router/routes/modules/
 - `path` 可以调整，但修改后要验证跳转、重定向和收藏页。
 - 后端只保存角色的 `menu_keys`，不维护菜单表或菜单同步命令。
 
-仓库里部分旧页面仍存在 `meta.permissions`，它不是后端 `menu_keys` 的真相源；新模块优先遵循路由 `name` + API 权限模型。
 
 ### 4. 按钮权限
 

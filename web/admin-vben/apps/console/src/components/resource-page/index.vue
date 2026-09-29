@@ -33,6 +33,8 @@ import { loadFormModel, toSubmitPayload } from './form-model';
 defineOptions({ name: 'ConsoleResourcePage' });
 
 const props = defineProps<{
+  // 操作列宽度，自定义操作按钮多时调大
+  actionWidth?: number;
   columns: ConsoleColumn[];
   // 自定义编辑表单组件名，文件放在 src/views/console/custom/ 下
   componentName?: string;
@@ -207,6 +209,9 @@ watch(
   },
   { immediate: true },
 );
+
+// 页面自定义的行操作完成后用它刷新列表
+defineExpose({ reload: fetchList });
 </script>
 
 <template>
@@ -244,7 +249,12 @@ watch(
     <Table
       :columns="[
         ...columns,
-        { title: '操作', key: 'action', width: 100, fixed: 'right' },
+        {
+          title: '操作',
+          key: 'action',
+          width: actionWidth ?? 100,
+          fixed: 'right',
+        },
       ]"
       :data-source="dataSource"
       :loading="loading"
@@ -256,6 +266,7 @@ watch(
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'action'">
           <Space>
+            <slot name="actions" :record="record"></slot>
             <Button
               v-if="canEdit"
               type="link"
@@ -283,9 +294,11 @@ watch(
             </Button>
           </Space>
         </template>
-        <template v-else-if="booleanCell(record, column) !== undefined">
-          {{ booleanCell(record, column) ? '是' : '否' }}
-        </template>
+        <slot v-else name="cell" :column="column" :record="record">
+          <template v-if="booleanCell(record, column) !== undefined">
+            {{ booleanCell(record, column) ? '是' : '否' }}
+          </template>
+        </slot>
       </template>
     </Table>
 
@@ -310,6 +323,7 @@ watch(
       <Form v-else ref="editFormRef" :model="editModel" layout="vertical">
         <template v-for="field in formFields || []" :key="field.key">
           <Form.Item
+            :extra="field.help"
             :label="field.label"
             :name="field.key"
             :rules="
@@ -321,11 +335,13 @@ watch(
             <Input.TextArea
               v-if="field.type === 'textarea'"
               v-model:value="editModel[field.key]"
+              :placeholder="field.placeholder"
               :rows="4"
             />
             <InputNumber
               v-else-if="field.type === 'number'"
               v-model:value="editModel[field.key]"
+              :placeholder="field.placeholder"
               style="width: 100%"
             />
             <Select
@@ -367,7 +383,11 @@ watch(
               list-type="picture-card"
               :upload-text="field.uploadText || '上传图片'"
             />
-            <Input v-else v-model:value="editModel[field.key]" />
+            <Input
+              v-else
+              v-model:value="editModel[field.key]"
+              :placeholder="field.placeholder"
+            />
           </Form.Item>
         </template>
       </Form>

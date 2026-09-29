@@ -30,6 +30,10 @@ export interface ConsoleFormField {
     | 'textarea'
     | 'uploadImg';
   required?: boolean;
+  /** 输入框占位提示 */
+  placeholder?: string;
+  /** 显示在字段下方的说明 */
+  help?: string;
   options?: ConsoleOption[];
   /** 后端存储磁盘（上传组件用） */
   disk?: string;
