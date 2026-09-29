@@ -3,7 +3,7 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/zhimma/grove/app/api/service"
+	"github.com/zhimma/grove/app/api/internal/service"
 	"github.com/zhimma/grove/pkg/auth"
 	"github.com/zhimma/grove/pkg/response"
 	"github.com/zhimma/grove/pkg/route"

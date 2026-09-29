@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/zhimma/grove/app/api/service"
+	"github.com/zhimma/grove/app/api/internal/service"
 	"github.com/zhimma/grove/pkg/job"
 	"github.com/zhimma/grove/pkg/request"
 	"github.com/zhimma/grove/pkg/response"

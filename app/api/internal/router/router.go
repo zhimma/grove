@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	apimiddleware "github.com/zhimma/grove/app/api/middleware"
+	apimiddleware "github.com/zhimma/grove/app/api/internal/middleware"
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/internal/provider"
 	"github.com/zhimma/grove/pkg/auth"

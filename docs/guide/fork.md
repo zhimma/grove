@@ -51,8 +51,8 @@ web/admin-vben/apps/console/src/views/console/content/articles.vue
 ### 删除 api starter 与 echo 任务
 
 ```
-app/api/handler/starter_handler.go
-app/api/service/starter_service.go
+app/api/internal/handler/starter.go
+app/api/internal/service/starter.go
 app/api/internal/router/demo.go
 app/worker/internal/handler/default_job.go
 pkg/job/tasks.go              # TaskEcho / EchoPayload

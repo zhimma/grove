@@ -3,7 +3,7 @@ package docs
 import (
 	"net/http"
 
-	"github.com/zhimma/grove/app/api/handler"
+	"github.com/zhimma/grove/app/api/internal/handler"
 	"github.com/zhimma/grove/internal/config"
 	"github.com/zhimma/grove/internal/docsui"
 )

@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/zhimma/grove/app/api/handler"
+	"github.com/zhimma/grove/app/api/internal/handler"
 	"github.com/zhimma/grove/pkg/route"
 )
 

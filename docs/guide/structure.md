@@ -28,21 +28,15 @@ grove/
 - `app/console`：管理后台后端
 - `app/worker`：异步任务入口
 
-每个服务目录保持相同的基本组织方式：
+每个服务目录的组织方式相同：`cmd/` 是启动入口，其余代码都在 `internal/` 下，其他服务无法导入：
 
-- `cmd/`：服务启动入口
-- `handler/`：处理 HTTP 或任务输入输出
-- `service/`：业务逻辑
-- `internal/router/`：路由注册
+- `internal/handler/`：处理 HTTP 或任务输入输出
+- `internal/service/`：业务逻辑（api、console）
+- `internal/middleware/`：认证、权限、审计等中间件（api、console）
+- `internal/router/`：路由注册（api、console）
+- `internal/docs/`：OpenAPI 声明（api、console）
 - `internal/server/`：服务装配
-
-`console` 额外包含：
-
-- `middleware/`：后台认证、权限、审计等中间件
-
-`worker` 额外包含：
-
-- `task/`：可在后台管理的计划任务注册表，见[计划任务](./scheduler.md#后台管理)
+- `internal/task/`：可在后台管理的计划任务注册表（worker），见[计划任务](./scheduler.md#后台管理)
 
 ### `cmd/`
 

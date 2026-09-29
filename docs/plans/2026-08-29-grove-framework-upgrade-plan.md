@@ -231,7 +231,7 @@ Grove 的切法：
 | ~~P1~~ | ~~G2~~ | ~~日志轮转：按大小切割 + 保留期，对应 Laravel daily channel，做法同 nunu~~ | ✅ lumberjack v2.2.1；`log.max_size_mb`（默认 100）/ `max_age_days`（默认 14，`0` 不清理），显式非法值启动即拒绝；启动时即打开文件，坏目录不会拖到第一条日志才暴露。轮转与急切打开各做一次变异验证。未被读取的 `log.service` 保留为兼容字段（严格解码下删掉会让旧配置启动失败） | — |
 | ~~P1~~ | ~~G3~~ | ~~分页下沉到 `pkg/`，api 与 console 共用；去掉 `[]PagePolicy` 可变参数~~ | ✅ `pkg/pagination`：`Policy`（零值可用）/ `Request` / `Page.Apply` / `Meta`，三份分页结构与两份 `ListMeta` 合一；8 个列表 service 的构造函数改为显式 `pages pagination.Policy`，`NewRoleServiceWithPolicy` 删除；router 只建一份 policy 与一份 `SessionService`。重构前后 OpenAPI 逐字节一致。顺带修复：计划任务 `list_all` 生成 `LIMIT 0` 返回空列表（加回归测试并变异验证）、用户列表从未接收配置的分页上限 | — |
 | ~~P1~~ | ~~G4~~ | ~~`internal/testkit`：`OpenDB(t, models...)` 等，替换重复夹具~~ | ✅ `OpenDB`（每测独立、`t.Cleanup` 关闭，原先无一处关闭连接）+ `CreateCasbinTable`（按迁移后的 `NOT NULL DEFAULT ''` 与唯一索引建表，原先 6 份手写 DDL 有两种形状）；app/cmd/internal 下 26 处建库与 6 份 DDL 全部收敛，生成器模板同步。`pkg/*` 测试因依赖方向保留自建 | — |
-| P2 | G5 | `app/api` 结构与 console/worker 对齐 | handler/service/middleware 移入 `internal/` | 无 |
+| ~~P2~~ | ~~G5~~ | ~~`app/api` 结构与 console/worker 对齐~~ | ✅ handler/service/middleware 移入 `app/api/internal/`，去掉 `auth_handler.go`、`starter_service.go` 这类与包名重复的后缀；`structure.md` 原先描述的目录结构与 console 实际不符，一并改正 | — |
 | P2 | G6 | 去 Java 味：`request.GetAdminID` → `request.AdminID` 等；`database.Connections` 返回具体类型；`Manager` 改为表意名 | 行为不变，调用点机械替换 | 改名面较大，可分批 |
 | P2 | G7 | `grove key:generate`：生成 `jwt.secret`、`config_encryption_key` 等强密钥 | fork 后无需手工造密钥 | 无 |
 | P3 | G8 | 通用限流中间件（go-zero 内置、Laravel `throttle`），复用现有 `x/time/rate` 与 Redis | 按 IP/用户限流，429 走统一错误信封 | 等 api 服务有公开接口 |
