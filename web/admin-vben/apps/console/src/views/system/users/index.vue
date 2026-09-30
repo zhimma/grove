@@ -5,7 +5,7 @@ import {
   getUserList,
   updateUser,
   updateUserStatus,
-} from '#/api/core/console';
+} from '#/api/user';
 import ResourcePage from '#/components/resource-page/index.vue';
 
 const statusOptions = [
@@ -68,6 +68,6 @@ function normalizePayload(payload: Record<string, any>) {
     :update-api="updateUser"
     :delete-api="deleteUser"
     :status-api="updateUserStatus"
-    :has-custom-submit-fun="normalizePayload"
+    :transform-payload="normalizePayload"
   />
 </template>

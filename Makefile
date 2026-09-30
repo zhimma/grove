@@ -11,9 +11,8 @@ GO ?= go
 PNPM_SHIM_DIR := $(CURDIR)/.tooling/pnpm
 PNPM ?= PATH="$(PNPM_SHIM_DIR):$$PATH" pnpm
 # Pinned to the versions CI installs and run through go run, so nobody has to
-# install them and a golangci-lint v2 on PATH (which cannot read this v1
-# config) does not break the target.
-GOLANGCI_LINT ?= $(GO) run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+# install them or depend on a globally installed version.
+GOLANGCI_LINT ?= $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 GOVULNCHECK ?= $(GO) run golang.org/x/vuln/cmd/govulncheck@v1.6.0
 GROVE := $(GO) run ./cmd/grove
 # air is pinned and run through go run, so it stays out of go.mod and every

@@ -43,10 +43,10 @@ app/console/internal/service/article.go
 app/console/internal/service/article_test.go
 database/migrations/postgres/202604150013_create_articles.*
 database/migrations/mysql/202604150013_create_articles.*
-web/admin-vben/apps/console/src/views/console/content/articles.vue
+web/admin-vben/apps/console/src/views/content/articles/index.vue
 ```
 
-同时移除 `app/console/internal/router/router.go` 里的 `handler.RegisterArticleRoutes(...)`、前端 `router/routes/modules/console.ts` 的「内容管理」路由，以及 OpenAPI 与前端契约里的对应条目（`make contracts` 会告诉你漏了哪些）。
+同时移除 `app/console/internal/router/router.go` 里的 `handler.RegisterArticleRoutes(...)`、前端 `router/routes/modules/content.ts` 的「内容管理」路由，以及 OpenAPI 与前端契约里的对应条目（`make contracts` 会告诉你漏了哪些）。
 
 ### 删除 api starter 与 echo 任务
 
@@ -54,8 +54,8 @@ web/admin-vben/apps/console/src/views/console/content/articles.vue
 app/api/internal/handler/starter.go
 app/api/internal/service/starter.go
 app/api/internal/router/demo.go
-app/worker/internal/handler/default_job.go
-pkg/job/tasks.go              # TaskEcho / EchoPayload
+app/worker/internal/handler/echo.go
+internal/jobtask/echo.go              # TaskEcho / EchoPayload
 ```
 
 `app/api/internal/router/router.go` 里去掉 `r.installDemoRoutes(...)`。
@@ -65,7 +65,7 @@ pkg/job/tasks.go              # TaskEcho / EchoPayload
 若你的系统只有内部运营、不存在终端客户，删 `users` 时要一并处理两处依赖：
 
 - `app/console/internal/service/dashboard.go` 的 `UserCount`
-- 前端 `views/console/dashboard/overview.vue` 对应的统计卡片
+- 前端 `views/dashboard/overview/index.vue` 对应的统计卡片
 
 ## 3. 必改配置
 
@@ -78,7 +78,7 @@ pkg/job/tasks.go              # TaskEcho / EchoPayload
 | `security.initial_root_password` | 留空则 `make seed.bootstrap` 生成一次性随机密码并打印，注意从输出里抄走 |
 | `security.config_encryption_key` | 使用系统配置的加密字段时必填，同样由 `key:generate` 生成。上线后不要更换，否则已加密的配置无法解密 |
 
-注意 `job.enabled: true` **强制要求** `redis.enabled: true`（`internal/config/load.go` 的 `Config.Validate`）。本机没有 Redis 就把两个一起关掉。
+注意 `job.enabled: true` **强制要求** `redis.enabled: true`（`internal/config/validate.go` 的 `Config.Validate`）。本机没有 Redis 就把两个一起关掉。
 
 生产环境额外强制（不满足直接启动失败，均在 `Config.Validate` 的 production 分支）：
 

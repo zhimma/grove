@@ -1,9 +1,40 @@
 package main
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 )
+
+var moduleNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*([_ -][A-Za-z0-9]+)*$`)
+
+// Initialisms keep Go identifiers consistent without changing SQL/JSON spelling.
+var initialisms = map[string]bool{
+	"api": true, "ascii": true, "cpu": true, "css": true, "dns": true,
+	"eof": true, "guid": true, "html": true, "http": true, "https": true,
+	"id": true, "ip": true, "json": true, "qps": true, "ram": true,
+	"rpc": true, "sla": true, "smtp": true, "sql": true, "ssh": true,
+	"tcp": true, "tls": true, "ttl": true, "udp": true, "ui": true,
+	"uid": true, "uuid": true, "uri": true, "url": true, "utf8": true,
+	"vm": true, "xml": true,
+}
+
+// Go interprets these final filename segments as build constraints. Reject
+// them instead of emitting a module that only builds on one platform or in tests.
+func validateModuleFilename(snake string) error {
+	_, suffix, found := strings.Cut(snake, "_")
+	if !found {
+		return nil
+	}
+	parts := strings.Split(suffix, "_")
+	suffix = parts[len(parts)-1]
+	reserved := " test aix android darwin dragonfly freebsd hurd illumos ios js linux nacl netbsd openbsd plan9 solaris wasip1 windows zos 386 amd64 amd64p32 arm arm64 arm64be armbe loong64 mips mipsle mips64 mips64le mips64p32 mips64p32le ppc ppc64 ppc64le riscv riscv64 s390 s390x sparc sparc64 wasm "
+	if strings.Contains(reserved, " "+suffix+" ") {
+		return fmt.Errorf("模块名生成的文件 %s.go 包含 Go 保留后缀 %q，请使用其他名称", snake, suffix)
+	}
+	return nil
+}
 
 func toSnake(input string) string {
 	input = strings.TrimSpace(input)
@@ -12,9 +43,12 @@ func toSnake(input string) string {
 	}
 
 	var out []rune
-	for i, r := range input {
+	runes := []rune(input)
+	for i, r := range runes {
 		if unicode.IsUpper(r) {
-			if i > 0 && out[len(out)-1] != '_' {
+			boundary := i > 0 && (unicode.IsLower(runes[i-1]) || unicode.IsDigit(runes[i-1]) ||
+				(unicode.IsUpper(runes[i-1]) && i+1 < len(runes) && unicode.IsLower(runes[i+1])))
+			if boundary && len(out) > 0 && out[len(out)-1] != '_' {
 				out = append(out, '_')
 			}
 			out = append(out, unicode.ToLower(r))
@@ -61,6 +95,10 @@ func toPascal(input string) string {
 	var out strings.Builder
 	for _, part := range parts {
 		if part == "" {
+			continue
+		}
+		if initialisms[part] {
+			out.WriteString(strings.ToUpper(part))
 			continue
 		}
 		runes := []rune(strings.ToLower(part))

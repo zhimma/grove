@@ -54,7 +54,7 @@ func (StringArray) GormDBDataType(db *gorm.DB, _ *schema.Field) string {
 	if db == nil || db.Dialector == nil {
 		return "json"
 	}
-	switch db.Dialector.Name() {
+	switch db.Name() {
 	case "postgres":
 		return "jsonb"
 	case "mysql":

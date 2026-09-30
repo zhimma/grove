@@ -1,13 +1,15 @@
 <script lang="ts" setup>
 import type { FormInstance, TablePaginationConfig } from 'ant-design-vue';
 
+import type { Component } from 'vue';
+
 import type {
   ConsoleColumn,
   ConsoleFormField,
   ConsoleSearchField,
 } from './types';
 
-import { computed, defineAsyncComponent, reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 
 import {
   Button,
@@ -27,7 +29,6 @@ import {
 
 import FileUpload from '#/components/upload/FileUpload.vue';
 
-import { resolveCustomForm } from './custom-forms';
 import { loadFormModel, toSubmitPayload } from './form-model';
 
 defineOptions({ name: 'ConsoleResourcePage' });
@@ -36,26 +37,28 @@ const props = defineProps<{
   // 操作列宽度，自定义操作按钮多时调大
   actionWidth?: number;
   columns: ConsoleColumn[];
-  // 自定义编辑表单组件名，文件放在 src/views/console/custom/ 下
-  componentName?: string;
   createApi?: (data: Record<string, any>) => Promise<any>;
   deleteApi?: (id: string) => Promise<any>;
   fetchApi: (params: Record<string, any>) => Promise<any>;
+  // 每次加载列表都带上的固定查询参数，优先于搜索条件
+  fixedParams?: Record<string, any>;
+  // 由业务页面显式传入，基础组件不依赖 views 目录。
+  formComponent?: Component;
   formFields?: ConsoleFormField[];
   getDetailApi?: (id: string) => Promise<any>;
-  // 提交前改写表单数据：接收当前表单数据，返回最终提交的数据
-  hasCustomSubmitFun?: (data: Record<string, any>) => Record<string, any>;
-  // 每次加载列表都带上的固定查询参数，优先于搜索条件
-  hasListParams?: Record<string, any>;
   searchFields?: ConsoleSearchField[];
   statusApi?: (id: string, status: number) => Promise<any>;
   title: string;
+  // 提交前改写表单数据：接收当前表单数据，返回最终提交的数据
+  transformPayload?: (data: Record<string, any>) => Record<string, any>;
   updateApi?: (id: string, data: Record<string, any>) => Promise<any>;
 }>();
 
 const searchFormRef = ref<FormInstance>();
 const editFormRef = ref<FormInstance>();
-const componentRef = ref<any>(null);
+const componentRef = ref<{
+  getFormStateData: () => Promise<Record<string, any>> | Record<string, any>;
+}>();
 const loading = ref(false);
 const modalOpen = ref(false);
 const editingId = ref('');
@@ -80,19 +83,12 @@ for (const field of props.formFields || []) {
 
 const canEdit = computed(
   () =>
-    !!props.updateApi && (!!props.formFields?.length || !!props.componentName),
+    !!props.updateApi && (!!props.formFields?.length || !!props.formComponent),
 );
 const canCreate = computed(
   () =>
-    !!props.createApi && (!!props.formFields?.length || !!props.componentName),
+    !!props.createApi && (!!props.formFields?.length || !!props.formComponent),
 );
-
-const customForm = computed(() => {
-  const loader = props.componentName
-    ? resolveCustomForm(props.componentName)
-    : undefined;
-  return loader ? defineAsyncComponent(loader) : null;
-});
 
 // Vue renders a bare boolean as nothing, which would leave the cell empty.
 function booleanCell(record: any, column: { dataIndex?: unknown }) {
@@ -108,7 +104,7 @@ async function fetchList() {
       page: pagination.current,
       page_size: pagination.pageSize,
       ...searchModel,
-      ...props.hasListParams,
+      ...props.fixedParams,
     });
     const meta = res.meta || {};
     dataSource.value = res.list || [];
@@ -157,14 +153,17 @@ async function openEdit(record: any) {
 
 async function submitEdit() {
   let payload: Record<string, any>;
-  if (props.componentName && componentRef.value?.getFormStateData) {
-    payload = componentRef.value.getFormStateData();
+  if (props.formComponent) {
+    if (!componentRef.value?.getFormStateData) {
+      throw new Error('自定义表单尚未就绪');
+    }
+    payload = await componentRef.value.getFormStateData();
   } else {
     await editFormRef.value?.validate();
     payload = toSubmitPayload(props.formFields || [], editModel);
   }
-  if (props.hasCustomSubmitFun) {
-    payload = props.hasCustomSubmitFun(payload);
+  if (props.transformPayload) {
+    payload = props.transformPayload(payload);
   }
   if (editingId.value && props.updateApi) {
     await props.updateApi(editingId.value, payload);
@@ -308,18 +307,12 @@ defineExpose({ reload: fetchList });
       :title="editingId ? `编辑${title}` : `新增${title}`"
       @ok="submitEdit"
     >
-      <template v-if="componentName">
-        <component
-          :is="customForm"
-          v-if="customForm"
-          ref="componentRef"
-          :edit-model="editModel"
-        />
-        <p v-else class="text-red-500">
-          未找到自定义表单组件 {{ componentName }}，请放在
-          src/views/console/custom/ 下
-        </p>
-      </template>
+      <component
+        :is="formComponent"
+        v-if="formComponent"
+        ref="componentRef"
+        :edit-model="editModel"
+      />
       <Form v-else ref="editFormRef" :model="editModel" layout="vertical">
         <template v-for="field in formFields || []" :key="field.key">
           <Form.Item

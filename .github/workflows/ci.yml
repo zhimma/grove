@@ -23,7 +23,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.14'
+          go-version: '1.27.1'
           cache: true
 
       - name: Setup Node
@@ -64,9 +64,9 @@ jobs:
           fi
 
       - name: Run Go lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v1.64.8
+          version: v2.14.0
 
       - name: Check patch whitespace
         run: git diff --check

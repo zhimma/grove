@@ -107,6 +107,7 @@ func WithConfigSecrets() Option {
 func WorkerOptions() []Option {
 	return []Option{
 		WithObservability(),
+		WithDatabase(),
 		WithRedis(),
 		WithCache(),
 		WithJobServer(),

@@ -137,7 +137,6 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 		`INSERT INTO users (id, name, email) VALUES ('soft-delete-user-1', 'First', 'reuse@example.test')`,
 		`UPDATE users SET deleted_at = NOW() WHERE id = 'soft-delete-user-1'`,
 		`INSERT INTO users (id, name, email) VALUES ('soft-delete-user-2', 'Second', 'reuse@example.test')`,
-		`DELETE FROM users WHERE email = 'reuse@example.test'`,
 	} {
 		if _, err := db.Exec(statement); err != nil {
 			t.Fatalf("verify active-record uniqueness with %q: %v", statement, err)
@@ -188,6 +187,7 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 	}
 
 	for attempts := 0; attempts < 32; attempts++ {
+		assertIntegrityRollbackPreflight(t, ctx, db, repoRoot, configPath, commandEnv)
 		output := runGrove(t, ctx, repoRoot, configPath, commandEnv, "migrate", "down")
 		if strings.Contains(output, "没有可回滚的迁移") {
 			break
@@ -224,7 +224,9 @@ func writeCLIConfig(t *testing.T, container *postgres.PostgresContainer) string 
 	}
 
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	content := fmt.Sprintf(`app:
+	content := fmt.Sprintf(`cors:
+  allowed_origins: ["http://localhost"]
+app:
   env: production
 jwt:
   secret: 0123456789abcdef0123456789abcdef

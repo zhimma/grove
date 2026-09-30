@@ -21,7 +21,7 @@ CoreServer → middleware → router → handler → service → model / databas
         │
         ├─ API      :8080
         ├─ Console  :8081
-        └─ Worker   :8082（health/metrics；任务由 Redis 驱动）
+        └─ Worker   :8082（health/metrics；队列经 Redis，调度由 Scheduler 承载）
 ```
 
 ## 服务边界
@@ -60,7 +60,7 @@ CoreServer → middleware → router → handler → service → model / databas
 
 1. CoreServer 创建 Gin engine、基础中间件和健康端点。
 2. 服务 router 注册公开和受保护路由。
-3. middleware 处理 request id、鉴权、限流、body limit、观测和错误出口。
+3. middleware 处理 request id、鉴权、body limit、观测和错误出口；登录链路另有登录保护，当前没有覆盖所有接口的通用限流中间件。
 4. handler 绑定请求并调用 service。
 5. service 使用数据库、缓存、事件或任务组件完成业务流程。
 6. response 统一输出成功或失败 envelope。

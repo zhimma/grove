@@ -5,7 +5,7 @@ import {
   getAdminList,
   updateAdmin,
   updateAdminStatus,
-} from '#/api/core/console';
+} from '#/api/admin';
 import ResourcePage from '#/components/resource-page/index.vue';
 
 const columns = [

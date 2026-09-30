@@ -138,8 +138,7 @@ func formatFrontend(created []string) (bool, error) {
 	return true, nil
 }
 
-const frontendAPITemplate = `import type { ConsoleListResult } from '#/api/core/console';
-import type { PageParams } from '#/types/common';
+const frontendAPITemplate = `import type { PageData, PageParams } from '#/types/pagination';
 
 import { consoleEndpoint } from '#/api/console-contract';
 import { requestClient } from '#/api/request';
@@ -154,7 +153,7 @@ export interface Console{{.Name}} {
 }
 
 export function get{{.Name}}List(params: PageParams & Record<string, any>) {
-  return requestClient.get<ConsoleListResult<Console{{.Name}}>>(
+  return requestClient.get<PageData<Console{{.Name}}>>(
     consoleEndpoint('consoleList{{.Plural}}'),
     { params },
   );

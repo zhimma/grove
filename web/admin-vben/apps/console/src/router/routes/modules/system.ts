@@ -27,7 +27,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'ConsoleRoles',
         path: '/system/role',
-        component: () => import('#/views/system/role/index.vue'),
+        component: () => import('#/views/system/roles/index.vue'),
         meta: { title: '角色权限' },
       },
       {
@@ -41,7 +41,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'ConsoleScheduledTasks',
         path: '/system/scheduled-task',
-        component: () => import('#/views/system/scheduled-task/index.vue'),
+        component: () => import('#/views/system/scheduled-tasks/index.vue'),
         meta: {
           icon: 'lucide:clock',
           title: '计划任务',
@@ -50,7 +50,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'ConsoleOperationLog',
         path: '/system/operation-log',
-        component: () => import('#/views/system/operation-log/index.vue'),
+        component: () => import('#/views/system/operation-logs/index.vue'),
         meta: {
           icon: 'lucide:file-text',
           title: '操作日志',
@@ -59,7 +59,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'ConsoleLoginLog',
         path: '/system/login-log',
-        component: () => import('#/views/system/login-log/index.vue'),
+        component: () => import('#/views/system/login-logs/index.vue'),
         meta: {
           icon: 'lucide:log-in',
           title: '登录日志',

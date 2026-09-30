@@ -132,7 +132,7 @@ func databaseSystem(db *gorm.DB) string {
 	if db == nil || db.Dialector == nil {
 		return "unknown"
 	}
-	switch strings.ToLower(strings.TrimSpace(db.Dialector.Name())) {
+	switch strings.ToLower(strings.TrimSpace(db.Name())) {
 	case "postgres", "postgresql":
 		return "postgresql"
 	case "mysql":
@@ -140,7 +140,7 @@ func databaseSystem(db *gorm.DB) string {
 	case "sqlite":
 		return "sqlite"
 	default:
-		return strings.ToLower(strings.TrimSpace(db.Dialector.Name()))
+		return strings.ToLower(strings.TrimSpace(db.Name()))
 	}
 }
 

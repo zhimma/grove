@@ -6,6 +6,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/zhimma/grove/internal/jobtask"
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/job"
@@ -93,7 +94,7 @@ func (s *DemoStarterService) DispatchEchoJob(ctx context.Context, input Dispatch
 		return DispatchEchoJobOutput{}, errx.InvalidParams().WithMessage("消息内容不能为空")
 	}
 
-	taskID, err := s.jobs.Enqueue(ctx, job.TaskEcho, job.EchoPayload{
+	taskID, err := s.jobs.Enqueue(ctx, jobtask.TaskEcho, jobtask.EchoPayload{
 		Message:     message,
 		RequestedBy: input.UserID,
 		RequestID:   input.RequestID,

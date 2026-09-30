@@ -6,7 +6,6 @@ import (
 	"go/format"
 	"strings"
 	"text/template"
-	"unicode"
 )
 
 // moduleSpec is everything a generated vertical slice is rendered from.
@@ -24,10 +23,22 @@ type moduleSpec struct {
 }
 
 func newModuleSpec(module, input, label string, fields []field) (moduleSpec, error) {
+	input = strings.TrimSpace(input)
+	if !moduleNamePattern.MatchString(input) {
+		return moduleSpec{}, fmt.Errorf("模块名称 %q 必须由英文字母、数字及单个分隔符组成", input)
+	}
 	name := toPascal(input)
 	snake := toSnake(input)
 	if !isValidGoIdentifier(name) || snake == "" {
 		return moduleSpec{}, fmt.Errorf("模块名称 %q 不能转换为合法 Go 标识符", input)
+	}
+	if err := validateModuleFilename(snake); err != nil {
+		return moduleSpec{}, err
+	}
+	for _, field := range fields {
+		if field.GoName == name+"ID" {
+			return moduleSpec{}, fmt.Errorf("字段 %q 与更新请求中的 %sID 冲突", field.Name, name)
+		}
 	}
 	label = strings.TrimSpace(label)
 	if label == "" {
@@ -41,13 +52,12 @@ func newModuleSpec(module, input, label string, fields []field) (moduleSpec, err
 	if strings.ContainsAny(label, "\"'`\\<>") {
 		return moduleSpec{}, fmt.Errorf("模块显示名 %q 不能包含引号、反斜杠或尖括号", label)
 	}
-	runes := []rune(name)
-	runes[0] = unicode.ToLower(runes[0])
+	first, rest, _ := strings.Cut(snake, "_")
 	return moduleSpec{
 		Module:    module,
 		Name:      name,
 		Plural:    toPascal(toSnakePlural(input)),
-		Var:       string(runes),
+		Var:       first + toPascal(rest),
 		Snake:     snake,
 		Kebab:     strings.ReplaceAll(snake, "_", "-"),
 		Table:     toSnakePlural(input),

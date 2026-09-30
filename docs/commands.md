@@ -3,7 +3,7 @@
 所有命令从仓库根目录执行。先确认 Go 版本符合项目要求，再运行 `make help`。
 
 ```bash
-go version                 # 需要 1.25.14 及以上
+go version                 # 需要 1.27.1 及以上；仓库与 CI 固定 1.27.1
 export GOTOOLCHAIN=local
 make help
 ```
@@ -58,8 +58,8 @@ make seed.bootstrap
 - `make docs.check`：检查 canonical 文档中的 Provider、路由目录和依赖注入示例
 - `make quality`：Go 格式与 vet、文档一致性、前端 lint、循环依赖和当前 diff 空白检查
 - `make ci`：完整质量门禁；先执行 `make admin.install`
-- `make quality.go.lint`：运行 `.golangci.yml` 中配置的 Go lint；经 `go run` 固定为 CI 的 v1.64.8，不必安装
-- `make quality.govuln`：运行 Go 漏洞检查；经 `go run` 固定为 CI 的 v1.6.0。标准库漏洞取决于本机 Go 版本，以 `go.mod` 的 toolchain 为准
+- `make quality.go.lint`：运行 `.golangci.yml` 中配置的 Go lint；经 `go run` 固定为 CI 的 v2.14.0，不必安装
+- `make quality.govuln`：运行 Go 漏洞检查；经 `go run` 固定为 CI 的 v1.6.0。标准库漏洞取决于实际执行的 Go 版本；`go.mod` 声明最低版本，`.mise.toml` 与 CI 固定验证版本
 - `make contracts`：检查 API/Console 路由与 OpenAPI 合同
 - `make admin.install`：按 lockfile 安装前端依赖
 - `make admin.typecheck`：Console TypeScript 类型检查

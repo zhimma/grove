@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,10 +20,7 @@ func TestWorkerExposesHealthAndMetrics(t *testing.T) {
 		WorkerPort: "0",
 		Log:        config.LogConfig{Level: "error", Path: t.TempDir()},
 		Server:     config.ServerConfig{ShutdownTimeout: 1},
-		Databases: config.DatabasesConfig{
-			Default: config.DatabaseConfig{Enabled: true},
-		},
-		Scheduler: config.SchedulerConfig{Enabled: true, Timezone: "UTC"},
+		Scheduler:  config.SchedulerConfig{Enabled: true, Timezone: "UTC"},
 		Observability: config.ObservabilityConfig{
 			Enabled:          true,
 			MetricsEnabled:   true,
@@ -75,6 +73,9 @@ func TestWorkerStartsSchedulerWhenQueueIsDisabled(t *testing.T) {
 	if app.provider.Scheduler == nil || app.provider.JobServer != nil {
 		t.Fatalf("scheduler=%v jobServer=%v", app.provider.Scheduler, app.provider.JobServer)
 	}
+	if app.reconciler != nil {
+		t.Fatal("worker without a database must not start a database reconciler")
+	}
 
 	var calls atomic.Int64
 	if err := app.provider.Scheduler.Register(&scheduler.Task{
@@ -103,5 +104,21 @@ func TestWorkerStartsSchedulerWhenQueueIsDisabled(t *testing.T) {
 	}
 	if err := app.Stop(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestWorkerRejectsInvalidEnabledDatabase(t *testing.T) {
+	cfg := &config.Config{
+		App:       config.AppConfig{Name: "grove", Env: "test"},
+		Log:       config.LogConfig{Level: "error", Path: t.TempDir()},
+		Scheduler: config.SchedulerConfig{Enabled: true, Timezone: "UTC"},
+		Databases: config.DatabasesConfig{Default: config.DatabaseConfig{Enabled: true, Driver: "unsupported"}},
+	}
+	app, cleanup, err := NewServer(cfg)
+	if cleanup != nil {
+		t.Cleanup(cleanup)
+	}
+	if app != nil || err == nil || !strings.Contains(err.Error(), "unsupported") {
+		t.Fatalf("enabled database must be initialized, not silently ignored: app=%v err=%v", app, err)
 	}
 }

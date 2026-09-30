@@ -1,4 +1,4 @@
-import type { ConsoleListResult } from '#/api/core/console';
+import type { PageData } from '#/types/pagination';
 
 import { consoleEndpoint } from '#/api/console-contract';
 import { requestClient } from '#/api/request';
@@ -35,7 +35,7 @@ export interface UpdateScheduledTaskPayload {
 
 // 获取计划任务列表
 export function getScheduledTaskList(params: ScheduledTaskListParams) {
-  return requestClient.get<ConsoleListResult<ScheduledTask>>(
+  return requestClient.get<PageData<ScheduledTask>>(
     consoleEndpoint('consoleListScheduledTasks'),
     { params },
   );

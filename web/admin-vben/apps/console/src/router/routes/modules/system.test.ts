@@ -2,15 +2,10 @@ import type { RouteRecordRaw } from 'vue-router';
 
 import { describe, expect, it } from 'vitest';
 
-const routeModules = import.meta.glob('./*.ts', { eager: true }) as Record<
-  string,
-  { default?: RouteRecordRaw[] }
->;
+import { routeModules } from '../route-modules';
 
 function allRoutes(): RouteRecordRaw[] {
-  return Object.entries(routeModules)
-    .filter(([path]) => !path.endsWith('.test.ts'))
-    .flatMap(([, module]) => module.default ?? []);
+  return Object.values(routeModules).flatMap((module) => module.default);
 }
 
 // Route modules are concatenated, not merged by path. A /system route declared
@@ -18,6 +13,13 @@ function allRoutes(): RouteRecordRaw[] {
 // joining 系统管理 — which is exactly what happened when the log and scheduled
 // task pages were added in modules of their own.
 describe('system route ownership', () => {
+  it('loads only route definitions into the production module registry', () => {
+    expect(Object.keys(routeModules).length).toBeGreaterThan(0);
+    for (const [path, module] of Object.entries(routeModules)) {
+      expect(path).not.toMatch(/\.(test|spec)\.ts$|\/__tests__\//);
+      expect(Array.isArray(module.default)).toBe(true);
+    }
+  });
   it('declares every /system page under one parent in one module', () => {
     const topLevel = allRoutes();
 

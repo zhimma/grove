@@ -46,7 +46,7 @@ Grove 是 Go 单体脚手架，不是 Java 企业框架的 Go 翻译版。它借
 - 不把 refresh token 明文写入数据库、日志或 metrics。
 - 不让 handler 直接 new 数据库、Redis、Job 或 Casbin。
 - 不因为一个 CRUD 模块就引入 Factory/Strategy/State。
-- 不把 Task 24–29 的 Deferred 能力提前实现。
+- 未实现能力和外部验收以[当前状态](../status.md)及[升级清单](../plans/2026-08-29-grove-framework-upgrade-plan.md)为准；暂缓不等于完成，不按旧计划编号推断现有能力。
 
 ## 新增 Console 模块的最小链路
 

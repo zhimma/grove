@@ -36,17 +36,18 @@ func NewServer(cfg *config.Config) (*WorkerApp, func(), error) {
 		return nil, nil, err
 	}
 
-	handler.RegisterDefaultJobs(p.JobServer)
+	handler.RegisterEchoJob(p.JobServer)
 
 	// The scheduler is driven by console_scheduled_tasks, so a task the code
 	// does not define cannot be introduced from the console. Without a database
 	// there is no schedule table: the scheduler still runs tasks registered
 	// directly in code, they just cannot be managed from the console.
 	var reconciler *task.Reconciler
-	if p.Scheduler != nil && p.DB == nil {
+	hasDatabase := p.DB != nil && p.DB.Default() != nil
+	if p.Scheduler != nil && !hasDatabase {
 		logger.Warn().Msg("未配置数据库，计划任务无法在后台管理")
 	}
-	if p.Scheduler != nil && p.DB != nil {
+	if p.Scheduler != nil && hasDatabase {
 		definitions, definitionsErr := task.Definitions(p.DB)
 		if definitionsErr != nil {
 			_ = p.Close()

@@ -221,7 +221,7 @@ func resolveTypeErrorFieldInStruct(c *gin.Context, target any, t reflect.Type, s
 		field := t.Field(i)
 		if field.Anonymous {
 			fieldType := field.Type
-			for fieldType.Kind() == reflect.Ptr {
+			for fieldType.Kind() == reflect.Pointer {
 				fieldType = fieldType.Elem()
 			}
 			if fieldType.Kind() == reflect.Struct {
@@ -281,7 +281,7 @@ func readRequestValue(c *gin.Context, source, key string) (string, bool) {
 }
 
 func fieldValueHasTypeError(fieldType reflect.Type, rawValue string) bool {
-	for fieldType.Kind() == reflect.Ptr {
+	for fieldType.Kind() == reflect.Pointer {
 		fieldType = fieldType.Elem()
 	}
 
@@ -419,7 +419,7 @@ func indirectStructType(target any) *reflect.Type {
 	}
 
 	t := reflect.TypeOf(target)
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	if t.Kind() != reflect.Struct {

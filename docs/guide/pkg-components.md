@@ -68,7 +68,7 @@ return dispatcher.Dispatch(ctx, OrderCreated{ID: orderID})
 
 ## Scheduler
 
-计划任务组件基于 `robfig/cron`，适合单进程定时任务。
+计划任务组件基于 `robfig/cron`，由 Worker 承载；支持进程内互斥，并可通过 Provider 注入共享 Redis store 协调多 Worker。
 
 推荐写法：
 
@@ -81,12 +81,13 @@ err := p.Scheduler.EveryMinute("sync_stats", scheduler.JobFunc(func(ctx context.
 约定：
 
 - 任务名必须唯一。
-- `Mutex` 可防止同一个进程内的任务重叠执行。
+- `Mutex` 防止同名任务在本进程重叠执行；已注入共享锁时还会争用 Redis 锁。
 - `Timeout` 为单次执行派生 deadline，Stop 会取消所有任务的 root context。
 - `Remove(name)` 会真正移除 cron entry，移除后不会再被调度。
 - Scheduler 只在 `worker` 进程且 `scheduler.enabled=true` 时创建和启动。
 - `Start()`、`Stop()` 和手动 `Run()` 都返回 error，调用方不得忽略关闭超时。
-- 多实例部署下的全局互斥需要 Redis/DB 锁，本组件不隐式实现。
+- `internal/provider.WithScheduler` 在 Redis 客户端与 Redis 缓存 store 可用时注入共享锁；未配置共享锁时仍按单 Worker 使用。锁的 TTL、释放竞争窗口及幂等要求见[多实例边界](scheduler.md#多实例)。
+- 后台调度管理使用 `app/worker/internal/task` 的注册表与数据库对账；表中只存调度参数和上次结果，不能存放脚本或新建任务体。
 
 ## Storage
 

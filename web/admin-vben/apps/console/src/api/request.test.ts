@@ -51,7 +51,7 @@ vi.mock('#/utils/http-error', () => ({
     status: 401,
   }),
 }));
-vi.mock('./core', () => ({
+vi.mock('./auth', () => ({
   refreshTokenApi: mocks.refreshTokenApi,
 }));
 

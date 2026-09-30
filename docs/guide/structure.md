@@ -49,10 +49,13 @@ grove/
 `internal/` 放置只在仓库内部复用的基础设施：
 
 - `bootstrap/`：服务启动期公共装配
-- `config/`：配置加载与配置类型
+- `config/`：配置加载与配置类型；`load.go` 读文件，`defaults.go` 默认值，`env.go` 环境覆盖，`normalize.go` 归一化，`validate.go` 校验
 - `docsui/`：文档页与 OpenAPI 页面基础能力
 - `middleware/`：通用 Gin 中间件
 - `model/`：共享 GORM 模型
+- `datatype/`：数据库字段类型
+- `jobtask/`：生产者和消费者共用的任务名与 payload，不放队列实现
+- `testkit/`：共享数据库测试夹具
 - `observability/`：OpenTelemetry 追踪与指标
 - `provider/`：数据库、缓存、存储、认证等资源装配
 - `readiness/`：就绪探针
@@ -62,7 +65,7 @@ grove/
 
 `pkg/` 是本仓库的基础层：跨 api / console / worker 复用的技术能力。它**不是对外发布的通用库**，因此允许出现 console、admin 这类本仓库的领域词（例如 `auth.UserTypeConsole`、`rbac.CheckConsolePermission`）和中文文案。
 
-仍然成立的唯一硬约束：**不得反向依赖 `internal/` 或 `app/`**，用来固定依赖方向。当前包含：
+仍然成立的唯一硬约束：**不得反向依赖 `internal/` 或 `app/`**，用来固定依赖方向。当前包含（具体 API 见[基础组件](pkg-components.md)）：
 
 - `auth`
 - `cache`
@@ -74,6 +77,10 @@ grove/
 - `job`
 - `logger`
 - `migrate`
+- `pagination`
+- `password`
+- `ratelimit`
+- `secretbox`
 - `permission`
 - `request`
 - `response`
@@ -97,9 +104,18 @@ grove/
 
 - `web/admin-vben`：管理后台前端 monorepo
 
-主应用为：
+主应用为 `web/admin-vben/apps/console`。Vben workspace 保留，业务源码位于 `src/`：
 
-- `web/admin-vben/apps/console`
+- `api/`：按资源拆分，`request.ts` 是传输入口，`console-contract.*` 是接口登记。
+- `types/pagination.ts`：唯一的列表参数、元数据和分页结果类型。
+- `views/system/{admins,users,roles,sessions,scheduled-tasks,operation-logs,login-logs}/index.vue`：系统管理。
+- `views/configs/{system,site}/index.vue` 与 `configs/components/ConfigForm.vue`：配置页面及领域表单。
+- `views/content/articles/index.vue`、`views/dashboard/overview/index.vue`：内容与工作台。
+- `views/<模块复数>/index.vue`：生成的新业务模块。
+- `components/resource-page/`：通用列表和编辑行为，自定义表单通过组件参数传入。
+- `router/routes/modules/`：按业务域注册页面；系统管理保持唯一父路由，路由名是菜单授权 key。
+
+CLI 在 `cmd/grove` 中按命令拆为 `migrate.go`、`seed.go`、`make_module.go`、`key.go` 等；`main.go` 只启动 Cobra。所有文件仍属于 `package main`。
 
 ### `docs/`
 
@@ -122,7 +138,7 @@ grove/
 ### 通用能力放在 `pkg/*`
 
 - `pkg/*` 只提供基础能力
-- 不在 `pkg/*` 中引入管理后台、业务模块或页面概念
+- 不在 `pkg/*` 放业务流程、页面或示例任务协议；允许身份类型等现有框架语义，但不能反向导入 `app/` 或 `internal/`
 
 ### 共享装配放在 `internal/*`
 

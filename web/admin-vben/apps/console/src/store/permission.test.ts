@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   getAuthorizationOverviewApi: vi.fn(),
 }));
 
-vi.mock('#/api/core/auth', () => ({
+vi.mock('#/api/auth', () => ({
   getAuthorizationOverviewApi: mocks.getAuthorizationOverviewApi,
 }));
 

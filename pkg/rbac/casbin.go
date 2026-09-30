@@ -128,7 +128,7 @@ func (e *Enforcer) RefreshPolicy() error {
 	lock := e.GetLock()
 	lock.Lock()
 	defer lock.Unlock()
-	if err := e.SyncedEnforcer.Enforcer.LoadPolicy(); err != nil {
+	if err := e.Enforcer.LoadPolicy(); err != nil {
 		return fmt.Errorf("reload casbin policy: %w", err)
 	}
 	e.version.Add(1)
@@ -227,7 +227,7 @@ func (e *Enforcer) replaceFilteredPolicies(sec, ptype string, rules [][]string, 
 	if _, err := adapter.UpdateFilteredPolicies(sec, ptype, rules, fieldIndex, fieldValues...); err != nil {
 		return err
 	}
-	if err := e.SyncedEnforcer.Enforcer.LoadPolicy(); err != nil {
+	if err := e.Enforcer.LoadPolicy(); err != nil {
 		return fmt.Errorf("reload casbin policy after replacement: %w", err)
 	}
 	return nil

@@ -8,6 +8,8 @@ docker build --build-arg SERVICE=console -t grove-console:local .
 docker build --build-arg SERVICE=worker -t grove-worker:local .
 ```
 
+三个服务构建共享 Go 模块与编译缓存；服务选择在依赖下载之后，避免切换 `SERVICE` 时重复下载依赖。构建上下文排除 `bin/`、`tmp/`、`.tooling/` 等本地产物。
+
 运行镜像只包含对应服务二进制，以 UID/GID `10001` 的非 root 用户执行，并预建 `/app/logs` 和 `/app/storage`。迁移使用发布产物中的 `bin/grove` 在受控的一次性 migration job 中执行；不要通过改变服务镜像的 entrypoint 临时执行迁移。
 
 ## 运行时约束

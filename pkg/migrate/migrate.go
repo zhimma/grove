@@ -112,23 +112,6 @@ func (m *Migrator) Down() (string, error) {
 	return name, nil
 }
 
-func validateDownMigration(db *gorm.DB, name string) error {
-	if name != "202604150011_add_system_config_secrets" {
-		return nil
-	}
-	if db == nil {
-		return fmt.Errorf("migration database is required")
-	}
-	var hasSecrets bool
-	if err := db.Raw(`SELECT EXISTS (SELECT 1 FROM system_configs WHERE is_secret = TRUE)`).Scan(&hasSecrets).Error; err != nil {
-		return fmt.Errorf("check encrypted system configs before down migration: %w", err)
-	}
-	if hasSecrets {
-		return fmt.Errorf("cannot remove is_secret while encrypted system configs exist")
-	}
-	return nil
-}
-
 func (m *Migrator) Status() ([]Status, error) {
 	dir, err := m.migrationDir()
 	if err != nil {
@@ -171,7 +154,7 @@ func (m *Migrator) openEngine() (*golangmigrate.Migrate, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	driverName := normalizeDriver(m.db.Dialector.Name())
+	driverName := normalizeDriver(m.db.Name())
 	var migrationDriver migratedatabase.Driver
 	switch driverName {
 	case "postgres":
@@ -184,7 +167,7 @@ func (m *Migrator) openEngine() (*golangmigrate.Migrate, func(), error) {
 		})
 	default:
 		_ = conn.Close()
-		return nil, nil, fmt.Errorf("unsupported migration database driver: %s", m.db.Dialector.Name())
+		return nil, nil, fmt.Errorf("unsupported migration database driver: %s", m.db.Name())
 	}
 	if err != nil {
 		_ = conn.Close()
@@ -216,7 +199,7 @@ func (m *Migrator) migrationDir() (string, error) {
 	if m == nil || m.db == nil {
 		return "", fmt.Errorf("migration database is required")
 	}
-	return ResolveDialectDir(m.dir, m.db.Dialector.Name())
+	return ResolveDialectDir(m.dir, m.db.Name())
 }
 
 // ResolveDialectDir resolves a dialect-specific directory while keeping explicit

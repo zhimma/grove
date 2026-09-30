@@ -110,3 +110,9 @@ database/seeds/mysql/
 
 - [开发规范](../01-%E5%BC%80%E5%8F%91%E8%A7%84%E8%8C%83.md)
 - [服务层](./service.md)
+
+## 回滚与数据前置条件
+
+回滚应在备份完成、应用写入停止的维护窗口中执行。版本 `202604150009` 会恢复包含软删除行的旧唯一约束，当前 CLI 先检查 users.email、console_roles.code、console_admins.account、配置分组/键，以及 PostgreSQL 旧管理员邮箱/手机号约束。存在冲突则在执行 DDL、标记 dirty 前拒绝，并只说明表和字段，不回显数据值；应用不会自动删除或改名数据。
+
+维护人员须依据业务规则显式处理冲突，或继续运行兼容当前 schema 的应用；不要跳过检查、直接执行 down SQL。该检查不阻止并发业务写入，所以不能替代停写。加密配置的 `is_secret` 回滚同样有数据保护检查。依据：`pkg/migrate/preflight.go` 与 `tests/integration/rollback_test.go`。

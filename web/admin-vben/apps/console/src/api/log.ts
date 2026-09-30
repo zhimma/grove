@@ -1,4 +1,4 @@
-import type { ConsoleListResult } from '#/api/core/console';
+import type { PageData } from '#/types/pagination';
 
 import { consoleEndpoint } from '#/api/console-contract';
 import { requestClient } from '#/api/request';
@@ -63,7 +63,7 @@ export interface LogListParams {
 
 // 获取操作日志列表
 export function getOperationLogList(params: LogListParams) {
-  return requestClient.get<ConsoleListResult<OperationLog>>(
+  return requestClient.get<PageData<OperationLog>>(
     consoleEndpoint('consoleListOperationLogs'),
     { params },
   );
@@ -78,7 +78,7 @@ export function getOperationLogDetail(id: string) {
 
 // 获取登录日志列表
 export function getLoginLogList(params: LogListParams) {
-  return requestClient.get<ConsoleListResult<LoginLog>>(
+  return requestClient.get<PageData<LoginLog>>(
     consoleEndpoint('consoleListLoginLogs'),
     { params },
   );

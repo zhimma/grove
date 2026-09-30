@@ -16,9 +16,15 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+const testTaskType = "test.message"
+
+type testPayload struct {
+	Message string `json:"message"`
+}
+
 func TestClientEnqueueRequiresInitializedClient(t *testing.T) {
 	var client *Client
-	if _, err := client.Enqueue(context.Background(), TaskEcho, EchoPayload{Message: "hello"}); err == nil {
+	if _, err := client.Enqueue(context.Background(), testTaskType, testPayload{Message: "hello"}); err == nil {
 		t.Fatal("expected enqueue error for nil client")
 	}
 }
@@ -29,7 +35,7 @@ func TestServerRegisterAllowsNilServerState(t *testing.T) {
 		t.Fatal("expected initialized server mux")
 	}
 
-	if err := server.Register(TaskEcho, func(context.Context, *asynq.Task) error {
+	if err := server.Register(testTaskType, func(context.Context, *asynq.Task) error {
 		return nil
 	}); err != nil {
 		t.Fatalf("register task: %v", err)
@@ -38,7 +44,7 @@ func TestServerRegisterAllowsNilServerState(t *testing.T) {
 
 func TestServerRegisterReturnsErrorForNilServer(t *testing.T) {
 	var server *Server
-	if err := server.Register(TaskEcho, func(context.Context, *asynq.Task) error {
+	if err := server.Register(testTaskType, func(context.Context, *asynq.Task) error {
 		return nil
 	}); err == nil {
 		t.Fatal("expected nil server register error")
@@ -46,9 +52,9 @@ func TestServerRegisterReturnsErrorForNilServer(t *testing.T) {
 }
 
 func TestParsePayloadDecodesJSON(t *testing.T) {
-	task := asynq.NewTask(TaskEcho, []byte(`{"message":"hello","_grove_trace":{"traceparent":"ignored-by-old-decoder"}}`))
+	task := asynq.NewTask(testTaskType, []byte(`{"message":"hello","_grove_trace":{"traceparent":"ignored-by-old-decoder"}}`))
 
-	var payload EchoPayload
+	var payload testPayload
 	if err := ParsePayload(task, &payload); err != nil {
 		t.Fatalf("parse payload failed: %v", err)
 	}
@@ -68,7 +74,7 @@ func TestTraceContextInjectionPreservesJSONPayloadCompatibility(t *testing.T) {
 	propagator := propagation.TraceContext{}
 	body := injectTraceContext(ctx, propagator, []byte(`{"message":"hello"}`))
 
-	var payload EchoPayload
+	var payload testPayload
 	if err := json.Unmarshal(body, &payload); err != nil || payload.Message != "hello" {
 		t.Fatalf("business payload changed: payload=%#v err=%v body=%s", payload, err, body)
 	}

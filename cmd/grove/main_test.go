@@ -367,10 +367,11 @@ func TestMakeModuleCompilesForEachFieldShape(t *testing.T) {
 	chdir(t, root)
 
 	shapes := map[string]string{
-		"Counter": "hits:int",
-		"Flag":    "active:bool",
-		"Moment":  "happened_at:time:required",
-		"Memo":    "body:text:required",
+		"Counter":    "hits:int",
+		"Flag":       "active:bool",
+		"Moment":     "happened_at:time:required",
+		"Memo":       "body:text:required",
+		"HTTPClient": "user_id:string,api_url:string,api_at:time",
 	}
 	crudTests := make([]string, 0, len(shapes))
 	for name, fields := range shapes {
@@ -506,6 +507,13 @@ func TestMakeModuleRejectsInvalidInputBeforeWriting(t *testing.T) {
 		"required bool":       {"Product", "--fields", "active:bool:required"},
 		"label with a dot":    {"Product", "--label", "商品.管理"},
 		"label with a quote":  {"Product", "--label", "商品'管理"},
+		"test suffix":         {"InvoiceTest"},
+		"os suffix":           {"InvoiceLinux"},
+		"arch suffix":         {"InvoiceAMD64"},
+		"field collision":     {"Product", "--fields", "api_url:string,a_p_i_u_r_l:string"},
+		"base collision":      {"Product", "--fields", "base:string"},
+		"method collision":    {"Product", "--fields", "table_name:string"},
+		"input collision":     {"Product", "--fields", "product_id:string"},
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {

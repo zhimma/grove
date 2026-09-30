@@ -44,7 +44,7 @@
   负责本地路由与菜单过滤
 - `web/admin-vben/apps/console/src/store/permission.ts`
   负责当前用户权限状态
-- `web/admin-vben/apps/console/src/views/system/role`
+- `web/admin-vben/apps/console/src/views/system/roles`
   负责角色授权页面
 
 ## 3. 请求执行流程

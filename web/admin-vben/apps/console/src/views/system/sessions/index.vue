@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { ConsoleSession } from '#/api/core/console';
+import type { ConsoleSession } from '#/api/session';
 
 import { computed, onMounted, ref } from 'vue';
 
 import { message, Modal } from 'ant-design-vue';
 
-import { getSessionList, revokeSession } from '#/api/core/console';
+import { getSessionList, revokeSession } from '#/api/session';
 import { useAuthStore } from '#/store';
 
 defineOptions({ name: 'ConsoleSessions' });

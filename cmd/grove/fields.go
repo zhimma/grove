@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"unicode"
 )
 
 // field is one column of a generated module, parsed from `name:type[:required]`
@@ -26,7 +25,7 @@ var fieldTypes = map[string]bool{
 	"time":   true,
 }
 
-var fieldNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+var fieldNamePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 
 // reservedFieldNames are either supplied by model.Base or are SQL keywords that
 // would need dialect-specific quoting, which the generated migrations avoid.
@@ -49,6 +48,7 @@ func parseFields(spec string) ([]field, error) {
 
 	var fields []field
 	seen := map[string]bool{}
+	goNames := map[string]bool{"Base": true, "TableName": true, "ID": true, "CreatedAt": true, "UpdatedAt": true, "DeletedAt": true}
 	for raw := range strings.SplitSeq(spec, ",") {
 		raw = strings.TrimSpace(raw)
 		if raw == "" {
@@ -68,6 +68,10 @@ func parseFields(spec string) ([]field, error) {
 		if seen[name] {
 			return nil, fmt.Errorf("字段名 %q 重复", name)
 		}
+		goName := toPascal(name)
+		if goNames[goName] {
+			return nil, fmt.Errorf("字段 %q 转换后的 Go 名称 %q 与其他字段或模型成员冲突", name, goName)
+		}
 		if !fieldTypes[kind] {
 			return nil, fmt.Errorf("字段 %q 的类型 %q 不支持，可选 string、text、int、bool、time", name, kind)
 		}
@@ -84,7 +88,8 @@ func parseFields(spec string) ([]field, error) {
 			return nil, fmt.Errorf("%s 字段 %q 不能标记 required：零值（false 或 0）本身是合法值，需要约束请在 service 中校验", kind, name)
 		}
 		seen[name] = true
-		fields = append(fields, field{Name: name, GoName: toPascal(name), Type: kind, Required: required})
+		goNames[goName] = true
+		fields = append(fields, field{Name: name, GoName: goName, Type: kind, Required: required})
 	}
 	if len(fields) == 0 {
 		return nil, fmt.Errorf("至少需要一个字段")
@@ -127,9 +132,8 @@ func (f field) PatchType() string {
 
 // TimeVar names the parsed *time.Time local in generated create code.
 func (f field) TimeVar() string {
-	runes := []rune(f.GoName)
-	runes[0] = unicode.ToLower(runes[0])
-	return string(runes) + "Time"
+	first, rest, _ := strings.Cut(toSnake(f.GoName), "_")
+	return first + toPascal(rest) + "Time"
 }
 
 // TSType is the field's type in the generated frontend API module.

@@ -1,321 +1,172 @@
-# Grove 框架升级计划
+# Grove 升级与交付清单
 
-> 事实来源：当前 checkout 的源码、测试与命令输出。与本文冲突时以代码为准。
-> 上次核对：2026-09-29。
+> 类型：工作清单，保留原路径与任务 ID，便于持续勾选；不是当前架构事实来源。
+> 状态：主要开发已落地，部分范围已收敛，外部验收尚未完成。
+> 范围：作为整仓 fork / clone 的 Go 单体脚手架，维护开发体验、基础组件、前后端一致性和交付能力。
+> 依据：当前源码、配置、测试与实际命令输出；概览见[当前状态](../status.md)，用法见[文档中心](../README.md)。
+> 退出条件：本次交付范围的本地检查、对应提交的 CI、隔离环境和浏览器验收都有证据；暂缓项继续明确标注，不冒充完成。
 
-**Goal:** 把 Grove 从「可运行的模块化单体脚手架」收敛为可持续开发的 Go Web 框架基线——分层边界干净、多实例可部署、常用组件齐备。
+## 1. 状态约定
 
-**Architecture:** 保留模块化单体与显式依赖注入。启动入口负责配置与生命周期；handler 只做 HTTP 适配；service 负责业务流程与事务；model 负责共享模型；`pkg/` 只放不依赖本仓库业务的通用能力，`internal/` 放本仓库装配代码。借鉴 Laravel 的能力分类与开发体验，不复制 Facade、运行时容器、通用 Repository。
+- `[x]`：该条明确写出的实现范围已经落地；不代表部署验收通过。
+- `[ ] 待验收`：代码或脚本存在，还需要真实执行证据。
+- `[ ] 部分完成`：原任务只有部分范围实现，拆分列出已完成与剩余部分。
+- `[ ] 暂缓`：尚未实现，等待实际使用场景；不能算作已完成。
+- 历史单测数量、覆盖率、文件行数、提交数不作为当前基线。测试通过记录须注明执行范围；`SKIP` 不算验收成功。
 
----
+当前保留三入口单体、显式装配和精确依赖。`pkg/` 是仓库内跨服务基础层，不对外发布，也不得反向依赖 `internal/`；实际边界见[架构](../architecture.md)。
 
-## 1. 已完成（2026-08-30 `cb3cba8` / `3725645`）
+## 2. 已实现范围
 
-上一轮计划已全部落地，逐条回查源码确认：
+### 基础安全与工程能力
 
-| 项 | 证据 |
-| --- | --- |
-| 配置模板移除固定凭据 | `config.example.yaml` 密码/secret 均为 `''` |
-| JWT 加固 | `pkg/auth/token.go:224` HS256 pin + `WithIssuer` + audience + subject + iat 必填 |
-| Console 权限 fail-closed | `app/console/internal/middleware/admin_auth.go:145` enforcer 缺失返回 503 |
-| API 强制 RBAC | `app/api/internal/router/router.go` `permissionSet.RequireRoute()` |
-| 存储默认私有 | `app/console/internal/server/server.go:58` `!disk.Public \|\| !disk.ServeStatic` |
-| Scheduler panic 隔离 | `pkg/scheduler/scheduler.go:127` `cron.Recover` + `:215` recover |
-| 装配层显式注入依赖 | `app/console/internal/router/router.go` 传 db/enforcer/pages/catalog，不再透传 Provider |
-| 日志前后端契约对齐 | 前后端均为 3 个只读接口 |
-| 分页配置生效 | `router.go` `pagination.Policy{Default: cfg.API.DefaultPerPage, Max: cfg.API.MaxPerPage}`（G3 起） |
-| 旧 log service 清理 | `operation_log.go` / `login_log.go` 已删除 |
+- [x] 配置模板凭据留空、服务级校验、JWT 校验、Console 权限缺失拒绝、API 受保护路由授权。依据：[配置加载](../../internal/config/load.go)、[JWT](../../pkg/auth/token.go)、[Console 鉴权](../../app/console/internal/middleware/admin_auth.go)、[API 路由](../../app/api/internal/router/router.go)。
+- [x] 存储默认私有、上传校验、统一响应/错误/验证、审计日志契约。用法：[基础组件](../guide/pkg-components.md)、[响应与错误](../04-响应与错误处理规范.md)、[日志](../guide/logging.md)。
+- [x] Scheduler panic 隔离、readiness 与资源关闭生命周期。依据：[Scheduler](../../pkg/scheduler/scheduler.go)、[readiness](../../internal/readiness/)、[Provider](../../internal/provider/)。
 
-## 2. 当前实测基线
+### Phase 1 / 2：分层与多实例基础（T1–T5）
 
+- [x] **T1**：服务装配位于 `internal/server`，不再把它当作公共 `pkg/server`。
+- [x] **T2**：路由元数据统一到实例级 Catalog，删除进程级双轨路径。依据：[路由组件](../../pkg/route/)。
+- [x] **T3**：路由注册统一使用 `RegisterXxxRoutes`，清理 `WithDeps` 后缀。依据：[Console router](../../app/console/internal/router/router.go)。
+- [x] **T4**：Casbin 定时重新加载策略，关闭时停止后台任务；有传播延迟，不是即时通知。依据：[RBAC](../../pkg/rbac/casbin.go)。
+- [x] **T5**：Worker 可注入共享 Redis store，对 `Mutex` 任务争用同名锁；无共享锁时仅进程内互斥。锁不续期，默认 TTL 为 15 分钟，释放是 Get+Delete，不能据此承诺 exactly-once。依据：[WithScheduler](../../internal/provider/provider.go)、[Scheduler](../../pkg/scheduler/scheduler.go)；[使用边界](../guide/scheduler.md#多实例)。
+
+### Phase 5：计划任务后台管理（S1–S7）
+
+- [x] **S1**：`console_scheduled_tasks` 模型与 PostgreSQL/MySQL 迁移；表中只保存调度参数与上次结果。真实 up/down 验收见 R2。
+- [x] **S2**：代码内任务注册表；真实任务为清理过期 Console Session。
+- [x] **S3**：Worker 补齐数据库行并周期对账，不覆盖已保存的调度设置；执行后写回结果。
+- [x] **S4**：手动触发通过数据库请求标记与条件 UPDATE 认领；停用或未注册的任务会给出跳过结果。
+- [x] **S5**：Console 列表、编辑调度、启停、执行一次接口，接入权限和 OpenAPI；不提供后台新建任务体。
+- [x] **S6**：管理页面复用 ResourcePage，提供编辑、启停、执行和上次结果展示。
+- [x] **S7**：[计划任务指南](../guide/scheduler.md)与[新增模块指南](../03-console-新增模块指南.md)已说明接入方式。
+
+证据：[共享模型](../../internal/model/console_scheduled_task.go)、[Worker 注册与对账](../../app/worker/internal/task/)、[Console handler](../../app/console/internal/handler/scheduled_task.go)、[前端页面与测试](../../web/admin-vben/apps/console/src/views/system/scheduled-tasks/)。当前只保存上次执行摘要，没有完整执行历史；代码中已删除的任务行也没有前端“未注册”标记。
+
+### Phase 6：fork 质量治理（A/B/C/D）
+
+- [x] **A1/A2/A4**：清理文档私人路径、生成器读取目标 `go.mod`、提供 [fork 指南](../guide/fork.md)。**A3 已纠正为分类说明**：`users` 是可选保留的终端用户管理能力，`articles` / starter / echo 是示例，不再按“users 必须解耦”开任务。
+- [x] **B1/B2/B3**：移除误导性错误值和无调用响应别名，`response.Fail` 接收 `error`。依据：[errx](../../pkg/errx/)、[response](../../pkg/response/)。
+- [x] **C1/C2/C3/C4**：明确内部基础层定位、移除未接入的 transaction manager、收敛构造方式、统一 `any`。单一实现用具体类型，真实多实现边界仍保留接口。
+- [x] **C5**：系统管理菜单统一归属，共享 ResourcePage 位于 `components/`。依据：[系统路由](../../web/admin-vben/apps/console/src/router/routes/modules/system.ts)、[ResourcePage](../../web/admin-vben/apps/console/src/components/resource-page/)。
+- [x] **D1/D2/D3、T10**：密码哈希归入 `pkg/password`，补充 request / route / permission / errx 的行为测试，不按覆盖率机械补测试。
+- [x] **D4**：Go/Node 由 mise 固定，pnpm 由 corepack 按前端 `packageManager` 选择；命令入口见 [Makefile](../../Makefile)。
+
+### Phase 7：开发体验与组件完善（G1–G14）
+
+- [x] **G1/G1b**：`make:module --fields` 生成后端迁移、模型、CRUD、测试和 OpenAPI；存在 Console 契约文件时还生成前端 API、页面、路由与契约登记。使用方式见[生成器指南](../03-console-新增模块指南.md#用生成器起步)。
+- [x] **G2**：日志按大小轮转、按保留期清理。依据：[logger](../../pkg/logger/logger.go)，配置见[日志配置](../guide/configuration.md#log)。
+- [x] **G3**：分页下沉到 `pkg/pagination`，Console service 显式接收分页策略。依据：[pagination](../../pkg/pagination/)、[Console router](../../app/console/internal/router/router.go)。
+- [x] **G4 / T8 的数据库夹具部分**：共用 `OpenDB` 与 `CreateCasbinTable`，自动隔离并关闭测试数据库；生成的 service 测试也使用它们。依据：[testkit](../../internal/testkit/testkit.go)、[生成模板](../../cmd/grove/templates.go)。
+- [x] **G5/G6**：API 的 handler/service/middleware 移入自身 `internal/`；访问器、构造函数和主要类型命名按 Go 风格收敛。`storage.Manager` 保留原名。
+- [x] **G7**：`key:generate` 生成并打印随机密钥，不覆盖配置文件。依据：[CLI](../../cmd/grove/main.go)。
+- [x] **G10**：`make dev.api/dev.console/dev.worker` 使用固定版本 Air 热重载。
+- [x] **G11 的配置部分**：Compose 提供 PostgreSQL/Redis 与可选 MySQL，Makefile 提供启停入口；真实启动见 R1。依据：[compose.yaml](../../compose.yaml)。
+- [x] **G12/G13**：清理前端第三方统计、旧业务地址和假通知；ResourcePage 支持扩展操作与单元格，计划任务页已复用。复杂会话/日志页面保留专用实现。
+- [x] **G14**：本地与 CI 使用固定版本的 lint / govulncheck；Go 已升至 1.27.1，lint 配置已迁移到 v2。漏洞结论限定为当次扫描的可达调用链，详见下方记录。
+
+## 3. 部分完成与暂缓项
+
+### T8：测试辅助能力
+
+- [x] 共用数据库夹具和 Casbin 表结构，替换重复建库逻辑；与 G4 为同一交付，不重复开任务。
+- [ ] **暂缓**：原计划中的通用模型工厂与 HTTP 测试助手没有实现。现有源码只有 `OpenDB` 与 `CreateCasbinTable`；后续出现重复需求再抽取。
+
+### T9：真实模块接入验证
+
+- [x] 生成器回归在临时仓库生成 Invoice 等模块，并验证后端编译、CRUD、迁移文件规则及前后端契约。依据：[TestMakeModuleOutputPassesTheProjectGates](../../cmd/grove/main_test.go)。
+- [ ] **待验收**：在一个实际 fork 项目中完成真实业务模块接入，包括持久化、权限、页面操作与业务规则；记录生成后手动修改的文件、原因和验收结果。
+
+生成器测试不启动 PostgreSQL/MySQL，也不执行生成页面的 Vue typecheck/build 或浏览器操作。因此 T9 原始的真实业务验收仍属部分完成。
+
+### 组件扩展
+
+- [ ] **T6/G9 暂缓：邮件**。当前没有发信组件；`net/mail` 的邮箱格式解析不等于发送邮件。真实发送场景明确后再设计驱动和失败策略。
+- [ ] **T7 暂缓：通知**。当前没有站内信/多通道通知服务；已删除的前端假通知不算能力实现。
+- [ ] **G8 暂缓：通用接口限流**。当前 `pkg/ratelimit` 提供登录保护，尚非所有接口的 IP/用户配额中间件；等待正式 API 和配额策略。
+
+继续保留已接受的边界：不引入运行时服务容器、Facade、通用 Repository、BaseService、插件或微服务拆分；i18n、多租户等按实际项目需求单独决定。借鉴其他框架的能力和开发体验，实现保持 Go 的显式组合。
+
+## 4. 交付验收清单
+
+以下均未取得本次交付的完整外部证据。勾选时记录提交 SHA、环境、实际命令/操作、结果；缺少前提时保留未勾选。
+
+- [x] **R0：MySQL CI 跳过行为**。已与 PostgreSQL 对齐；在 `CI=true`、无效 Docker socket 下实测失败而非跳过。MySQL 就绪改为 SQL 检查，PostgreSQL 夹具补齐合法生产 CORS。
+- [x] **R1：Compose 与镜像**。OrbStack 上以独立项目/随机本机端口验证 Compose 三个依赖健康；三个服务镜像均构建并验证 readiness、UID 10001、只读根文件系统、只读配置挂载、日志/存储可写挂载与 SIGTERM 退出码 0。
+- [x] **R2：PostgreSQL/MySQL 生命周期**。2026-09-30 在 OrbStack 上分别运行 `-count=1` 的真实集成测试，完整 up/down、seed、dirty 状态、约束以及冲突回滚拒绝均通过，未跳过。
+- [ ] **R3：Redis 与多 Worker（部分通过）**。Redis Store contract 和单 Worker 的页面手动任务执行已在隔离环境通过；队列消费、多 Worker 互斥/超时和跨实例策略刷新仍需按[Staging 清单](../deployment/staging-checklist.md)验收。任务仍须幂等。
+- [ ] **R4：浏览器与运行流程（部分通过）**。本机已验证真实登录、主要页面、系统/站点配置保存、手动任务执行，以及三个镜像 readiness/优雅退出；令牌刷新/退出、最小权限角色、上传下载、任务编辑/启停及生产反向代理仍需完整验收。
+- [ ] **R5：镜像扫描**。为三个实际镜像保存扫描结果和 digest；当前 CI 配置只有镜像构建，没有自动镜像漏洞扫描任务。
+- [ ] **R6：对应提交的 CI**。经用户授权提交和推送后，保存对应提交的 pipeline 结果；配置了 Job 不等于 Job 已执行成功。
+- [ ] **R7：真实业务接入**。完成 T9 剩余验收，确认生成器之外还需手写哪些业务逻辑。
+
+### 数据库与 Redis 检查入口
+
+以下命令只针对隔离测试环境；Redis contract 使用专用测试库。
+
+```bash
+GROVE_INTEGRATION_DB=postgres go test -tags=integration ./tests/integration -v
+GROVE_INTEGRATION_DB=mysql go test -tags=integration ./tests/integration -v
+CACHE_REDIS_ADDR=127.0.0.1:6379 CACHE_REDIS_DB=15 \
+  go test -tags=integration ./pkg/cache -run '^TestRedisStoreContract$' -v
 ```
-go build ./...     exit 0
-go test ./...      exit 0（45 包 ok / 7 包无测试）
-go vet ./...       exit 0
-make quality       exit 0（fmt、any、password、vet、docs、diff、前端 lint 与循环依赖）
-make contracts     PASS（路由↔OpenAPI、前端↔OpenAPI 双向）
-前端单测            45 文件 / 328 测试
-```
 
-规模：211 个 Go 文件 / 36,007 行 / 14 个迁移（postgres 与 mysql 各一份，均含 down）。
+**执行边界**：PostgreSQL/MySQL 都只在本地允许因 Docker 不可用而跳过；CI 下容器不可用会失败。Redis 缺少 `CACHE_REDIS_ADDR` 时仍会跳过，验收须明确指定隔离实例地址并检查实际日志。
 
-`pkg/` 22 个基础层组件：`auth` `cache` `database` `errx` `event` `httpclient` `job` `logger` `migrate` `password` `permission` `ratelimit` `rbac` `request` `response` `route` `scheduler` `secretbox` `storage` `transaction` `ulid` `validation`。
+## 5. 验证记录与证据边界
 
-`server` 已于 T1 移入 `internal/`；`password` 由 D1 新增。
+### Go 1.27.1 升级验收（2026-09-30）
 
-## 3. 剩余问题
+以下是本会话上一轮 Go 升级的实际执行记录；本次仅整理文档，不将其写成重新运行的结果。
 
-| # | 问题 | 位置 | 影响 |
-| --- | --- | --- | --- |
-| 1 | 缺 Mail / Notification | 全仓无 smtp 相关代码 | 注册、找回密码、告警无法交付。按 YAGNI 等真实触发 |
-| 2 | 业务纵深薄 | `app/api` 仅 starter+auth，`app/worker` 仅 echo + 会话清理 | 未验证「新增一个功能要改几处」 |
-| 3 | 迁移未在真实库执行 | 本机无 Docker，`tests/integration/` 处于 skip | 需在 CI 或有 Docker 的机器确认 up/down |
+- [x] Go 1.27.1 已安装；`go.mod`、mise、Docker 和两套 CI 已对齐，移除旧 `toolchain` 指令。四个本机产物经 `go version` 确认为 Go 1.27.1。
+- [x] golangci-lint 升至 v2.14.0；保留原检查范围，修正新版检查发现的反射常量与冗余嵌入字段访问。业务依赖版本与 `go.sum` 未变。
+- [x] `go mod tidy -diff`、`make test`、`go test -race ./...`、`make quality.go.vet quality.go.lint build` 通过；最后一批等价写法修正后另验 `go test -race ./pkg/migrate ./cmd/grove`。
+- [x] `make quality.govuln` 通过：0 个代码可达漏洞，仍报告未触达的依赖漏洞，不宣称所有依赖无漏洞。
+- [x] `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags=-s ./app/api/cmd ./app/console/cmd ./app/worker/cmd ./cmd/grove` 通过。
+- [x] lint 配置校验、Air v1.67.4 的编译与 `-v`、`make docs.check quality.go.fmt`、`git diff --check` 通过。
+- [ ] Docker 镜像和真实 PostgreSQL/MySQL/Redis：当时 Docker daemon 未运行，仍待 R1–R3 验收。
 
-## 4. 任务
+上述 Go 命令通过 `mise exec -- env GOTOOLCHAIN=local` 使用仓库固定工具链。版本依据保留为 [Go 发布说明](https://go.dev/doc/go1.27)与 [golangci-lint 迁移指南](https://golangci-lint.run/docs/product/migration-guide/)。
 
-### Phase 1 — 分层收口
+### 前端与历史验证
 
-| ID | 任务 | 验收 |
-| --- | --- | --- |
-| ~~T1~~ | ~~`pkg/server` → `internal/server`~~ | ✅ `891540e` |
-| ~~T2~~ | ~~删 `pkg/route` 全局状态 + 合并 `*WithCatalog` 双轨~~ | ✅ `a0ac0ff` |
-| ~~T3~~ | ~~清理 `RegisterXxxRoutesWithDeps` 后缀~~ | ✅ 本节第 3 行 |
+前一开发阶段记录了前端 typecheck、lint、unit、循环依赖检查、构建及生成模块后的手工门禁通过。这里只保留验证范围，不沿用旧测试数量、覆盖率或“全部完成”的结论。本次 Go 升级与文档整理均未重新执行完整前端门禁；浏览器和真实部署仍待 R4。
 
-### Phase 2 — 多实例能力
+### 本次文档整理
 
-| ID | 任务 | 验收 |
-| --- | --- | --- |
-| ~~T4~~ | ~~Casbin 策略定时重载~~ | ✅ `85cac4c` |
-| ~~T5~~ | ~~Scheduler 集群互斥~~ | ✅ `643d1a7` |
+- [x] T8/G4 合并完成范围；T9 区分自动生成回归与真实业务验收；T6/G9、T7、G8 标为暂缓。
+- [x] 删除过期“当前基线”数字和已修复问题表；已实现内容链接到对应源码与指南。
+- [x] 新增状态入口，修正 Scheduler 多实例、生成器测试范围、MySQL `SKIP` 和命令使用说明。
+- [x] 文档本地链接与标题锚点、`make docs.check`、`git diff --check` 通过；非 Markdown 差异摘要与本轮开始时一致，保留已有 Go 升级改动。
 
-### Phase 3 — 补组件
+### 本轮真实运行验证（2026-09-30）
 
-| ID | 任务 | 验收 |
-| --- | --- | --- |
-| T6 | `pkg/mail`：接口 + SMTP 驱动 + log 驱动（dev），配置进 `config.yaml` | 单测覆盖发送失败与超时 |
-| T7 | `pkg/notify`：站内信 + 邮件，复用 `pkg/event` | 单测覆盖多通道分发 |
-| T8 | `internal/testkit`：模型工厂 + `httptest` 助手 | 至少替换 3 处重复 fixture |
+- PostgreSQL / MySQL：仓库真实生命周期测试均通过，含回滚前拒绝冲突、保持数据/索引/迁移状态、显式处理测试数据后完整 down。
+- Redis：隔离实例上的 `TestRedisStoreContract` 通过；未连接用户已有数据库。
+- 生成器：临时仓库生成 `HTTPClient` 后，后端编译/CRUD/契约检查及前端 typecheck/build 通过。
+- 浏览器：生产构建在本机 Chrome 中通过真实登录、管理员/用户/角色/会话/操作日志/登录日志/文章页面，以及系统/站点配置表单保存；任务从页面请求后由真实 Worker 执行成功，无未捕获的页面错误。
+- 运行验证暴露并修复两处装配问题：路由 glob 将测试模块打入生产包；Worker 未装配已配置的数据库。均补充针对性回归。
+- Go：`make test test.race quality.go.vet quality.go.lint build` 通过。前端：typecheck、lint、unit、循环依赖和构建通过。
+- 三个服务镜像：最终串行构建与运行全部通过，包含 UID 10001、只读根文件系统、挂载配置/可写日志与存储、真实数据库/Redis readiness、SIGTERM 退出码 0。首次并行运行时 OrbStack 曾退出（构建码 137），失败尝试未计为通过。
+- 本地验证标签为 `grove-{api,console,worker}:structure-review`；最终镜像 ID 分别以 `7b5a798266e6`、`a68e45208423`、`b9106a8da130` 开头。镜像留作本地复核，临时容器、数据卷与网络已清理。
+- Dockerfile 的服务参数位于依赖层之后，三个服务共用模块与编译缓存；构建上下文排除本地二进制和临时工具产物。
 
-### Phase 4 — 纵深验证
+以上是本机隔离环境的证据；远端 CI、镜像安全扫描、真实业务接入及完整 Staging 仍按 R3–R7 逐项验收。
 
-| ID | 任务 | 验收 |
-| --- | --- | --- |
-| T9 | 用一个真实模块走完 `grove make:module` 全流程，记录改动点数量 | 产出改动清单，决定是否需要再收敛 |
-| ~~T10~~ | ~~补无测试的基础包~~ | ✅ Phase 6 D2/D3。剩余 7 个是 3 个 `cmd`（main 包）、api/worker 示例模块、`pkg/ulid`（13 行），均不值得为覆盖率硬测 |
+## 6. 收尾顺序
 
-### Phase 5 — 计划任务后台管理
+### 本轮结构优化（2026-09-30，已完成）
 
-参考 `xinliangnote/go-gin-api` 的 `internal/{api,services}/cron`：DB 存调度参数 + 后台 CRUD + 手动触发。
+- [x] O1：生成器缩写、特殊文件后缀和转换后名称冲突；生成物构建回归。
+- [x] O2：PostgreSQL 生产配置夹具、MySQL SQL 就绪与 CI 失败语义；回滚前校验旧约束，不删除冲突数据。
+- [x] O3：前端 API 按资源拆分，共用分页类型；生成器同步。
+- [x] O4：页面目录按业务域统一，保留路由名与菜单 key；ResourcePage 自定义表单改为显式传入。
+- [x] O5：CLI/config 按职责拆文件，transaction 文件准确命名，echo 协议移出通用 job 包。
+- [x] O6：规范与结构指南同步；Go/前端门禁、真实数据库与 Redis、三个服务镜像构建和运行验证通过，详见本轮真实运行记录。
+- [x] O7（运行验证发现）：路由 glob 排除测试文件，防止 Vitest 进入生产包；Worker 补齐数据库装配，无数据库时不创建对账器，已补回归。真实浏览器已验证任务手动执行成功；镜像验证见 O6。
 
-**但不照抄它的执行模型。** 它的 `AddJob` 只打一条日志，注释写着"生产环境应写入 Kafka 由执行器订阅"——把任务内容存进 DB 再运行时解释这条路它自己没走通，而且那等于开一个远程命令执行口子。
+本轮不包含暂缓组件、远端发布与真实业务接入；已有 Go 升级改动保持，未经授权不提交或推送。
 
-Grove 的切法：
-
-| 归属 | 内容 | 理由 |
-| --- | --- | --- |
-| 代码 | 任务名 → handler 函数 | 编译期确定，可测试，无法注入 |
-| DB | cron 表达式、启停、超时、互斥、上次执行结果 | 改调度不必重新部署 |
-| Console | 改表达式、启停、手动触发、看上次结果 | 运维自助 |
-
-关键约束：**Console 不能新建任务**。行由 Worker 按代码注册表补齐，Console 只能改已存在的行。任务名对不上代码注册表就没有 handler，也就不存在"从后台注入一个任务"的路径。
-
-#### 任务清单
-
-- [x] **S1 数据模型与迁移** — `internal/model/console_scheduled_task.go` + `202604150014` 双方言迁移
-  - `console_scheduled_tasks`：`name`(唯一) / `schedule` / `enabled` / `mutex` / `timeout_seconds` / `run_requested_at` / `last_run_at` / `last_status` / `last_error` / `last_duration_ms`
-  - postgres + mysql 双份迁移，含 down
-  - 验收：`pkg/migrate` 配对/方言/「schedule-only」守卫测试通过；集成测试断言已补但**本机 Docker 不可用，未真实执行 up/down**
-
-- [x] **S2 Worker 任务注册表** — `app/worker/internal/task`
-  - `Definitions(dbs) map[string]Definition`，编译期确定；名称重复、无 Job、非法 cron 均在构建时报错
-  - 真实任务：`console.purge-expired-sessions` 清理过期后台会话（分批删除，保留已吊销但未过期的行）
-  - 顺带：`scheduler.ValidateSchedule` 抽为共用校验器，Console 保存前用同一个解析器，避免"后台存得进、Worker 跑不了"
-  - 验收：5 个单测通过（注册表可运行性、缺数据库报错、只删过期、跨批清空、取消 context 中止）
-
-- [x] **S3 Worker reconcile 循环** — `app/worker/internal/task/reconciler.go`
-  - 每轮先补齐缺失的行，再让 Scheduler 与表对齐；已有行不覆盖，运维改过的调度在重新部署后仍保留
-  - `schedule`/`mutex`/`timeout` 变了才 `Remove`+`Register`；`enabled=false` 移除；表达式解析失败只跳过该行
-  - 执行结果经 `instrument` 包装写回 `last_*`；写回用独立 context，超时被取消的任务仍能记录失败
-  - 默认间隔 30s，与 T4 casbin 重载同一节奏
-  - 无数据库时降级：Scheduler 仍跑代码内注册的任务，只是无法在后台管理（Worker 会告警）
-  - 验收：14 个单测通过；「保留运维改动」「停用即移除」两项做过变异验证，改坏实现后确实变红
-  - 已知缺口：代码中已删除的任务留下的行，Console 看不出「无 handler」与「从未执行」的区别，仅 Worker 日志告警
-
-- [x] **S4 手动触发** — `runOnRequest` / `claimRunRequest` / `declineRunRequest`
-  - Console 写 `run_requested_at`；Worker 用条件 UPDATE 抢占，`RowsAffected == 1` 的那个才执行，多副本下只跑一次
-  - 走 `scheduler.Run`，因此手动执行同样受 mutex、集群锁、超时和 panic 隔离保护
-  - 跑不了的请求也要回答：任务已停用或代码中不存在时，清空标记并写 `skipped` + 原因，不会永远显示"待执行"
-  - 新增 `scheduler.ErrTaskNotFound` sentinel，用于区分"未注册"和任务自身失败
-  - 验收：17 个单测通过；抢占逻辑做过变异验证（去掉 `RowsAffected` 检查后 4 个 worker 全部抢到，测试变红）
-  - 上限：触发延迟最多一个对账周期（30s）。要即时需改走 asynq，Console 得加 `WithJob()`
-
-- [x] **S5 Console 接口** — `handler/scheduled_task.go` + `service/scheduled_task.go`
-  - 4 个接口：列表 / 改调度 / 启停 / 手动触发。**没有新建和删除**，行由 Worker 按代码注册表补齐
-  - 保存前用 `scheduler.ValidateSchedule` 校验，与 Worker 的 cron 同一个解析器
-  - 停用的任务拒绝手动触发；已有待执行请求时拒绝重复提交
-  - 权限走 route catalog `.Name("计划任务.xxx")`；OpenAPI 已登记
-  - 验收：8 个 service 单测 + `make contracts` 通过
-  - 修掉一个模型缺陷：`gorm:"default:true"` 会让 `false` 在 INSERT 时被省略，`Mutex: false` 的任务定义会被静默存成 `true`。已去掉标签并加回归测试（把标签加回去测试会红）
-
-- [x] **S6 前端页面** — `views/system/scheduled-task/` + `api/scheduled-task.ts`
-  - 列表 + 编辑弹窗（表达式/互斥/超时）+ 启停 + 手动触发 + 上次执行结果（状态标签、耗时、错误摘要）
-  - 页面顶部说明"任务内容在代码中定义，此处只能调整执行时机"，并提示对账延迟
-  - 已有待执行请求或任务停用时，"执行一次"按钮禁用
-  - 路由登记在 `router/routes/modules/system.ts`（不放 `log.ts`，那是日志模块）
-  - 验收：`admin.typecheck` / `admin.lint` / `admin.circular` / `admin.build` 通过；前端单测 326 个（新增 4 个 API 契约测试）
-  - 契约门禁做过变异验证：改坏 `console-contract.json` 里的路径后 `make contracts` 变红
-
-- [x] **S7 文档**
-  - `docs/guide/scheduler.md` 新增「后台管理」：注册方式、代码/DB 职责划分、为什么不能后台建任务、对账生效时机、边界
-  - `docs/guide/structure.md` 补 `app/worker/internal/task` 的位置与去向指引
-  - 验收：`make docs.check` 通过
-
-#### 本阶段不做
-
-- 任务内容存 DB、运行时解释脚本或 shell 命令。
-- Kafka / 独立执行器。
-- 完整执行历史表——先用行上的 `last_*` 字段；真要排查多次失败再单开 `console_scheduled_task_runs`。
-
-### Phase 6 — fork 质量治理
-
-产品形态定为 **fork / clone**：新项目整仓 fork 后自持，不做库化、不承诺 API 稳定、不提供升级通道。
-
-这个决定让一批问题直接失效，不再追：版本标签与 CHANGELOG、`pkg/` 的 doc.go 与 Example、`pkg/` 的 gin/gorm 解绑、升级机制。剩下的唯一产品是「你 fork 到手的这份代码」。
-
-核心判断：**问题里有一半是文档在说谎，不是代码有病。** `pkg/` 声称"不承载业务语义"却塞满 `UserTypeConsole`、`CheckConsolePermission`；`pkg/logger` 的全局单例对应用是惯例、只对发布库才是反模式。这类问题改声明比改代码便宜，也更诚实。
-
-| ID | 任务 | 验收 |
-| --- | --- | --- |
-| ~~A1~~ | ~~清掉文档里的个人机器路径~~ | ✅ `0392ce8` |
-| ~~A2~~ | ~~codegen 从目标仓库 go.mod 读 module path~~ | ✅ `fdc811b` |
-| ~~A3~~ | ~~dashboard 解除示例表依赖~~ | ✅ 前提有误，见实施记录，不改代码 |
-| ~~A4~~ | ~~新增 fork 指南~~ | ✅ `3df8766` |
-| ~~B1~~ | ~~删 `errx` 的坏 sentinel~~ | ✅ `12dfcba` |
-| ~~B2~~ | ~~`response.Fail` 改为接受 `error`~~ | ✅ `12dfcba` |
-| ~~B3~~ | ~~删重复的响应别名~~ | ✅ `12dfcba` |
-| ~~C1~~ | ~~修正 `pkg/` 定位声明~~ | ✅ `afeefeb` |
-| ~~C2~~ | ~~删单实现接口~~ | ✅ `53ddd8f` |
-| ~~C3~~ | ~~构造函数统一 `New(Config)`~~ | ✅ `3abce2b` |
-| ~~C4~~ | ~~`interface{}` → `any`~~ | ✅ `c002031` |
-| ~~C5~~ | ~~统一 `/system` 前端归属~~ | ✅ `a8c76a5` |
-| ~~D1~~ | ~~抽出 `pkg/password`~~ | ✅ `a0af363` |
-| ~~D2~~ | ~~补 `pkg/request` 测试~~ | ✅ `88aae4b` |
-| ~~D3~~ | ~~补 route / permission / errx 测试~~ | ✅ `34dda5a` |
-| ~~D4~~ | ~~工具链可复现~~ | ✅ `5adf9fb` |
-
-#### 本轮新增的 6 个守卫
-
-每个都做过变异验证（改坏后确认变红），都挂在 `make quality` 或 `make docs.check` 下：
-
-| 守卫 | 拦截什么 |
-| --- | --- |
-| 文档个人路径 | 文档里出现 `/Users/...` 或 `/home/...` |
-| 文档教已删 API | `response.OK(`、`httpclient.NewWithConfig(`、`event.NewDispatcher(` 等 |
-| `/system` 路由归属 | 出现第二个 `/system` 父路由或游离的 `/system/*` |
-| `interface{}` 回流 | 非测试代码出现 `interface{}` |
-| bcrypt 越界 | 非测试代码绕过 `pkg/password` 直接用 bcrypt |
-| 计划任务 schedule-only | 迁移里出现 command/script/payload 之类的列 |
-
-### Phase 7 — 对标评估路线图（2026-09-29）
-
-**对照原则：Laravel 只借「要有哪些能力」，Go 原生框架决定「怎么实现」。** 不参考任何 Java 系脚手架的设计（注解/AOP、BaseService 继承、Repository/DAO 分层、部门岗位数据权限）。
-
-| 对照组 | 借什么 | 不借什么 |
-| --- | --- | --- |
-| Laravel | 能力清单与开发闭环：`make:model -mcr`、`key:generate`、`paginate()`、`throttle`、daily 日志、RefreshDatabase | Facade、服务容器、Eloquent 魔法方法、模型观察者 |
-| go-zero | goctl「一份描述 → 全栈代码」、内置限流、ServiceContext 显式依赖 | 微服务注册发现（Grove 是单体） |
-| Huma | OpenAPI 与代码不能漂移 | 替换 gin handler 签名（Grove 已有契约测试兜底） |
-| Goravel | 仅作能力覆盖参照 | 它的 Facade 风格，正是要避免的 |
-| nunu | lumberjack 日志轮转、`run` 热重载、docker-compose 起本地依赖 | `google/wire`（2025-08-25 已归档）；`XxxService` 接口 + 唯一实现 + `*Service` 基类嵌入；Repository 层；gomock 与独立 `test/` 目录 |
-| go-gin-api | 生成器意识、限流、pprof | 连真实 MySQL 读表生成（凭据进 shell 历史、仅 MySQL）；handler 以带 `i()` 标记的接口声明 |
-| GoFrame | `gf run` 热重载、一条命令出代码 | 全局 `g.DB()` / `g.Log()` 单例 |
-| Rails / Phoenix（思想） | `scaffold Post title:string`：命令行字段直接生成迁移、模型、控制器与测试 | — |
-
-#### 实测结论
-
-| 结论 | 证据 |
-| --- | --- |
-| **生成器与门禁互相矛盾** | 临时 worktree 执行 `grove make:module Invoice` 后 `make contracts` 立即失败：`missing OpenAPI operations: GET /console/v1/invoices`。且生成的 service 只返回「模块已就绪」，没有迁移、没有 CRUD |
-| 日志永不轮转 | `pkg/logger` 以 `O_APPEND` 写 `./logs/<service>.log`，无切割、无保留期，部署文档未提 |
-| 分页锁在 console 内部 | `PagePolicy`/`ListMeta` 在 `app/console/internal/service`，api 服务无法复用；`ListMeta` 在 handler 与 service 各定义一份；构造靠 `policies []PagePolicy` 可变参数冒充可选参数 |
-| 三个 app 结构不一致 | `app/api` 的 handler/service/middleware 在 `internal/` 外，console 与 worker 在里面 |
-| 测试夹具重复 | 23 个测试文件各自 `sqlite.Open`，6 个同构的建库函数 |
-| Java 味残留 | `pkg/request` 12 个 `Get` 前缀访问器（Effective Go 不推荐）；`auth`/`cache`/`migrate`/`storage` 四个 `Manager`；`database.NewConnections` 返回单实现接口 |
-
-#### 任务（按优先级）
-
-| 优先级 | ID | 任务 | 验收方向 | 阻塞 |
-| --- | --- | --- | --- | --- |
-| ~~P0~~ | ~~G1~~ | ~~`make:module --fields` 生成可用纵向切片（后端）~~ | ✅ 双方言迁移 + 模型 + 分页 CRUD + 自带测试 + handler + OpenAPI；回归测试在仓库副本里生成后跑 `go vet`、契约、生成的 CRUD 测试、方言规则，三处变异均被抓到。顺带修复 `grove migrate create` 只建单方言的问题 | — |
-| ~~P0~~ | ~~G1b~~ | ~~生成前端：`console-contract.json` 条目 + `api/*.ts` + 基于 `resource-page` 的页面 + 路由~~ | ✅ 在真实仓库生成 Invoice 后 `admin.typecheck` / `quality`（含 `admin.lint`）/ `admin.test` / `admin.build` / `contracts` / 全量 `go test` 通过；回归测试校验前端只调用已登记的 operation，契约 JSON 往返逐字节不变，两处变异均被抓到。time 字段改为与响应同格式的字符串入参，`""` 清空。顺带修 `resource-page` 编辑时沿用上一条记录 `omitempty` 字段的旧值、清空日期提交 `null` 被后端忽略两个问题 | — |
-| ~~P1~~ | ~~G2~~ | ~~日志轮转：按大小切割 + 保留期，对应 Laravel daily channel，做法同 nunu~~ | ✅ lumberjack v2.2.1；`log.max_size_mb`（默认 100）/ `max_age_days`（默认 14，`0` 不清理），显式非法值启动即拒绝；启动时即打开文件，坏目录不会拖到第一条日志才暴露。轮转与急切打开各做一次变异验证。未被读取的 `log.service` 保留为兼容字段（严格解码下删掉会让旧配置启动失败） | — |
-| ~~P1~~ | ~~G3~~ | ~~分页下沉到 `pkg/`，api 与 console 共用；去掉 `[]PagePolicy` 可变参数~~ | ✅ `pkg/pagination`：`Policy`（零值可用）/ `Request` / `Page.Apply` / `Meta`，三份分页结构与两份 `ListMeta` 合一；8 个列表 service 的构造函数改为显式 `pages pagination.Policy`，`NewRoleServiceWithPolicy` 删除；router 只建一份 policy 与一份 `SessionService`。重构前后 OpenAPI 逐字节一致。顺带修复：计划任务 `list_all` 生成 `LIMIT 0` 返回空列表（加回归测试并变异验证）、用户列表从未接收配置的分页上限 | — |
-| ~~P1~~ | ~~G4~~ | ~~`internal/testkit`：`OpenDB(t, models...)` 等，替换重复夹具~~ | ✅ `OpenDB`（每测独立、`t.Cleanup` 关闭，原先无一处关闭连接）+ `CreateCasbinTable`（按迁移后的 `NOT NULL DEFAULT ''` 与唯一索引建表，原先 6 份手写 DDL 有两种形状）；app/cmd/internal 下 26 处建库与 6 份 DDL 全部收敛，生成器模板同步。`pkg/*` 测试因依赖方向保留自建 | — |
-| ~~P2~~ | ~~G5~~ | ~~`app/api` 结构与 console/worker 对齐~~ | ✅ handler/service/middleware 移入 `app/api/internal/`，去掉 `auth_handler.go`、`starter_service.go` 这类与包名重复的后缀；`structure.md` 原先描述的目录结构与 console 实际不符，一并改正 | — |
-| ~~P2~~ | ~~G6~~ | ~~去 Java 味：`request.GetAdminID` → `request.AdminID` 等；`database.Connections` 返回具体类型；`Manager` 改为表意名~~ | ✅ 分三批：`pkg/request` 去掉 `Get` 前缀（返回结构体的四个与类型重名，改为 `IdentityOf` 等）；`database.Connections` 由单实现接口改为具体类型；`auth.Manager` → `auth.Tokens`（Provider 字段 `TokenManager` → `Tokens`）、`cache.Manager` → `cache.Stores`（`Stores()` → `Names()`）、`migrate.Manager` → `migrate.Migrator`。`storage.Manager` 保留：它同时持有 disk 与上传策略，没有更准确的单个名词，改名只是换一个同样含糊的词 | — |
-| ~~P2~~ | ~~G7~~ | ~~`grove key:generate`：生成 `jwt.secret`、`config_encryption_key` 等强密钥~~ | ✅ 打印一段可直接粘贴的 YAML（32 字节随机，JWT 为 43 字符 base64url，加密密钥为 `base64:` 格式）；刻意不改写 `config.yaml`，避免覆盖正在使用的密钥。测试校验输出能被 secretbox 与生产 JWT 规则接受。`fork.md` 的 `load.go:行号` 引用改为函数名 | — |
-| ~~P2~~ | ~~G12~~ | ~~管理后台清掉 Vben 与旧项目遗留~~ | ✅ `index.html` 生产构建会注入 Vben 自己的百度统计（把每个部署的访问数据发给第三方），已删并加测试；`.env.production` 写死了旧业务域名，改为同域默认并在部署文档补前端发布说明；通知铃铛是写死的假数据且头像取自外部站点，后端也没有通知能力，已删并关掉偏好开关；个人资料的「新消息提醒」tab 什么都不保存，已删；`/account/center` 无入口可达且与 `/profile` 重复，连同专用的 `api/profile.ts` 删除；空的 `demos.ts`、`dashboard.ts` 路由模块删除，`vben.ts` 更名 `profile.ts`。遗留：图标按需走 iconify 在线 API，纯内网部署会缺图标，等有内网需求再离线化 | — |
-| ~~P2~~ | ~~G13~~ | ~~手写列表页收敛到 `resource-page`（C5 遗留的后半段）~~ | ✅ `resource-page` 增加 `#actions`（追加行操作）、`#cell`（接管单元格，未接管的列仍按布尔 / 原值回退）、`actionWidth`、表单字段 `help` / `placeholder` 与 `reload()`；计划任务页由 284 行改为基于它的约 150 行，行为不变。插槽回退与页面的执行、编辑载荷各有挂载测试并做过变异验证。会话页（概览指标、吊销当前设备需登出）与两个日志页（详情抽屉、时间区间筛选）定制程度高，硬迁会把组件撑成大杂烩，保持手写 | — |
-| ~~P1~~ | ~~G14~~ | ~~CI 门禁在本机可复现，依赖无已知漏洞~~ | ✅ `quality.go.lint` / `quality.govuln` 经 `go run` 固定为 CI 版本（本机装了 golangci-lint v2 时原目标因配置格式直接失败）；由此跑出一处 errcheck（`cmd/grove/module.go`）并修复。govulncheck 报 grpc、x/text、x/net、otel 四个模块的可达漏洞，升到修复版；CI 所用 Go 1.25.12 的标准库另有漏洞，工具链统一升到 1.25.14（go.mod、`.mise.toml`、Dockerfile、两份 CI、文档），在 1.25.14 下全量测试通过、govulncheck 0 漏洞。本轮 14 个提交经独立复审无高危问题，四条中低危已修（prettier 失败不再让已落地的生成报错、`page_size` 改由 `api.max_per_page` 截断而非固定 100 拒绝、路线图证据指向已删代码、用户下拉描述重复） | — |
-| P3 | G8 | 通用限流中间件（go-zero 内置、Laravel `throttle`），复用现有 `x/time/rate` 与 Redis | 按 IP/用户限流，429 走统一错误信封 | 等 api 服务有公开接口 |
-| P3 | G9 | `pkg/mail` | — | 等真实触发 |
-| ~~P3~~ | ~~G10~~ | ~~`make dev` 热重载（对应 nunu `run`、`gf run`），用 `go run` 固定版本的 air，不进 go.mod~~ | ✅ `make dev.api` / `dev.console` / `dev.worker`，air v1.67.4 经 `go run` 固定版本，参数全走命令行、不加 `.air.toml`；监听 `go`、`yaml`，排除 `web` 等目录防止 node_modules 耗尽文件监听。在临时目录实测改动后自动重新编译并重启 | — |
-| ~~P3~~ | ~~G11~~ | ~~docker-compose 起本地 PostgreSQL + Redis~~ | ✅ `compose.yaml`：postgres:17-alpine、redis:7.4.2-alpine，MySQL 8.0 在 `mysql` profile 里；镜像与 CI、集成测试一致；端口只绑 127.0.0.1。`make deps.up` / `deps.down`。`config.example.yaml` 的数据库段此前是某次提交误带进来的本机 MySQL 值，与代码默认和文档都不符，已改回 PostgreSQL 并与 compose 对齐；`TestComposeServesTheExampleConfig` 守住两者一致（两处变异验证）。**未验证**：本机无 Docker，`docker compose up` 本身没有跑过 | 需在有 Docker 的机器上跑一次 `make deps.up` |
-
-#### 本阶段不做
-
-- Facade、服务容器、注解/AOP 式横切（幂等、脱敏、字段翻译装饰器）。
-- Repository/DAO 层、BaseService 继承、DTO/VO/BO 分层。
-- 部门/岗位/数据权限/多租户、字典表——需要下拉选项时用代码枚举或 `system_configs`。
-- 迁移到 Huma 或 `log/slog`——现有契约测试与 zerolog 已够用，迁移成本不抵收益。
-- `google/wire` 编译期注入——已归档；Grove 的手写 Options 装配在当前规模下更直观。
-- 读库生成代码（go-gin-api gormgen、GoFrame `gf gen dao`）——需要活数据库与方言自省，不适合双方言与 CI。
-- swag 注释生成文档——Grove 用代码声明 OpenAPI 并双向契约测试，更不易漂移。
-
-## 5. 明确不做
-
-- 不拆微服务、不引入插件系统。
-- 不做 ServiceContainer / Facade / 全局 helper。
-- 不引入通用 Repository 层或继承式领域模型。
-- 不做一次性全仓重命名或大重写。
-- i18n 暂缓：当前只有中文一种语言，等真出现第二语言再做。
-
-### 对照 go-gin-api / nunu 后确认不引入
-
-2026-09-04 逐项比对 `xinliangnote/go-gin-api` 与 `huluxiaobao-nunu/console-api`，除 Phase 5 外均判定不抄：
-
-| 能力 | 对方实现 | Grove 现状 | 结论 |
-| --- | --- | --- | --- |
-| ID 生成 | nunu：sonyflake + base62 | `pkg/ulid` | 不换。sonyflake 需协调 machine ID，容器里易冲突；ULID 128 位、字典序即时间序、无需协调 |
-| ID 混淆 | nunu：`SafeID` Blowfish + base58 | ULID | 不做。ULID 本就不泄露自增序号；nunu 那个是为兼容老系统 `bind_key` 的历史包袱 |
-| trace | go-gin-api：自研 `pkg/trace` | OpenTelemetry | 不换 |
-| 错误码 | go-gin-api：`pkg/errors` | `pkg/errx` | 已有 |
-| 优雅关闭 | go-gin-api：`pkg/shutdown` | `internal/server` | 已有 |
-| 路由白名单 | go-gin-api：`pkg/urltable` | route Catalog | 已有 |
-| 加解密 | go-gin-api：`aes`/`rsa`/`hash`；nunu：blowfish | `pkg/secretbox` | 已有 |
-| 文件 | go-gin-api：`pkg/file` | `pkg/storage` | 已有且更完整 |
-| 时间工具 | go-gin-api：`pkg/timeutil` | stdlib | 不需要 |
-| API 签名验签 | go-gin-api：`pkg/signature` | 无 | 当前无需求，不做 |
-| 多租户过滤 | nunu：`scope.Apply` | 无 | 无多租户需求，不做组件；但其 fail-closed 原则（空范围 → `WHERE 1=0` 而非不过滤）已记入权限文档待办 |
-
-## 6. 实施记录
-
-| 日期 | 任务 | 结果 |
-| --- | --- | --- |
-| 2026-08-30 | 上一轮全部任务 | 已完成，见第 1 节 |
-| 2026-09-04 | T1 `pkg/server` → `internal/server` | `891540e`。`pkg/` 非测试代码已无 `internal/` 依赖；`pkg/job/job_test.go` 仍引 `internal/observability`，属测试专用，不影响外部消费，暂留。 |
-| 2026-09-04 | T2 route catalog 单一化 | `a0ac0ff`。删全局 `sync.Map` / `ResetForTest` / 4 组 `*WithCatalog` 双份实现，净删 139 行。 |
-| 2026-09-04 | T3 去 `WithDeps` 后缀 | 纯重命名，11 个注册函数。 |
-| 2026-09-04 | T4 Casbin 定时重载 | `85cac4c`。复用 `SyncedEnforcer.StartAutoLoadPolicy`，无新依赖；`auto_load_seconds` 默认 30，Provider 关闭时停 goroutine。代价：变更最多延迟一个间隔。 |
-| 2026-09-04 | T5 Scheduler 集群互斥 | `643d1a7`。复用 `pkg/cache.Store` 的 SETNX，无新依赖；Redis 启用时 Mutex 任务全局互斥，未启用时行为不变（仍限单 Worker）。释放为 Get+Delete 比对，非原子 CAS。 |
-| 2026-09-04 | Phase 5 计划任务后台管理（S1–S7） | `b7e687f` `87fd273` `2419ecc` `901ab35` `1677cd0` `66d38ed`。改调度不再需要重新部署。过程中由测试抓出两个真实缺陷：孤儿行的 `run_requested_at` 永远清不掉；GORM `default:true` 标签使 `Mutex: false` 被静默存成 `true`。四处关键逻辑做过变异验证。**迁移未在真实 PostgreSQL/MySQL 执行**（本机无 Docker），集成断言处于 skip。 |
-| 2026-09-29 | Phase 6 fork 质量治理（A/B/C/D） | 13 个提交 `0392ce8`…`5adf9fb`。详见下方「被代码推翻的判断」。全门禁绿：`build`/`test`/`vet`/`quality`/`contracts`/`docs.check` 与前端 typecheck/lint/circular/test/build。 |
-
-### 被代码推翻的判断
-
-Phase 6 的计划里有 6 条经不起查证，均以代码为准修正：
-
-| 计划原本写的 | 查证结果 |
-| --- | --- |
-| `dashboard.go` 依赖示例表 `users`，要解耦 | `users` 是框架能力（355 行 CRUD 的 C 端客户管理），`console_admins` 才是运营者。真正的示例只有 `articles` 和 `starter`。**不改代码** |
-| 删 `Success`/`Error` 别名，保留 `OK`/`Fail` | `OK` 与 `Error` 各 **0 调用**，`Success` 59 处、`Fail` 151 处。方向反了，改为删 `OK`/`Error` |
-| unexport `logger.InitForTest` | 被 `internal/bootstrap` 的测试跨包使用，不能 unexport |
-| 去掉 `zerolog.SetGlobalLevel` | 它是**唯一**应用 `log.level` 的地方，删掉配置直接失效。**此项会造成 regression** |
-| `ratelimit.NewLoginGuard` 应返回具体类型 | 它按有无 Redis 在两个实现间选，返回接口是正确的工厂 |
-| 在 `.mise.toml` 里钉 pnpm | 本机 `~/Library/pnpm` 在 PATH 中优先，钉了也不生效；且与 `packageManager` 构成两个真相源。改为 Makefile 走 corepack |
-
-### 删除死代码时的连锁发现
-
-删掉 `transaction.Manager` 后变异验证**没有变红**，查下去发现 `txKey` 的唯一写入方就是被删的 `Manager.Execute`，因此 `FromContext` 永远返回 nil、`GetDB` 的第一个分支不可达——测试覆盖的是一条走不到的路径。清理后该包从 86 行降到 33 行，两个测试才真正可被变异打红。
-
-同类情况：`SetIdentity` 把身份镜像进 std context，但 `GetIdentityFromContext` 零消费方，而正是这个镜像让 setter 解引用 `c.Request`，在 `gin.CreateTestContext` 给的 context 上 panic。
-
-### 覆盖率变化
-
-| 包 | 改前 | 改后 |
-| --- | --- | --- |
-| `pkg/request` | 0% | 97.0% |
-| `pkg/permission` | 33.9% | 96.6% |
-| `pkg/route` | 54.8% | 94.5% |
-| `pkg/errx` | 43.9% | 80.6% |
-| `pkg/password` | 新增 | 90.0% |
+O1–O7、R0–R2 已完成；下一步补齐 R3/R4 剩余的完整环境验收、R5 镜像扫描，并在用户授权提交推送后取得 R6 的 CI 记录；T9/R7 在真实接入项目中验证。暂缓组件不提前填上完成标记，也不据此继续扩大当前交付范围。

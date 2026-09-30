@@ -130,7 +130,7 @@ web/admin-vben/apps/console/src/api/
 
 ### 2. 页面
 
-页面放在 `web/admin-vben/apps/console/src/views/` 下按业务领域组织，例如 `views/console/content/articles.vue`；生成器放在 `views/<模块复数>/index.vue`。
+页面放在 `web/admin-vben/apps/console/src/views/` 下按业务领域组织，例如 `views/content/articles/index.vue`；生成器放在 `views/<模块复数>/index.vue`。
 
 列表页优先用 `components/resource-page`：列、搜索、表单和增删改接口都用配置声明。页面特有的部分用插槽补，不必整页手写：
 
@@ -139,7 +139,7 @@ web/admin-vben/apps/console/src/api/
 - 表单字段的 `help`、`placeholder`：字段说明与占位提示。
 - 组件 ref 的 `reload()`：自定义操作完成后刷新列表。
 
-参考 `views/system/scheduled-task/index.vue`。只有需要概览区、详情抽屉等明显不同的交互时才手写页面。
+参考 `views/system/scheduled-tasks/index.vue`。只有需要概览区、详情抽屉等明显不同的交互时才手写页面。
 
 ### 3. 本地路由和菜单
 
@@ -155,7 +155,7 @@ web/admin-vben/apps/console/src/router/routes/modules/
 {
   name: 'ConsoleArticles',
   path: '/content/articles',
-  component: () => import('#/views/console/content/articles.vue'),
+  component: () => import('#/views/content/articles/index.vue'),
   meta: { title: '文章管理' },
 }
 ```
@@ -209,7 +209,7 @@ make verify
 
 ## 用生成器起步
 
-新模块优先从生成器开始，一条命令得到可运行、已通过门禁的纵向切片：
+新模块优先从生成器开始，一条命令生成前后端代码；生成模板有回归检查，具体模块仍需验证业务规则、门禁和运行行为：
 
 ```bash
 go run ./cmd/grove make:module Invoice --label 发票 \
@@ -252,7 +252,13 @@ go run ./cmd/grove make:module Invoice --label 发票 \
 2. 按业务补充校验（唯一性、状态流转等）。
 3. 把页面里的列名、表单 `label` 换成中文，按需换菜单图标与排序（默认 `lucide:folder`、`order: 1000`）。
 
-生成器自身有回归测试：在仓库副本里生成模块后，必须同时通过 `go vet`、`make contracts`（含前端契约与 OpenAPI 的比对）、生成出的 CRUD 测试和方言迁移规则，且前端接口模块只调用已登记的 operation。
+生成器自身有回归测试：在仓库副本里生成模块后，执行后端 `go vet`、Console 路由/OpenAPI/前端契约比对、生成出的 CRUD 测试和方言迁移文件规则，且前端接口模块只调用已登记的 operation。这些测试不执行 Vue typecheck/build、真实数据库迁移或浏览器操作；生成后仍须按本指南完成相应门禁。测试入口与范围见[测试策略](development/testing.md#生成器回归的范围)。
+
+### 命名与自定义表单
+
+`HTTPClient` 生成 `http_client.go`、`http_clients` 和 `http-clients`；字段 `user_id` / `api_url` 生成为 `UserID` / `APIURL`。`InvoiceTest`、`InvoiceLinux` 等名称会生成 Go 特殊后缀，命令会在写文件前拒绝。字段不能与 `Base`、`TableName`、模块更新请求的 ID 字段或其他转换后的字段重名。
+
+API 统一引用 `types/pagination.ts` 的 `PageParams`、`PageData<T>`，不从某个业务 API 文件借用分页类型。自定义编辑页直接导入组件并传入 `:form-component="ConfigForm"`；组件暴露 `getFormStateData()` 返回提交数据。页面可通过 `transformPayload` 调整载荷，`fixedParams` 固定查询条件。示例见 `views/configs/`。
 
 ## 常见错误
 

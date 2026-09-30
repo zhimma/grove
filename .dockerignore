@@ -5,6 +5,9 @@
 .turbo
 .cache
 node_modules
+bin
+tmp
+.tooling
 **/node_modules
 web/admin-vben/dist
 web/admin-vben/output

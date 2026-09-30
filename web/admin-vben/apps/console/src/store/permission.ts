@@ -2,7 +2,7 @@ import { ref } from 'vue';
 
 import { defineStore } from 'pinia';
 
-import { getAuthorizationOverviewApi } from '#/api/core/auth';
+import { getAuthorizationOverviewApi } from '#/api/auth';
 
 export const usePermissionStore = defineStore('permission', () => {
   const apiPermissions = ref<string[]>([]);

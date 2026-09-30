@@ -4,7 +4,7 @@
 
 ## 1. 准备环境
 
-- Go 1.25.14+
+- Go 1.27.1+（仓库与 CI 固定 1.27.1）
 - PostgreSQL 14+ 或 MySQL 8.0.16+
 - Node.js 20.19+
 - pnpm 10.28.2（仅启动前端需要）
@@ -13,11 +13,11 @@
 确认 Go 环境：
 
 ```bash
-go version                 # 需要 1.25.14 及以上
+go version                 # 需要 1.27.1 及以上
 export GOTOOLCHAIN=local   # 固定使用本机工具链，避免自动下载
 ```
 
-仓库带有 `.mise.toml`，用 [mise](https://mise.jdx.dev) 管理版本的话执行 `mise install` 即可装齐 Go 与 Node。
+仓库带有 `.mise.toml`，用 [mise](https://mise.jdx.dev) 管理版本的话执行 `mise install` 即可装齐 Go 与 Node。未激活 shell 集成或 PATH 中有旧版 Go 时，使用 `mise exec -- go version`、`mise exec -- make test`，确保实际执行仓库固定的版本。
 
 本机装了 Docker 的话，数据库和 Redis 可以不手装：
 
@@ -165,7 +165,7 @@ make verify
 ```bash
 go test -race ./...
 go vet ./...
-govulncheck ./...
+make quality.govuln
 ```
 
 下一步阅读：[项目结构](structure.md)、[开发规范](../01-开发规范.md)、[新增 Console 模块](../03-console-新增模块指南.md)。

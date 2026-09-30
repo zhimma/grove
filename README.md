@@ -35,6 +35,8 @@ Grove 是一个面向中大型项目的 console-first Go 单体脚手架。它�
 
 基于 Grove 建立新项目：[fork 指南](docs/guide/fork.md)。
 
+了解完成范围和待验收事项：[当前状态与下一步](docs/status.md)。
+
 AI 或自动化工具先读取仓库根目录的 [AGENTS.md](AGENTS.md) 和 [AI 项目上下文](docs/ai/project-context.md)。
 
 ## 最短启动路径
@@ -94,7 +96,7 @@ go run ./cmd/grove about
 ```bash
 go test -race ./...
 go vet ./...
-govulncheck ./...
+make quality.govuln
 ```
 
 路由、权限、OpenAPI、迁移和认证的验证要求见 [AI 变更检查清单](docs/ai/change-checklist.md)。
@@ -102,6 +104,7 @@ govulncheck ./...
 ## 文档导航
 
 - [文档中心](docs/README.md)
+- [当前状态与下一步](docs/status.md)
 - [架构](docs/architecture.md)
 - [命令](docs/commands.md)
 - [配置](docs/guide/configuration.md)
@@ -109,4 +112,4 @@ govulncheck ./...
 - [Console 架构与权限](docs/02-console-架构与权限.md)
 - [新增 Console 模块](docs/03-console-新增模块指南.md)
 - [部署与运维](docs/operations.md)
-- [设计计划归档](docs/plans/README.md)
+- [升级清单与历史背景](docs/plans/README.md)

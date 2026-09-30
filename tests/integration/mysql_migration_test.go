@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/docker/go-connections/nat"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -22,7 +23,9 @@ func TestMySQLFreshDatabaseMigration(t *testing.T) {
 	if os.Getenv("GROVE_INTEGRATION_DB") != "mysql" {
 		t.Skip("set GROVE_INTEGRATION_DB=mysql to run MySQL integration")
 	}
-	testcontainers.SkipIfProviderIsNotHealthy(t)
+	if os.Getenv("CI") == "" {
+		testcontainers.SkipIfProviderIsNotHealthy(t)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -36,7 +39,9 @@ func TestMySQLFreshDatabaseMigration(t *testing.T) {
 				"MYSQL_PASSWORD":      "grove_test_password",
 				"MYSQL_ROOT_PASSWORD": "grove_root_password",
 			},
-			WaitingFor: wait.ForLog("ready for connections").WithStartupTimeout(4 * time.Minute),
+			WaitingFor: wait.ForSQL("3306/tcp", "mysql", func(host string, port nat.Port) string {
+				return fmt.Sprintf("grove:grove_test_password@tcp(%s:%s)/grove_test", host, port.Port())
+			}).WithStartupTimeout(4 * time.Minute).WithPollInterval(500 * time.Millisecond),
 		},
 		Started: true,
 	})
@@ -177,6 +182,7 @@ func TestMySQLFreshDatabaseMigration(t *testing.T) {
 	}
 
 	for attempts := 0; attempts < 32; attempts++ {
+		assertIntegrityRollbackPreflight(t, ctx, db, repoRoot, configPath, commandEnv)
 		output := runGrove(t, ctx, repoRoot, configPath, commandEnv, "migrate", "down")
 		if strings.Contains(output, "没有可回滚的迁移") {
 			break

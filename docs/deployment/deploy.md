@@ -8,7 +8,7 @@
 
 ### 运行环境
 
-- Go 1.25.14+
+- Go 1.27.1+（构建工具链与 CI 固定 1.27.1）
 - PostgreSQL 14+ 或 MySQL 8.0.16+
 - Redis 6+（启用缓存、队列或 worker 时需要）
 - Linux systemd 环境，或容器运行环境
@@ -48,7 +48,7 @@ make quality
 - 管理后台前端类型检查
 - Go 格式与 `go vet`、前端 lint 与循环依赖、当前工作树空白检查
 
-`golangci-lint` 与 `govulncheck` 不必安装：两个目标经 `go run` 固定到 CI 使用的版本（v1.64.8、v1.6.0），首次运行会下载，本机装了别的版本也不受影响：
+`golangci-lint` 与 `govulncheck` 不必安装：两个目标经 `go run` 固定到 CI 使用的版本（v2.14.0、v1.6.0），首次运行会下载，本机装了别的版本也不受影响。lint 配置使用 v2 格式，原 `gosimple` 检查已由 `staticcheck` 承接，`gofmt` 移入 `formatters`：
 
 ```bash
 make quality.go.lint

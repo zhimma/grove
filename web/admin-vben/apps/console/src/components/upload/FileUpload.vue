@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { UploadFile, UploadProps } from 'ant-design-vue';
 
-import type { StorageClientConfig, StoredFile } from '#/api/core/file';
+import type { StorageClientConfig, StoredFile } from '#/api/storage';
 
 import { computed, ref, shallowRef, watch } from 'vue';
 
@@ -9,7 +9,7 @@ import { IconifyIcon } from '@vben/icons';
 
 import { Button, message, Upload } from 'ant-design-vue';
 
-import { getStorageConfig, uploadStorageFile } from '#/api/core/file';
+import { getStorageConfig, uploadStorageFile } from '#/api/storage';
 
 interface Props {
   /** 当前值（文件URL） */
