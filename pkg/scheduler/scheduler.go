@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,7 +14,6 @@ import (
 	"time"
 
 	"github.com/robfig/cron/v3"
-	"github.com/zhimma/grove/pkg/cache"
 	"github.com/zhimma/grove/pkg/logger"
 )
 
@@ -64,14 +62,17 @@ type Task struct {
 	Timeout  time.Duration
 }
 
+// LockStore 提供调度互斥所需的原子操作；释放锁时必须同时比较所有权。
+type LockStore interface {
+	Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error)
+	CompareAndDelete(ctx context.Context, key string, expected []byte) (bool, error)
+}
+
 type Config struct {
 	Location    string
 	StopTimeout time.Duration
-	// Lock makes Mutex tasks exclusive across the whole deployment instead of
-	// only within this process. Leave it nil for a single worker; point it at
-	// a Redis-backed cache.Store once a second worker exists, or every replica
-	// runs every task on every tick.
-	Lock cache.Store
+	// Lock 在锁租期内协调跨实例互斥；未设置时仅提供进程内互斥。
+	Lock LockStore
 	// LockTTL bounds how long a crashed worker can keep a task's cluster lock.
 	LockTTL time.Duration
 }
@@ -91,7 +92,7 @@ type Scheduler struct {
 	stoppedCh   chan struct{}
 	stopTimeout time.Duration
 	location    *time.Location
-	lock        cache.Store
+	lock        LockStore
 	lockTTL     time.Duration
 }
 
@@ -466,14 +467,8 @@ func (s *Scheduler) Monthly(name string, job Job) error {
 	return s.Register(&Task{Name: name, Schedule: MonthlySchedule, Job: job})
 }
 
-// acquireClusterLock takes the deployment-wide slot for a Mutex task. With no
-// Lock configured it is a no-op, which is the correct single-worker behaviour.
-//
-// ponytail: release is Get-then-Delete, not a compare-and-delete script. The
-// token check means a worker that overran lockTTL will not delete the lock a
-// second worker has since taken; the remaining race is the microseconds
-// between that Get and Delete, against a TTL measured in minutes. Move to a
-// Lua CAS release if a task ever runs closer to its TTL than that.
+// acquireClusterLock 获取有固定租期的共享锁；释放时原子校验所有权。
+// 当前不自动续租，任务仍需限制执行时间并保证幂等。
 func (s *Scheduler) acquireClusterLock(taskName string) (release func(), acquired bool, err error) {
 	if s.lock == nil {
 		return func() {}, true, nil
@@ -497,16 +492,11 @@ func (s *Scheduler) acquireClusterLock(taskName string) (release func(), acquire
 		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), lockOpTimeout)
 		defer releaseCancel()
 
-		current, found, getErr := s.lock.Get(releaseCtx, key)
-		if getErr != nil || !found {
-			return
-		}
-		if !bytes.Equal(current, token) {
-			logger.Warn().Str("task", taskName).Msg("任务集群锁已被其他实例接管，跳过释放")
-			return
-		}
-		if delErr := s.lock.Delete(releaseCtx, key); delErr != nil {
+		deleted, delErr := s.lock.CompareAndDelete(releaseCtx, key, token)
+		if delErr != nil {
 			logger.Error().Err(delErr).Str("task", taskName).Msg("释放任务集群锁失败")
+		} else if !deleted {
+			logger.Warn().Str("task", taskName).Msg("任务集群锁已失效或被接管，跳过释放")
 		}
 	}, true, nil
 }

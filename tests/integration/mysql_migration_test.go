@@ -93,6 +93,7 @@ func TestMySQLFreshDatabaseMigration(t *testing.T) {
 	if output := runGrove(t, ctx, repoRoot, configPath, commandEnv, "migrate", "up"); !strings.Contains(output, "已执行") {
 		t.Fatalf("unexpected MySQL migrate output: %s", output)
 	}
+	t.Run("explicit_zero_values", func(t *testing.T) { checkExplicitZeroValues(t, db, "mysql") })
 	for _, table := range []string{
 		"users",
 		"console_roles",

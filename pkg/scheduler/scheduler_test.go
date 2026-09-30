@@ -315,10 +315,10 @@ func BenchmarkSchedulerRegister(b *testing.B) {
 }
 
 // Two workers sharing one lock store must not both run the same Mutex task.
-// A shared cache.Store stands in for Redis: same Add/Get/Delete contract, no
-// container needed.
+// A shared memory store exercises the same atomic lock contract as Redis.
 func TestMutexTaskRunsOnOneInstanceWhenSharingALockStore(t *testing.T) {
 	shared := cache.NewMemoryStore()
+	t.Cleanup(func() { _ = shared.Close() })
 	var runs atomic.Int32
 	release := make(chan struct{})
 

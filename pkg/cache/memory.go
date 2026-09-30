@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"time"
@@ -68,6 +69,28 @@ func (m *MemoryStore) Delete(ctx context.Context, key string) error {
 	delete(m.data, key)
 	m.mu.Unlock()
 	return nil
+}
+
+// CompareAndDelete 仅在缓存值仍与 expected 相同时删除，比较与删除在同一临界区完成。
+func (m *MemoryStore) CompareAndDelete(ctx context.Context, key string, expected []byte) (bool, error) {
+	if err := contextError(ctx); err != nil {
+		return false, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	item, found := m.data[key]
+	if !found {
+		return false, nil
+	}
+	if item.expired(time.Now()) {
+		delete(m.data, key)
+		return false, nil
+	}
+	if !bytes.Equal(item.value, expected) {
+		return false, nil
+	}
+	delete(m.data, key)
+	return true, nil
 }
 
 func (m *MemoryStore) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {

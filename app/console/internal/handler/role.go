@@ -32,7 +32,7 @@ type CreateRoleRequest struct {
 	DisplayName string `json:"display_name" label:"显示名称"`
 	Description string `json:"description" label:"角色描述"`
 	Sort        int    `json:"sort" label:"排序"`
-	Status      int    `json:"status" label:"状态"`
+	Status      *int   `json:"status" binding:"omitempty,oneof=0 1" label:"状态"`
 }
 
 type UpdateRoleRequest struct {

@@ -24,7 +24,7 @@ func TestSystemConfigSecretLifecycleEncryptsMasksAndResolves(t *testing.T) {
 		ValueType:    "string",
 		Value:        " secret-current ",
 		DefaultValue: " secret-default ",
-		IsEditable:   true,
+		IsEditable:   ptrBool(true),
 		IsSecret:     true,
 	})
 	if err != nil {
@@ -133,7 +133,7 @@ func TestSystemConfigNonSecretRemainsPlainWithoutEncryptionKey(t *testing.T) {
 		ConfigKey:   "site_name",
 		Name:        "Site Name",
 		Value:       "Grove",
-		IsEditable:  true,
+		IsEditable:  ptrBool(true),
 	})
 	if err != nil {
 		t.Fatalf("create plain config: %v", err)

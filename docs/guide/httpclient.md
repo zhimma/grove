@@ -2,6 +2,8 @@
 
 `pkg/httpclient` 用于调用第三方 HTTP API。共享 `Client` 只保存传输层（Transport）、基础 URL 和默认超时；请求头、查询参数、请求体、重试策略和钩子都属于单次 `Request`。
 
+相对路径追加到基础 URL 的路径后，并保留 `%2F` 等转义字符。例如 `/files/a%2Fb` 中的资源标识不会被改写为 `/files/a/b`；查询参数仍按请求配置合并。
+
 ## 快速开始
 
 ```go

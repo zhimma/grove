@@ -525,9 +525,17 @@ func WithScheduler() Option {
 		// Mutex tasks need a lock every worker can see. The Redis cache store is
 		// that shared thing when Redis is configured; without it the lock stays
 		// nil and Mutex is process-local, which only holds for a single worker.
-		var clusterLock cache.Store
+		var clusterLock scheduler.LockStore
 		if p.Cache != nil && p.RedisClient != nil {
-			clusterLock = p.Cache.Store("redis")
+			store, err := p.Cache.Get("redis")
+			if err != nil {
+				return fmt.Errorf("get scheduler lock store: %w", err)
+			}
+			var ok bool
+			clusterLock, ok = store.(scheduler.LockStore)
+			if !ok {
+				return fmt.Errorf("scheduler lock store must support atomic compare and delete")
+			}
 		}
 		sched, err := scheduler.New(scheduler.Config{
 			Location:    p.Config.Scheduler.Timezone,

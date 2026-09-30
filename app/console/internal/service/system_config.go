@@ -12,6 +12,7 @@ import (
 	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/secretbox"
+	"github.com/zhimma/grove/pkg/transaction"
 )
 
 const SecretMask = "********"
@@ -45,7 +46,7 @@ type CreateSystemConfigInput struct {
 	ValueType    string
 	Value        string
 	DefaultValue string
-	IsEditable   bool
+	IsEditable   *bool
 	IsSystem     bool
 	IsSecret     bool
 	SortOrder    int
@@ -155,6 +156,10 @@ func (s *SystemConfigService) CreateConfig(ctx context.Context, in CreateSystemC
 		value = strings.TrimSpace(value)
 		defaultValue = strings.TrimSpace(defaultValue)
 	}
+	editable := true
+	if in.IsEditable != nil {
+		editable = *in.IsEditable
+	}
 	record := model.SystemConfig{
 		ConfigGroup:  strings.TrimSpace(in.ConfigGroup),
 		ConfigKey:    strings.TrimSpace(in.ConfigKey),
@@ -163,7 +168,7 @@ func (s *SystemConfigService) CreateConfig(ctx context.Context, in CreateSystemC
 		ValueType:    normalizeConfigValueType(in.ValueType),
 		Value:        value,
 		DefaultValue: defaultValue,
-		IsEditable:   in.IsEditable,
+		IsEditable:   editable,
 		IsSystem:     in.IsSystem,
 		IsSecret:     in.IsSecret,
 		SortOrder:    in.SortOrder,
@@ -312,7 +317,7 @@ func (s *SystemConfigService) defaultDB(ctx context.Context) (*gorm.DB, error) {
 	if s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
-	return s.dbs.Default().WithContext(ctx), nil
+	return transaction.GetDB(ctx, s.dbs.Default()), nil
 }
 
 func normalizeConfigValueType(valueType string) string {

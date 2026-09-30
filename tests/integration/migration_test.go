@@ -80,6 +80,7 @@ func TestFreshDatabaseLifecycle(t *testing.T) {
 	if !strings.Contains(output, "已执行") {
 		t.Fatalf("unexpected migrate up output: %s", output)
 	}
+	t.Run("explicit_zero_values", func(t *testing.T) { checkExplicitZeroValues(t, db, "postgres") })
 
 	for _, relation := range []string{
 		"users",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/mail"
 	"strings"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/pagination"
+	"github.com/zhimma/grove/pkg/transaction"
 )
 
 type UserService struct {
@@ -69,7 +71,7 @@ func NewUserService(dbs *database.Connections, pages pagination.Policy) *UserSer
 }
 
 func (s *UserService) ListUsers(ctx context.Context, in ListUsersInput) (*ListUsersOutput, error) {
-	db, err := s.defaultDB()
+	db, err := s.defaultDB(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +126,7 @@ func (s *UserService) GetUser(ctx context.Context, in GetUserInput) (*model.User
 }
 
 func (s *UserService) CreateUser(ctx context.Context, in CreateUserInput) (*model.User, error) {
-	db, err := s.defaultDB()
+	db, err := s.defaultDB(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +173,7 @@ func (s *UserService) UpdateUser(ctx context.Context, in UpdateUserInput) (*mode
 		if name == "" {
 			return nil, invalidUserParams("用户名称不能为空")
 		}
-		if len(name) > 120 {
+		if utf8.RuneCountInString(name) > 120 {
 			return nil, invalidUserParams("用户名称过长")
 		}
 		updates["name"] = name
@@ -185,21 +187,21 @@ func (s *UserService) UpdateUser(ctx context.Context, in UpdateUserInput) (*mode
 	}
 	if in.Phone != nil {
 		phone := strings.TrimSpace(*in.Phone)
-		if len(phone) > 32 {
+		if utf8.RuneCountInString(phone) > 32 {
 			return nil, invalidUserParams("手机号过长")
 		}
 		updates["phone"] = phone
 	}
 	if in.Avatar != nil {
 		avatar := strings.TrimSpace(*in.Avatar)
-		if len(avatar) > 255 {
+		if utf8.RuneCountInString(avatar) > 255 {
 			return nil, invalidUserParams("头像地址过长")
 		}
 		updates["avatar"] = avatar
 	}
 	if in.Remark != nil {
 		remark := strings.TrimSpace(*in.Remark)
-		if len(remark) > 500 {
+		if utf8.RuneCountInString(remark) > 500 {
 			return nil, invalidUserParams("备注过长")
 		}
 		updates["remark"] = remark
@@ -215,7 +217,7 @@ func (s *UserService) UpdateUser(ctx context.Context, in UpdateUserInput) (*mode
 		return nil, err
 	}
 	if len(updates) > 0 {
-		if err := s.dbs.Default().WithContext(ctx).Model(&model.User{}).
+		if err := transaction.GetDB(ctx, s.dbs.Default()).Model(&model.User{}).
 			Where("id = ?", in.UserID).Updates(updates).Error; err != nil {
 			return nil, errx.Internal().WithCause(err)
 		}
@@ -230,7 +232,7 @@ func (s *UserService) UpdateUserStatus(ctx context.Context, in UpdateUserStatusI
 	if _, err := s.loadUser(ctx, in.UserID); err != nil {
 		return nil, err
 	}
-	if err := s.dbs.Default().WithContext(ctx).Model(&model.User{}).
+	if err := transaction.GetDB(ctx, s.dbs.Default()).Model(&model.User{}).
 		Where("id = ?", strings.TrimSpace(in.UserID)).Update("status", in.Status).Error; err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}
@@ -241,7 +243,7 @@ func (s *UserService) DeleteUser(ctx context.Context, in DeleteUserInput) error 
 	if _, err := s.loadUser(ctx, in.UserID); err != nil {
 		return err
 	}
-	if err := s.dbs.Default().WithContext(ctx).Delete(&model.User{}, "id = ?", strings.TrimSpace(in.UserID)).Error; err != nil {
+	if err := transaction.GetDB(ctx, s.dbs.Default()).Delete(&model.User{}, "id = ?", strings.TrimSpace(in.UserID)).Error; err != nil {
 		return errx.Internal().WithCause(err)
 	}
 	return nil
@@ -252,7 +254,7 @@ func (s *UserService) loadUser(ctx context.Context, userID string) (*model.User,
 	if userID == "" {
 		return nil, invalidUserParams("用户ID不能为空")
 	}
-	db, err := s.defaultDB()
+	db, err := s.defaultDB(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -267,7 +269,7 @@ func (s *UserService) loadUser(ctx context.Context, userID string) (*model.User,
 }
 
 func (s *UserService) ensureEmailAvailable(ctx context.Context, userID, email string) error {
-	db, err := s.defaultDB()
+	db, err := s.defaultDB(ctx)
 	if err != nil {
 		return err
 	}
@@ -285,11 +287,11 @@ func (s *UserService) ensureEmailAvailable(ctx context.Context, userID, email st
 	return nil
 }
 
-func (s *UserService) defaultDB() (*gorm.DB, error) {
+func (s *UserService) defaultDB(ctx context.Context) (*gorm.DB, error) {
 	if s == nil || s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
-	return s.dbs.Default(), nil
+	return transaction.GetDB(ctx, s.dbs.Default()), nil
 }
 
 func normalizeUserFields(name, email, phone, avatar, remark string) (string, string, string, string, string, error) {
@@ -297,7 +299,7 @@ func normalizeUserFields(name, email, phone, avatar, remark string) (string, str
 	if name == "" {
 		return "", "", "", "", "", invalidUserParams("用户名称不能为空")
 	}
-	if len(name) > 120 {
+	if utf8.RuneCountInString(name) > 120 {
 		return "", "", "", "", "", invalidUserParams("用户名称过长")
 	}
 	normalizedEmail, err := normalizeUserEmail(email)
@@ -305,15 +307,15 @@ func normalizeUserFields(name, email, phone, avatar, remark string) (string, str
 		return "", "", "", "", "", err
 	}
 	phone = strings.TrimSpace(phone)
-	if len(phone) > 32 {
+	if utf8.RuneCountInString(phone) > 32 {
 		return "", "", "", "", "", invalidUserParams("手机号过长")
 	}
 	avatar = strings.TrimSpace(avatar)
-	if len(avatar) > 255 {
+	if utf8.RuneCountInString(avatar) > 255 {
 		return "", "", "", "", "", invalidUserParams("头像地址过长")
 	}
 	remark = strings.TrimSpace(remark)
-	if len(remark) > 500 {
+	if utf8.RuneCountInString(remark) > 500 {
 		return "", "", "", "", "", invalidUserParams("备注过长")
 	}
 	return name, normalizedEmail, phone, avatar, remark, nil
@@ -321,7 +323,7 @@ func normalizeUserFields(name, email, phone, avatar, remark string) (string, str
 
 func normalizeUserEmail(email string) (string, error) {
 	email = strings.TrimSpace(email)
-	if len(email) == 0 || len(email) > 160 {
+	if email == "" || utf8.RuneCountInString(email) > 160 {
 		return "", invalidUserParams("邮箱格式不正确")
 	}
 	address, err := mail.ParseAddress(email)

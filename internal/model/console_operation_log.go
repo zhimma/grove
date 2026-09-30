@@ -12,7 +12,7 @@ type ConsoleOperationLog struct {
 	TargetID     string        `gorm:"size:64;index" json:"target_id"`
 	RequestID    string        `gorm:"size:120;index" json:"request_id"`
 	StatusCode   int           `gorm:"not null;default:200" json:"status_code"`
-	Success      bool          `gorm:"not null;default:true" json:"success"`
+	Success      bool          `gorm:"not null" json:"success"`
 	ErrorMessage string        `gorm:"size:500" json:"error_message"`
 	DurationMS   int64         `gorm:"not null;default:0" json:"duration_ms"`
 	ClientIP     string        `gorm:"size:64" json:"client_ip"`

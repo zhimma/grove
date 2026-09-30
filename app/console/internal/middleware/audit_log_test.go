@@ -56,6 +56,9 @@ func TestAuditOperationUsesErrorMetaMessage(t *testing.T) {
 	if log.ErrorMessage != "不能删除超级管理员" {
 		t.Fatalf("expected business error message, got %q", log.ErrorMessage)
 	}
+	if log.Success || log.StatusCode != http.StatusForbidden {
+		t.Fatalf("failed request stored as success: success=%v status=%d", log.Success, log.StatusCode)
+	}
 }
 
 func TestAuditRequestQueryRedactsSensitiveValuesAndBoundsLength(t *testing.T) {

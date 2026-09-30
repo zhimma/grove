@@ -363,7 +363,13 @@ func (rb *RequestBuilder) buildURL() (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("parse base URL: %w", err)
 		}
-		baseURL.Path = strings.TrimRight(baseURL.Path, "/") + "/" + strings.TrimLeft(requestURL.Path, "/")
+		// 同时保留转义路径，避免把资源标识中的 %2F 改成路径分隔符。
+		escapedPath := strings.TrimRight(baseURL.EscapedPath(), "/") + "/" + strings.TrimLeft(requestURL.EscapedPath(), "/")
+		baseURL.Path, err = url.PathUnescape(escapedPath)
+		if err != nil {
+			return "", fmt.Errorf("decode request path: %w", err)
+		}
+		baseURL.RawPath = escapedPath
 		baseQuery := baseURL.Query()
 		for key, values := range requestURL.Query() {
 			baseQuery.Del(key)

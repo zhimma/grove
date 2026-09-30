@@ -23,6 +23,8 @@ curl -fsS http://127.0.0.1:8081/metrics
 ## 日志与观测
 
 - 日志统一由 `pkg/logger` 管理，文件按 `log.max_size_mb` 轮转、按 `log.max_age_days` 清理，不需要再配 logrotate；见 [配置说明](guide/configuration.md#log)。
+- HTTP 请求中间件把请求 ID 和有效的追踪 ID 放入上下文 logger。service 使用 `log := logger.FromContext(ctx)` 后记录日志，即可携带 `request_id`，以及已启用追踪时的 `trace_id` 和 `span_id`；进程日志使用全局 logger。
+- 异常恢复通过结构化日志记录错误，不转储原始请求头和查询参数。连接已断开时记录连接错误并停止处理，不继续写响应。
 - OpenTelemetry（OTel）运行时由 Provider 持有并按逆序关闭。
 - HTTP、数据库、Redis、外部 HTTP 和队列任务提供追踪与指标扩展点。
 - 指标标签中不要包含 SQL、令牌、密码、Redis 参数或完整错误文本，避免泄露敏感信息或产生过多不同的标签值。

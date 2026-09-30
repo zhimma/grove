@@ -14,7 +14,7 @@ type ConsoleRole struct {
 	Description string               `gorm:"size:255" json:"description"`
 	MenuKeys    datatype.StringArray `gorm:"not null" json:"menu_keys"`
 	IsSuper     bool                 `gorm:"not null;default:false" json:"is_super"`
-	Status      int                  `gorm:"not null;default:1" json:"status"`
+	Status      int                  `gorm:"not null" json:"status"`
 	Sort        int                  `gorm:"not null;default:0" json:"sort"`
 }
 

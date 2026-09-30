@@ -161,13 +161,14 @@ func formatErrors(c *gin.Context, err error, target any, source string) map[stri
 		return nil
 	}
 
-	if validationErrors, ok := err.(validator.ValidationErrors); ok {
-		return formatValidationErrors(validationErrors, target)
+	var validationErrors validator.ValidationErrors
+	if errors.As(err, &validationErrors) {
+		return formatValidationErrors(validationErrors, target, source)
 	}
 
 	var unmarshalTypeErr *json.UnmarshalTypeError
 	if errors.As(err, &unmarshalTypeErr) {
-		meta := resolveFieldMeta(target, unmarshalTypeErr.Field)
+		meta := resolveFieldMeta(target, unmarshalTypeErr.Field, source)
 		return map[string][]string{
 			meta.Key: {fmt.Sprintf("%s格式不正确", meta.Label)},
 		}
@@ -242,7 +243,7 @@ func resolveTypeErrorFieldInStruct(c *gin.Context, target any, t reflect.Type, s
 		}
 
 		if fieldValueHasTypeError(field.Type, rawValue) {
-			return resolveFieldMeta(target, field.Name), true
+			return resolveFieldMeta(target, field.Name, source), true
 		}
 	}
 
@@ -303,11 +304,12 @@ func fieldValueHasTypeError(fieldType reflect.Type, rawValue string) bool {
 	}
 }
 
-func formatValidationErrors(validationErrors validator.ValidationErrors, target any) map[string][]string {
+func formatValidationErrors(validationErrors validator.ValidationErrors, target any, source string) map[string][]string {
 	errorsMap := make(map[string][]string, len(validationErrors))
 	for _, fieldErr := range validationErrors {
-		meta := resolveFieldMeta(target, fieldErr.StructField())
-		errorsMap[meta.Key] = append(errorsMap[meta.Key], formatValidationMessage(target, meta, fieldErr))
+		path := validationFieldPath(target, fieldErr.StructNamespace())
+		meta := resolveFieldMeta(target, path, source)
+		errorsMap[meta.Key] = append(errorsMap[meta.Key], formatValidationMessage(target, meta, fieldErr, source))
 	}
 	if len(errorsMap) == 0 {
 		return map[string][]string{
@@ -325,7 +327,7 @@ func isValidationError(err error) bool {
 	return errors.As(err, &validationErrors)
 }
 
-func formatValidationMessage(target any, meta fieldMeta, fieldErr validator.FieldError) string {
+func formatValidationMessage(target any, meta fieldMeta, fieldErr validator.FieldError, source string) string {
 	label := meta.Label
 	tag := fieldErr.Tag()
 	param := fieldErr.Param()
@@ -361,7 +363,11 @@ func formatValidationMessage(target any, meta fieldMeta, fieldErr validator.Fiel
 	case "oneof":
 		return fmt.Sprintf("%s的取值不合法", label)
 	case "eqfield":
-		other := resolveFieldMeta(target, param)
+		parts := splitFieldPath(validationFieldPath(target, fieldErr.StructNamespace()))
+		if len(parts) > 1 {
+			param = strings.Join(parts[:len(parts)-1], ".") + "." + param
+		}
+		other := resolveFieldMeta(target, param, source)
 		return fmt.Sprintf("%s必须与%s一致", label, other.Label)
 	default:
 		return fmt.Sprintf("%s不合法", label)
@@ -371,46 +377,6 @@ func formatValidationMessage(target any, meta fieldMeta, fieldErr validator.Fiel
 type fieldMeta struct {
 	Key   string
 	Label string
-}
-
-func resolveFieldMeta(target any, fieldRef string) fieldMeta {
-	fieldRef = lastFieldSegment(fieldRef)
-	if fieldRef == "" {
-		return fieldMeta{
-			Key:   "_error",
-			Label: "参数",
-		}
-	}
-
-	meta := fieldMeta{
-		Key:   lowerFirst(fieldRef),
-		Label: lowerFirst(fieldRef),
-	}
-
-	structType := indirectStructType(target)
-	if structType == nil {
-		return meta
-	}
-
-	field, ok := findFieldMetaTarget(*structType, fieldRef)
-	if !ok {
-		return meta
-	}
-
-	if key := firstNonEmptyTagValue(field, "json", "form", "uri"); key != "" && key != "-" {
-		meta.Key = key
-	}
-
-	label := strings.TrimSpace(field.Tag.Get("label"))
-	if label != "" {
-		meta.Label = label
-		return meta
-	}
-
-	if meta.Key != "" && meta.Key != "_" {
-		meta.Label = meta.Key
-	}
-	return meta
 }
 
 func indirectStructType(target any) *reflect.Type {
@@ -454,15 +420,6 @@ func findFieldMetaTarget(t reflect.Type, fieldRef string) (reflect.StructField, 
 	return reflect.StructField{}, false
 }
 
-func firstNonEmptyTagValue(field reflect.StructField, tagNames ...string) string {
-	for _, tagName := range tagNames {
-		if value := firstTagValue(field.Tag.Get(tagName)); value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
 func firstTagValue(tag string) string {
 	if tag == "" {
 		return ""
@@ -474,17 +431,6 @@ func firstTagValue(tag string) string {
 	}
 
 	return strings.TrimSpace(parts[0])
-}
-
-func lastFieldSegment(field string) string {
-	field = strings.TrimSpace(field)
-	if field == "" {
-		return ""
-	}
-	if index := strings.LastIndex(field, "."); index >= 0 {
-		return field[index+1:]
-	}
-	return field
 }
 
 func lowerFirst(value string) string {

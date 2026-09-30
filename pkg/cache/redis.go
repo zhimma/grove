@@ -14,6 +14,13 @@ type RedisStore struct {
 	prefix string
 }
 
+var compareAndDeleteScript = redis.NewScript(`
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+    return redis.call("DEL", KEYS[1])
+end
+return 0
+`)
+
 func NewRedisStore(client *redis.Client, prefix string) *RedisStore {
 	return &RedisStore{
 		client: client,
@@ -68,6 +75,18 @@ func (r *RedisStore) Delete(ctx context.Context, key string) error {
 		return fmt.Errorf("redis delete: %w", err)
 	}
 	return nil
+}
+
+// CompareAndDelete 使用 Redis 脚本原子比较并删除，避免误删新的值。
+func (r *RedisStore) CompareAndDelete(ctx context.Context, key string, expected []byte) (bool, error) {
+	if err := r.validate(); err != nil {
+		return false, err
+	}
+	deleted, err := compareAndDeleteScript.Run(normalizeContext(ctx), r.client, []string{r.prefixKey(key)}, expected).Int64()
+	if err != nil {
+		return false, fmt.Errorf("redis compare and delete: %w", err)
+	}
+	return deleted != 0, nil
 }
 
 func (r *RedisStore) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {

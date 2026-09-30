@@ -18,7 +18,7 @@ type ConsoleAdmin struct {
 	DisplayName        string       `gorm:"size:120" json:"display_name"`
 	Avatar             string       `gorm:"size:255" json:"avatar"`
 	RoleID             string       `gorm:"size:26;index" json:"role_id"`
-	Status             int          `gorm:"not null;default:1" json:"status"`
+	Status             int          `gorm:"not null" json:"status"`
 	EmailVerified      bool         `gorm:"not null;default:false" json:"email_verified"`
 	PhoneVerified      bool         `gorm:"not null;default:false" json:"phone_verified"`
 	LastLoginAt        *time.Time   `json:"last_login_at,omitempty"`

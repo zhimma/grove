@@ -192,6 +192,7 @@ import (
 	"{{.Module}}/pkg/database"
 	"{{.Module}}/pkg/errx"
 	"{{.Module}}/pkg/pagination"
+	"{{.Module}}/pkg/transaction"
 )
 
 type {{.Name}}Service struct {
@@ -231,7 +232,7 @@ func New{{.Name}}Service(dbs *database.Connections, pages pagination.Policy) *{{
 }
 
 func (s *{{.Name}}Service) List{{.Plural}}(ctx context.Context, in List{{.Plural}}Input) (*List{{.Plural}}Output, error) {
-	db, err := s.defaultDB()
+	db, err := s.defaultDB(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +277,7 @@ func (s *{{.Name}}Service) Get{{.Name}}(ctx context.Context, id string) (*model.
 }
 
 func (s *{{.Name}}Service) Create{{.Name}}(ctx context.Context, in Create{{.Name}}Input) (*model.{{.Name}}, error) {
-	db, err := s.defaultDB()
+	db, err := s.defaultDB(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +344,7 @@ func (s *{{.Name}}Service) Update{{.Name}}(ctx context.Context, in Update{{.Name
 	}
 {{- end}}
 	if len(updates) > 0 {
-		db, dbErr := s.defaultDB()
+		db, dbErr := s.defaultDB(ctx)
 		if dbErr != nil {
 			return nil, dbErr
 		}
@@ -359,7 +360,7 @@ func (s *{{.Name}}Service) Delete{{.Name}}(ctx context.Context, id string) error
 	if err != nil {
 		return err
 	}
-	db, err := s.defaultDB()
+	db, err := s.defaultDB(ctx)
 	if err != nil {
 		return err
 	}
@@ -374,7 +375,7 @@ func (s *{{.Name}}Service) load{{.Name}}(ctx context.Context, id string) (*model
 	if id == "" {
 		return nil, invalid{{.Name}}Params("ID 不能为空")
 	}
-	db, err := s.defaultDB()
+	db, err := s.defaultDB(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -388,11 +389,11 @@ func (s *{{.Name}}Service) load{{.Name}}(ctx context.Context, id string) (*model
 	return &item, nil
 }
 
-func (s *{{.Name}}Service) defaultDB() (*gorm.DB, error) {
+func (s *{{.Name}}Service) defaultDB(ctx context.Context) (*gorm.DB, error) {
 	if s == nil || s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
-	return s.dbs.Default(), nil
+	return transaction.GetDB(ctx, s.dbs.Default()), nil
 }
 
 func invalid{{.Name}}Params(message string) error {
@@ -406,15 +407,19 @@ const serviceTestTemplate = `package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 {{- if .FirstField.IsTime}}
 	"time"
 {{- end}}
 
+	"gorm.io/gorm"
+
 	"{{.Module}}/internal/model"
 	"{{.Module}}/internal/testkit"
 	"{{.Module}}/pkg/database"
 	"{{.Module}}/pkg/pagination"
+	"{{.Module}}/pkg/transaction"
 )
 
 func Test{{.Name}}ServiceCRUD(t *testing.T) {
@@ -475,6 +480,33 @@ func Test{{.Name}}ServiceCRUD(t *testing.T) {
 	}
 	if _, err := svc.Get{{.Name}}(ctx, created.ID); err == nil {
 		t.Fatal("a deleted {{.Snake}} must not be found")
+	}
+}
+
+func Test{{.Name}}ServiceJoinsCallerTransaction(t *testing.T) {
+	db := testkit.OpenDB(t, &model.{{.Name}}{})
+	svc := New{{.Name}}Service(database.NewConnectionsFromDBs(db, nil), pagination.Policy{})
+	abort := errors.New("abort workflow")
+	err := db.Transaction(func(tx *gorm.DB) error {
+		ctx := transaction.WithDB(context.Background(), tx)
+		if _, err := svc.Create{{.Name}}(ctx, Create{{.Name}}Input{
+{{- range .Fields}}
+			{{.GoName}}: {{.SampleValue}},
+{{- end}}
+		}); err != nil {
+			return err
+		}
+		return abort
+	})
+	if !errors.Is(err, abort) {
+		t.Fatalf("transaction: %v", err)
+	}
+	var count int64
+	if err := db.Model(&model.{{.Name}}{}).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("records survived rollback: %d", count)
 	}
 }
 `

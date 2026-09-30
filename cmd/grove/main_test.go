@@ -336,7 +336,7 @@ func TestMakeModuleOutputPassesTheProjectGates(t *testing.T) {
 	// the entries appended to console-contract.json against the generated docs.
 	runGo(t, root, "test",
 		"./app/console/internal/docs/", "./app/console/internal/service/", "./pkg/migrate/",
-		"-run", "Contract|InvoiceServiceCRUD|DialectMigrationVersionsMatch|EveryUpMigrationHasDown|MySQLMigrations",
+		"-run", "Contract|InvoiceService(CRUD|JoinsCallerTransaction)|DialectMigrationVersionsMatch|EveryUpMigrationHasDown|MySQLMigrations",
 	)
 
 	api := mustRead(t, filepath.Join(root, consoleWebDir, "api/invoice.ts"))

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/pagination"
+	"github.com/zhimma/grove/pkg/transaction"
 	"github.com/zhimma/grove/pkg/ulid"
 )
 
@@ -66,7 +68,7 @@ func NewArticleService(dbs *database.Connections, pages pagination.Policy) *Arti
 }
 
 func (s *ArticleService) ListArticles(ctx context.Context, in ListArticlesInput) (*ListArticlesOutput, error) {
-	db, err := s.defaultDB()
+	db, err := s.defaultDB(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +124,7 @@ func (s *ArticleService) GetArticle(ctx context.Context, in GetArticleInput) (*m
 }
 
 func (s *ArticleService) CreateArticle(ctx context.Context, in CreateArticleInput) (*model.Article, error) {
-	db, err := s.defaultDB()
+	db, err := s.defaultDB(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -164,21 +166,21 @@ func (s *ArticleService) UpdateArticle(ctx context.Context, in UpdateArticleInpu
 	newSlug := article.Slug
 	if in.Title != nil {
 		title := strings.TrimSpace(*in.Title)
-		if title == "" || len(title) > 200 {
+		if title == "" || utf8.RuneCountInString(title) > 200 {
 			return nil, invalidArticleParams("文章标题不能为空且不能超过200个字符")
 		}
 		updates["title"] = title
 	}
 	if in.Slug != nil {
 		newSlug = strings.TrimSpace(*in.Slug)
-		if newSlug == "" || len(newSlug) > 180 {
+		if newSlug == "" || utf8.RuneCountInString(newSlug) > 180 {
 			return nil, invalidArticleParams("文章标识不能为空且不能超过180个字符")
 		}
 		updates["slug"] = newSlug
 	}
 	if in.Summary != nil {
 		summary := strings.TrimSpace(*in.Summary)
-		if len(summary) > 500 {
+		if utf8.RuneCountInString(summary) > 500 {
 			return nil, invalidArticleParams("文章摘要不能超过500个字符")
 		}
 		updates["summary"] = summary
@@ -192,14 +194,14 @@ func (s *ArticleService) UpdateArticle(ctx context.Context, in UpdateArticleInpu
 	}
 	if in.Cover != nil {
 		cover := strings.TrimSpace(*in.Cover)
-		if len(cover) > 255 {
+		if utf8.RuneCountInString(cover) > 255 {
 			return nil, invalidArticleParams("封面地址不能超过255个字符")
 		}
 		updates["cover"] = cover
 	}
 	if in.Category != nil {
 		category := strings.TrimSpace(*in.Category)
-		if len(category) > 80 {
+		if utf8.RuneCountInString(category) > 80 {
 			return nil, invalidArticleParams("文章分类不能超过80个字符")
 		}
 		updates["category"] = category
@@ -221,7 +223,7 @@ func (s *ArticleService) UpdateArticle(ctx context.Context, in UpdateArticleInpu
 		return nil, err
 	}
 	if len(updates) > 0 {
-		db, dbErr := s.defaultDB()
+		db, dbErr := s.defaultDB(ctx)
 		if dbErr != nil {
 			return nil, dbErr
 		}
@@ -241,7 +243,7 @@ func (s *ArticleService) DeleteArticle(ctx context.Context, in DeleteArticleInpu
 	if err != nil {
 		return err
 	}
-	db, err := s.defaultDB()
+	db, err := s.defaultDB(ctx)
 	if err != nil {
 		return err
 	}
@@ -256,7 +258,7 @@ func (s *ArticleService) loadArticle(ctx context.Context, articleID string) (*mo
 	if articleID == "" {
 		return nil, invalidArticleParams("文章ID不能为空")
 	}
-	db, err := s.defaultDB()
+	db, err := s.defaultDB(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +273,7 @@ func (s *ArticleService) loadArticle(ctx context.Context, articleID string) (*mo
 }
 
 func (s *ArticleService) ensureSlugAvailable(ctx context.Context, articleID, slug string) error {
-	db, err := s.defaultDB()
+	db, err := s.defaultDB(ctx)
 	if err != nil {
 		return err
 	}
@@ -289,24 +291,24 @@ func (s *ArticleService) ensureSlugAvailable(ctx context.Context, articleID, slu
 	return nil
 }
 
-func (s *ArticleService) defaultDB() (*gorm.DB, error) {
+func (s *ArticleService) defaultDB(ctx context.Context) (*gorm.DB, error) {
 	if s == nil || s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
-	return s.dbs.Default(), nil
+	return transaction.GetDB(ctx, s.dbs.Default()), nil
 }
 
 func normalizeArticleFields(title, slug, summary, content, cover, category string) (string, string, string, string, string, string, error) {
 	title = strings.TrimSpace(title)
-	if title == "" || len(title) > 200 {
+	if title == "" || utf8.RuneCountInString(title) > 200 {
 		return "", "", "", "", "", "", invalidArticleParams("文章标题不能为空且不能超过200个字符")
 	}
 	slug = strings.TrimSpace(slug)
-	if len(slug) > 180 {
+	if utf8.RuneCountInString(slug) > 180 {
 		return "", "", "", "", "", "", invalidArticleParams("文章标识不能超过180个字符")
 	}
 	summary = strings.TrimSpace(summary)
-	if len(summary) > 500 {
+	if utf8.RuneCountInString(summary) > 500 {
 		return "", "", "", "", "", "", invalidArticleParams("文章摘要不能超过500个字符")
 	}
 	content = strings.TrimSpace(content)
@@ -314,11 +316,11 @@ func normalizeArticleFields(title, slug, summary, content, cover, category strin
 		return "", "", "", "", "", "", invalidArticleParams("文章内容不能为空")
 	}
 	cover = strings.TrimSpace(cover)
-	if len(cover) > 255 {
+	if utf8.RuneCountInString(cover) > 255 {
 		return "", "", "", "", "", "", invalidArticleParams("封面地址不能超过255个字符")
 	}
 	category = strings.TrimSpace(category)
-	if len(category) > 80 {
+	if utf8.RuneCountInString(category) > 80 {
 		return "", "", "", "", "", "", invalidArticleParams("文章分类不能超过80个字符")
 	}
 	return title, slug, summary, content, cover, category, nil

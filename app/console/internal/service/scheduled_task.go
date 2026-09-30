@@ -13,6 +13,7 @@ import (
 	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/scheduler"
+	"github.com/zhimma/grove/pkg/transaction"
 )
 
 // ScheduledTaskService edits the schedule of tasks the Worker already defines.
@@ -198,5 +199,5 @@ func (s *ScheduledTaskService) defaultDB(ctx context.Context) (*gorm.DB, error) 
 	if s.dbs == nil || s.dbs.Default() == nil {
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
-	return s.dbs.Default().WithContext(ctx), nil
+	return transaction.GetDB(ctx, s.dbs.Default()), nil
 }

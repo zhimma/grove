@@ -35,7 +35,7 @@ type CreateSystemConfigRequest struct {
 	ValueType    string `json:"value_type" label:"值类型"`
 	Value        string `json:"value" label:"配置值"`
 	DefaultValue string `json:"default_value" label:"默认值"`
-	IsEditable   bool   `json:"is_editable" label:"是否可编辑"`
+	IsEditable   *bool  `json:"is_editable" label:"是否可编辑"`
 	IsSystem     bool   `json:"is_system" label:"是否系统配置"`
 	IsSecret     bool   `json:"is_secret" label:"是否敏感配置"`
 	SortOrder    int    `json:"sort_order" label:"排序"`

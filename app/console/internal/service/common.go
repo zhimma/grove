@@ -1,11 +1,23 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"time"
 
 	"gorm.io/gorm"
+
+	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/transaction"
 )
+
+// 独立的权限存储和登录保护不能随调用方的 SQL 事务一起回滚。
+func rejectCallerTransaction(ctx context.Context) error {
+	if transaction.FromContext(ctx) != nil {
+		return errx.Conflict().WithCode("transaction_not_supported").WithMessage("此操作不能在调用方事务中执行")
+	}
+	return nil
+}
 
 func parseOrderBy(input string) (string, string) {
 	item := strings.TrimSpace(input)

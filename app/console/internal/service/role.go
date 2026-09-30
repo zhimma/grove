@@ -13,6 +13,7 @@ import (
 	"github.com/zhimma/grove/pkg/errx"
 	"github.com/zhimma/grove/pkg/pagination"
 	"github.com/zhimma/grove/pkg/rbac"
+	"github.com/zhimma/grove/pkg/transaction"
 )
 
 type RoleService struct {
@@ -64,7 +65,7 @@ type CreateRoleInput struct {
 	DisplayName string
 	Description string
 	Sort        int
-	Status      int
+	Status      *int
 }
 
 type UpdateRoleInput struct {
@@ -113,7 +114,7 @@ func (s *RoleService) ListRoles(ctx context.Context, in ListRolesInput) (*ListRo
 		return nil, errx.ServiceUnavailable().WithMessage("默认数据库未配置")
 	}
 
-	query := s.dbs.Default().WithContext(ctx).Model(&model.ConsoleRole{})
+	query := transaction.GetDB(ctx, s.dbs.Default()).Model(&model.ConsoleRole{})
 	if keyword := strings.TrimSpace(in.Keyword); keyword != "" {
 		like := "%" + keyword + "%"
 		query = query.Where(
@@ -192,7 +193,11 @@ func (s *RoleService) CreateRole(ctx context.Context, in CreateRoleInput) (*Role
 	if name == "" || code == "" {
 		return nil, errx.InvalidParams().WithHTTPStatus(422).WithMessage("角色名称和角色编码不能为空")
 	}
-	if !isRoleStatusValid(in.Status) && in.Status != 0 {
+	status := model.ConsoleRoleStatusActive
+	if in.Status != nil {
+		status = *in.Status
+	}
+	if !isRoleStatusValid(status) {
 		return nil, errx.InvalidParams().WithHTTPStatus(422).WithMessage("角色状态不合法")
 	}
 	if err := s.ensureRoleCodeUnique(ctx, "", code); err != nil {
@@ -205,13 +210,9 @@ func (s *RoleService) CreateRole(ctx context.Context, in CreateRoleInput) (*Role
 		DisplayName: strings.TrimSpace(in.DisplayName),
 		Description: strings.TrimSpace(in.Description),
 		Sort:        in.Sort,
-		Status:      model.ConsoleRoleStatusActive,
+		Status:      status,
 	}
-	if in.Status == model.ConsoleRoleStatusDisabled {
-		role.Status = in.Status
-	}
-
-	if err := s.dbs.Default().WithContext(ctx).Create(&role).Error; err != nil {
+	if err := transaction.GetDB(ctx, s.dbs.Default()).Create(&role).Error; err != nil {
 		return nil, errx.Internal().WithCause(err)
 	}
 	return s.GetRole(ctx, GetRoleInput{RoleID: role.ID})
@@ -261,7 +262,7 @@ func (s *RoleService) UpdateRole(ctx context.Context, in UpdateRoleInput) (*Role
 	}
 
 	if len(updates) > 0 {
-		if err := s.dbs.Default().WithContext(ctx).
+		if err := transaction.GetDB(ctx, s.dbs.Default()).
 			Model(&model.ConsoleRole{}).
 			Where("id = ?", in.RoleID).
 			Updates(updates).Error; err != nil {
@@ -273,6 +274,9 @@ func (s *RoleService) UpdateRole(ctx context.Context, in UpdateRoleInput) (*Role
 }
 
 func (s *RoleService) DeleteRole(ctx context.Context, in DeleteRoleInput) error {
+	if err := rejectCallerTransaction(ctx); err != nil {
+		return err
+	}
 	role, err := s.loadRole(ctx, in.RoleID)
 	if err != nil {
 		return err
@@ -282,7 +286,7 @@ func (s *RoleService) DeleteRole(ctx context.Context, in DeleteRoleInput) error 
 	}
 
 	var count int64
-	if err := s.dbs.Default().WithContext(ctx).
+	if err := transaction.GetDB(ctx, s.dbs.Default()).
 		Model(&model.ConsoleAdmin{}).
 		Where("role_id = ?", in.RoleID).
 		Count(&count).Error; err != nil {
@@ -301,7 +305,7 @@ func (s *RoleService) DeleteRole(ctx context.Context, in DeleteRoleInput) error 
 			return rbacSyncError("角色权限清理失败", err, nil)
 		}
 	}
-	if err := s.dbs.Default().WithContext(ctx).Delete(&model.ConsoleRole{}, "id = ?", in.RoleID).Error; err != nil {
+	if err := transaction.GetDB(ctx, s.dbs.Default()).Delete(&model.ConsoleRole{}, "id = ?", in.RoleID).Error; err != nil {
 		var compensationErr error
 		if s.rolePolicies != nil {
 			compensationErr = s.rolePolicies.ReplaceConsolePoliciesForRole(in.RoleID, permissions)
@@ -332,6 +336,9 @@ func (s *RoleService) GetRolePermissions(ctx context.Context, in GetRolePermissi
 }
 
 func (s *RoleService) SetRolePermissions(ctx context.Context, in SetRolePermissionsInput) error {
+	if err := rejectCallerTransaction(ctx); err != nil {
+		return err
+	}
 	role, err := s.loadRole(ctx, in.RoleID)
 	if err != nil {
 		return err
@@ -411,7 +418,7 @@ func (s *RoleService) SetRoleMenus(ctx context.Context, in SetRoleMenusInput) er
 	if err := validateConsoleMenuKeys(keys); err != nil {
 		return err
 	}
-	if err := s.dbs.Default().WithContext(ctx).
+	if err := transaction.GetDB(ctx, s.dbs.Default()).
 		Model(&model.ConsoleRole{}).
 		Where("id = ?", in.RoleID).
 		Update("menu_keys", datatype.NewStringArray(normalizeConsoleMenuKeys(keys))).Error; err != nil {
@@ -426,7 +433,7 @@ func (s *RoleService) loadRole(ctx context.Context, roleID string) (*model.Conso
 	}
 
 	var role model.ConsoleRole
-	if err := s.dbs.Default().WithContext(ctx).First(&role, "id = ?", strings.TrimSpace(roleID)).Error; err != nil {
+	if err := transaction.GetDB(ctx, s.dbs.Default()).First(&role, "id = ?", strings.TrimSpace(roleID)).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, errx.NotFound().WithMessage("角色不存在")
 		}
@@ -437,7 +444,7 @@ func (s *RoleService) loadRole(ctx context.Context, roleID string) (*model.Conso
 
 func (s *RoleService) ensureRoleCodeUnique(ctx context.Context, excludeID, code string) error {
 	var count int64
-	query := s.dbs.Default().WithContext(ctx).Model(&model.ConsoleRole{}).Where("code = ?", code)
+	query := transaction.GetDB(ctx, s.dbs.Default()).Model(&model.ConsoleRole{}).Where("code = ?", code)
 	if strings.TrimSpace(excludeID) != "" {
 		query = query.Where("id <> ?", excludeID)
 	}

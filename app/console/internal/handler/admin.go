@@ -42,7 +42,7 @@ type CreateAdminRequest struct {
 	DisplayName string `json:"display_name" binding:"omitempty,max=100" label:"显示名称"`
 	Avatar      string `json:"avatar" binding:"omitempty,max=500" label:"头像"`
 	RoleID      string `json:"role_id" binding:"required" label:"角色"`
-	Status      int    `json:"status" label:"状态"`
+	Status      *int   `json:"status" binding:"omitempty,oneof=0 1 2" label:"状态"`
 	Remark      string `json:"remark" binding:"omitempty,max=500" label:"备注"`
 }
 

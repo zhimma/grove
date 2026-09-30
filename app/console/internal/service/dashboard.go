@@ -5,6 +5,7 @@ import (
 
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/transaction"
 )
 
 type DashboardService struct {
@@ -36,7 +37,7 @@ func (s *DashboardService) Summary(ctx context.Context) (SummaryOutput, error) {
 		operationCount int64
 		loginCount     int64
 	)
-	db := s.dbs.Default().WithContext(ctx)
+	db := transaction.GetDB(ctx, s.dbs.Default())
 	if err := db.Table("console_admins").Count(&adminCount).Error; err != nil {
 		return SummaryOutput{}, errx.Internal().WithCause(err)
 	}

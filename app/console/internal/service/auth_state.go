@@ -8,6 +8,7 @@ import (
 	"github.com/zhimma/grove/internal/model"
 	"github.com/zhimma/grove/pkg/database"
 	"github.com/zhimma/grove/pkg/errx"
+	"github.com/zhimma/grove/pkg/transaction"
 )
 
 type AdminAuthState struct {
@@ -31,7 +32,7 @@ func NewAdminAuthStateResolver(dbs *database.Connections) AdminAuthStateResolver
 
 func (r *adminAuthStateResolver) ResolveAdminAuthState(ctx context.Context, adminID string) (*AdminAuthState, error) {
 	var admin model.ConsoleAdmin
-	if err := r.dbs.Default().WithContext(ctx).
+	if err := transaction.GetDB(ctx, r.dbs.Default()).
 		Preload("Role").
 		Where("id = ?", adminID).
 		First(&admin).Error; err != nil {

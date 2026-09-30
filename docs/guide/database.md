@@ -102,6 +102,29 @@ database/seeds/mysql/
 - 迁移文件使用正反向 SQL，按时间戳命名。
 - 生产环境只通过迁移和种子初始化数据库，不使用 AutoMigrate 替代迁移。
 
+## 服务间事务
+
+调用方通过 GORM 开启事务，将事务连接放入 `context.Context`，参与同一流程的 SQL 服务通过 `transaction.GetDB` 获取连接：
+
+```go
+err := db.Transaction(func(tx *gorm.DB) error {
+    txCtx := transaction.WithDB(ctx, tx)
+    if _, err := users.CreateUser(txCtx, userInput); err != nil {
+        return err
+    }
+    _, err := articles.CreateArticle(txCtx, articleInput)
+    return err
+})
+```
+
+用户、文章、配置等 SQL 服务的查询和写入会使用调用方连接；模块生成器也遵循这一约定。返回错误时，由调用方统一回滚。该机制只适用于同一个数据库，不提供跨数据库事务。
+
+创建或删除管理员、修改管理员角色、删除角色、分配 API 权限及登录包含独立的权限存储或登录保护副作用。这些操作不支持调用方事务，传入事务上下文时返回 `transaction_not_supported`，并在产生副作用前停止。密码修改与会话吊销使用同一 SQL 事务。
+
+管理员和角色创建时，省略 `status` 默认启用，显式传入 `0` 则保存为禁用。默认值由 service 补齐，模型不使用非零 GORM 默认值覆盖调用方传入的零值；直接操作模型时须显式指定状态。
+
+配置的 `is_editable` 同样区分省略与 `false`：省略时默认可编辑，显式 `false` 保存为只读。操作审计的 `success` 按实际 HTTP 状态保存，失败不会被 ORM 默认值改成成功。这些规则作用于新的写入，不推断或重写已有数据的历史意图。
+
 ## 模型边界
 
 - 模型负责字段定义与通用查询辅助。

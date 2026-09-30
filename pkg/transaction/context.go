@@ -18,7 +18,7 @@ func WithDB(ctx context.Context, db *gorm.DB) context.Context {
 // GetDB returns the transaction the caller put in ctx, or defaultDB when the
 // call is not inside one. Both are bound to ctx before returning.
 func GetDB(ctx context.Context, defaultDB *gorm.DB) *gorm.DB {
-	if db := getDBFromContext(ctx); db != nil {
+	if db := FromContext(ctx); db != nil {
 		return db.WithContext(ctx)
 	}
 	if defaultDB == nil {
@@ -27,7 +27,11 @@ func GetDB(ctx context.Context, defaultDB *gorm.DB) *gorm.DB {
 	return defaultDB.WithContext(ctx)
 }
 
-func getDBFromContext(ctx context.Context) *gorm.DB {
+// FromContext 返回调用方显式传入的数据库连接；未设置时返回 nil。
+func FromContext(ctx context.Context) *gorm.DB {
+	if ctx == nil {
+		return nil
+	}
 	db, _ := ctx.Value(dbKey{}).(*gorm.DB)
 	return db
 }

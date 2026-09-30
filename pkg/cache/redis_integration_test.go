@@ -30,6 +30,7 @@ func TestRedisStoreContract(t *testing.T) {
 	}
 	prefix := "grove-cache-contract-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	store := NewRedisStore(client, prefix)
+	testCompareAndDelete(t, store)
 	for _, key := range []string{"missing", "permanent", "expiring", "add"} {
 		key := key
 		t.Cleanup(func() { _ = store.Delete(context.Background(), key) })
