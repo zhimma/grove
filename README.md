@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/zhimma/grove/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/zhimma/grove/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/github/go-mod/go-version/zhimma/grove)](go.mod)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 **一个带管理后台的 Go 单体脚手架，让新项目从业务开始。**
 
@@ -157,4 +158,6 @@ docker build --build-arg SERVICE=console -t grove-console:local .
 
 感谢 [Gin](https://github.com/gin-gonic/gin)、[GORM](https://github.com/go-gorm/gorm)、[Casbin](https://github.com/casbin/casbin)、[Asynq](https://github.com/hibiken/asynq)、[Vben Admin](https://github.com/vbenjs/vue-vben-admin) 及其他依赖项目。
 
-管理后台保留 Vben Admin 的 [MIT 许可证](web/admin-vben/LICENSE)。Grove 根目录尚未声明整体项目许可证；各依赖的许可证与版权归原作者所有。
+Grove 自身代码采用 [MIT 许可证](LICENSE)，允许商业使用、修改、分发、再许可和销售。分发软件副本或实质性部分时，须保留版权声明和许可证全文；软件按原样提供，不附带担保。
+
+管理后台保留 Vben Admin 的 [MIT 许可证与版权声明](web/admin-vben/LICENSE)。第三方代码和依赖仍遵循各自的许可证。

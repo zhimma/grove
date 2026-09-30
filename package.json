@@ -1,6 +1,7 @@
 {
   "name": "@zhimma/grove",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "install:admin": "pnpm --dir web/admin-vben install --frozen-lockfile",
     "dev:admin": "pnpm --dir web/admin-vben dev:console",
