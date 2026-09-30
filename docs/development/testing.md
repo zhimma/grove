@@ -87,7 +87,7 @@ SQLite 的模型迁移测试不执行 PostgreSQL/MySQL SQL，不能替代上面�
 
 [cmd/grove/main_test.go](../../cmd/grove/main_test.go)会复制仓库、生成模块，再运行后端 `go vet`、生成的 CRUD 测试、Console 路由/OpenAPI/前端契约比对和双方言迁移文件规则；单字段分支也有回归。
 
-这些回归在 `go test -short` 下跳过；它们不运行生成页面的 Vue typecheck/build、真实数据库迁移或浏览器操作。新增模块后仍需执行相关前端门禁与[Staging 验收](../deployment/staging-checklist.md)，真实业务接入成本见[升级清单 T9](../plans/2026-08-29-grove-framework-upgrade-plan.md#t9真实模块接入验证)。
+这些回归在 `go test -short` 下跳过；它们不运行生成页面的 Vue typecheck/build、真实数据库迁移或浏览器操作。新增模块后仍需执行相关前端门禁与[Staging 验收](../deployment/staging-checklist.md)，并在实际业务中评估生成后还需补充的规则与接口。
 
 ## 编写约定
 
@@ -113,4 +113,4 @@ SQLite 的模型迁移测试不执行 PostgreSQL/MySQL SQL，不能替代上面�
 ## 相关文档
 
 - [快速上手](../guide/quickstart.md)
-- [错误处理](./error-handling.md)
+- [错误处理](../04-响应与错误处理规范.md)

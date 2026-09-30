@@ -8,7 +8,7 @@
 - PostgreSQL 14+ 或 MySQL 8.0.16+
 - Node.js 20.19+
 - pnpm 10.28.2（仅启动前端需要）
-- Redis 6+（启用 Cache、Job 或 Worker 时需要）
+- Redis（启用 Redis 缓存或 Asynq 队列时需要；Compose 使用 Redis 7）
 
 确认 Go 环境：
 
@@ -56,7 +56,7 @@ jwt:
 
 `jwt.secret` 与 `security.config_encryption_key` 不用手造：`go run ./cmd/grove key:generate` 打印一组强随机值，粘进 `config.yaml` 即可。
 
-如果需要后台 API 权限，再打开：
+模板已经启用 Console 权限执行器。保留以下配置，普通管理员接口依赖它完成授权：
 
 ```yaml
 casbin:

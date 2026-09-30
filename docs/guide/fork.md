@@ -19,7 +19,7 @@ sed -i '' "s|^module $OLD|module $NEW|" go.mod
 go build ./... && go test ./...
 ```
 
-涉及约 126 个 Go 文件。代码生成器不需要手改——`grove make:module` 从 `go.mod` 读 module path，改完就跟着变。
+代码生成器不需要手改——`grove make:module` 从 `go.mod` 读 module path，改完就跟着变。
 
 前端 `web/admin-vben/**/package.json` 里的 `repository` / `homepage` 字段指向 Grove 仓库，不影响构建，按需替换。
 
@@ -95,8 +95,8 @@ internal/jobtask/echo.go              # TaskEcho / EchoPayload
 | --- | --- |
 | `config.yaml` / `config.example.yaml` | `app.name` |
 | `README.md`、`AGENTS.md` | 项目定位描述 |
-| `docs/` | 按需裁剪；`docs/plans/` 是 Grove 自己的决策归档，通常整个删掉 |
-| `web/admin-vben/apps/console/index.html` | 标题 |
+| `docs/` | 按需裁剪；保留与你的项目实际能力匹配的指南 |
+| `web/admin-vben/apps/console/.env.development` / `.env.production` | 前端标题与 API 地址 |
 | `.gitlab-ci.yml` / `.github/workflows/ci.yml` | 二选一，删掉不用的那份 |
 
 ## 5. 上游修复
@@ -104,13 +104,13 @@ internal/jobtask/echo.go              # TaskEcho / EchoPayload
 fork 后两边独立演进，Grove 不提供升级通道。要跟进上游改动只能手工：
 
 ```bash
-git remote add upstream <grove-repo>
+git remote add upstream https://github.com/zhimma/grove.git
 git fetch upstream
 git log upstream/main --oneline
 git cherry-pick <commit>
 ```
 
-改过 module path 之后几乎每个 cherry-pick 都会冲突，属预期。建议只在有明确安全修复时才做，日常不同步。
+修改 module path 或业务结构后，上游变更可能冲突；逐项审查需要的修复，并在合入后运行相应测试。不要直接覆盖下游代码。
 
 ## 6. 验证
 

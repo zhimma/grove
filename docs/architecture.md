@@ -51,7 +51,7 @@ CoreServer → middleware → router → handler → service → model / databas
 - `provider.APIOptions()`：API 所需依赖
 - `provider.ConsoleOptions()`：Console 所需依赖
 - `provider.WorkerOptions()`：Worker 所需依赖
-- Provider 负责按逆序关闭资源，并暴露 readiness checks。
+- Provider 负责按逆序关闭资源，并暴露 readiness checks。初始化失败时回滚已创建的资源，关闭路径幂等并汇总错误。
 - handler、service、job 不应接收完整 Provider，只接收实际需要的依赖。
 
 ## 请求链路
@@ -101,4 +101,4 @@ CoreServer → middleware → router → handler → service → model / databas
 - [配置](guide/configuration.md)
 - [项目结构](guide/structure.md)
 - [Console 权限](02-console-架构与权限.md)
-- [Provider 生命周期设计](plans/2026-07-14-provider-lifecycle-config-design.md)
+- [贡献与验证](../CONTRIBUTING.md)

@@ -85,18 +85,22 @@ contracts: ## 检查 API 和 Console 路由/OpenAPI 合同
 quality: quality.go.fmt quality.go.any quality.go.password quality.go.vet docs.check diff.check admin.lint admin.circular ## 运行本地可用的格式、静态与前端质量检查
 
 docs.check: ## 检查 canonical 文档中的架构示例是否与当前代码一致
-	@files='docs/01-开发规范.md docs/02-console-架构与权限.md docs/03-console-新增模块指南.md docs/guide/service.md docs/guide/pkg-components.md docs/guide/cache.md docs/guide/permission.md docs/guide/httpclient.md docs/guide/event.md docs/commands.md'; \
+	@files='README.md CONTRIBUTING.md AGENTS.md docs/README.md docs/architecture.md docs/commands.md docs/01-开发规范.md docs/02-console-架构与权限.md docs/03-console-新增模块指南.md docs/04-响应与错误处理规范.md docker/README.md'; \
 	for file in $$files; do test -f "$$file" || { echo "缺少文档文件：$$file"; exit 1; }; done; \
+	files="$$files $$(rg --files docs -g '*.md')"; \
 	if rg -n -F \
 		-e 'provider *provider.Provider' \
 		-e 'RegisterArticleRoutes(protected, p)' \
 		-e 'route.WrapWithCatalog(' \
 		-e 'catalogs ...*route.Catalog' \
-		-e 'response.OK(' \
+		-e 'response.OK' \
 		-e 'response.Error(' \
 		-e 'httpclient.NewWithConfig(' \
 		-e 'event.NewDispatcher(' \
 		-e 'event.NewAsync(' \
+		-e 'job.NewTask(' \
+		-e 'request.GetRequestID(' \
+		-e 'request.GetRequestMeta(' \
 		-e 'grove make:model' \
 		-e 'grove make:service' \
 		-e 'grove make:handler' \
@@ -106,7 +110,7 @@ docs.check: ## 检查 canonical 文档中的架构示例是否与当前代码一
 		echo '文档示例引用了已删除或已更名的 API（见上方命中行），请按当前代码更新。'; \
 		exit 1; \
 	fi
-	@if rg -n -e '/Users/[a-z]' -e '/home/[a-z]' --glob 'docs/**/*.md' --glob '!docs/plans/**' --glob 'README.md' --glob 'AGENTS.md' .; then \
+	@if rg -n -e '/Users/[a-z]' -e '/home/[a-z]' --glob 'docs/**/*.md' --glob 'README.md' --glob 'AGENTS.md' .; then \
 		echo '文档中出现了个人机器路径：fork 本仓库的人无法照做，请改成通用命令或占位符。'; \
 		exit 1; \
 	fi

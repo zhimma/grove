@@ -1,115 +1,160 @@
 # Grove
 
-Grove 是一个面向中大型项目的 console-first Go 单体脚手架。它借鉴 Laravel 的目录约定和 CLI 体验，但坚持 Go 的显式组合、直接命名和按需抽象。
+[![CI](https://github.com/zhimma/grove/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/zhimma/grove/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/github/go-mod/go-version/zhimma/grove)](go.mod)
 
-## 项目定位
+**一个带管理后台的 Go 单体脚手架，让新项目从业务开始。**
 
-适合从零搭建：
+Grove 把后台开发常用的认证、权限、数据库、上传、日志、队列和管理界面放在同一个仓库。借鉴 Laravel 的开发体验，采用 Go 的显式组合和按需抽象，通过完整 fork / clone 接入新项目。
 
-- SaaS 管理后台
-- 平台运营后台
-- RBAC + CRUD + 配置管理 + 文件上传 + 审计日志系统
+[快速上手](#快速上手) · [开发文档](docs/README.md) · [创建业务模块](docs/03-console-新增模块指南.md) · [参与贡献](CONTRIBUTING.md) · [反馈问题](https://github.com/zhimma/grove/issues)
 
-当前主线是单租户、单 Console 后台；多租户、插件系统、数据权限 DSL、工作流和通知平台不属于当前基线。
+## 能做什么
 
-## 当前能力
+| 能力 | 已有实现 |
+| --- | --- |
+| 管理后台 | 管理员、终端用户、角色、会话、系统/站点配置、文章示例、审计日志、计划任务页面 |
+| 认证与授权 | JWT access/refresh token、持久化 Session、刷新轮换、强制下线、Casbin API 权限与前端菜单授权 |
+| HTTP 开发 | Gin 路由、参数校验、统一响应和错误、分页、请求 ID、OpenAPI 与路由契约检查 |
+| 数据层 | GORM、PostgreSQL/MySQL、命名连接、事务传递、双方言 SQL 迁移、基础与演示种子 |
+| 文件与配置 | Local/S3 存储、上传策略、私有下载、业务配置敏感值加密 |
+| 后台任务 | Asynq 队列、同步/异步事件、Cron 调度、后台启停与手动执行 |
+| 运维基础 | 结构化日志与轮转、readiness、Prometheus、OpenTelemetry、服务镜像 |
+| 开发工具 | 前后端模块生成、密钥生成、RBAC 检查、热重载、本地依赖 Compose、统一 Makefile 命令 |
 
-- `api / console / worker` 三个 Go 服务入口
-- PostgreSQL/MySQL 迁移、bootstrap/demo seed 和可回滚生命周期
-- Console access/refresh token、持久化 Session、退出和强制下线
-- Casbin API RBAC、前端路由菜单权限
-- 配置、数据库资源、Redis、Cache、Event、Job、Scheduler、Storage
-- 统一响应、错误处理、请求校验、上传限制和审计日志
-- readiness、Prometheus metrics、OpenTelemetry trace、安全 CI
-- Vue 3 + Vite 管理后台前端
+后端为 **Go + Gin + GORM**；管理后台为 **Vue 3 + TypeScript + Vite + Ant Design Vue**，基于 Vben Admin。
 
-## 三分钟了解项目
+## 适用场景
 
-按以下顺序阅读：
+适合运营后台、内部管理系统，以及需要后台管理能力的业务 API。代码由你的项目自持，可以按需删除示例或替换实现。
 
-1. [项目架构](docs/architecture.md)
-2. [命令参考](docs/commands.md)
-3. [快速上手](docs/guide/quickstart.md)
-4. [项目结构](docs/guide/structure.md)
-5. [开发规范](docs/01-开发规范.md)
+当前以单租户、单 Console 后台为基础。邮件、通知、多租户、工作流和通用接口配额限流没有预置；已提供的是登录限流。组件边界与后续方向见[项目范围](docs/status.md)。
 
-基于 Grove 建立新项目：[fork 指南](docs/guide/fork.md)。
+## 快速上手
 
-了解完成范围和待验收事项：[当前状态与下一步](docs/status.md)。
+### 1. 准备环境
 
-AI 或自动化工具先读取仓库根目录的 [AGENTS.md](AGENTS.md) 和 [AI 项目上下文](docs/ai/project-context.md)。
-
-## 最短启动路径
+需要 Go、Node.js/Corepack，以及 PostgreSQL/Redis。仓库固定 Go **1.27.1**、Node.js **20.19.5**；pnpm 由前端 `packageManager` 字段固定。版本分别见 [.mise.toml](.mise.toml) 和 [前端 package.json](web/admin-vben/package.json)。
 
 ```bash
+git clone https://github.com/zhimma/grove.git
+cd grove
+
+# 安装仓库固定的 Go 和 Node.js；已自行安装对应版本可跳过
+mise install
+```
+
+可通过 [mise](https://mise.jdx.dev) 管理工具链。如果 shell 未启用 mise，以下命令可加 `mise exec --` 前缀，例如 `mise exec -- make help`。
+
+### 2. 启动依赖并配置
+
+已安装 Docker / OrbStack 时：
+
+```bash
+make deps.up
 cp config.example.yaml config.yaml
-# 编辑 config.yaml，启用 PostgreSQL 或 MySQL 并填写本地凭据
+go run ./cmd/grove key:generate
+```
+
+将生成的值填入 `config.yaml` **已有的** `jwt.secret` 和 `security.config_encryption_key`。模板中的数据库与 Redis 地址已对应 Compose；无需更改。
+
+Compose 仅供本机开发，数据库使用本机回环端口和免密配置。已有数据库、端口冲突或改用 MySQL 的步骤见[快速上手指南](docs/guide/quickstart.md)。后端只读取指定的 YAML 配置及支持的环境变量，不自动加载 `.env`。
+
+### 3. 初始化并启动后台
+
+```bash
 make migrate.up
 make seed.bootstrap
 make run.console
 ```
 
-管理后台前端：
+初始账号是 **`root`**。未配置初始密码时，首次 `seed.bootstrap` 会生成并显示一次性密码；已有账号的密码不会被重复执行覆盖。
+
+另开一个终端：
 
 ```bash
 make admin.install
 make admin.dev
 ```
 
-默认端口：API `8080`、Console `8081`、Worker `8082`、前端 `5666`。完整步骤见 [快速上手](docs/guide/quickstart.md)。
+打开 **http://localhost:5666** 登录。开发前端默认连接本机 `8081` 端口的 Console API。
 
-## 目录速览
+| 入口 | 默认地址 | 用途 |
+| --- | --- | --- |
+| Console | `http://localhost:8081` | 管理后台 API |
+| API | `http://localhost:8080` | 对外业务 API 起点，另行执行 `make run.api` |
+| Worker | `http://localhost:8082` | 队列/调度进程的健康端点，另行执行 `make run.worker` |
+| OpenAPI | `http://localhost:8081/console/docs` | Console 接口文档，受 `docs.enabled` 控制 |
+
+确认后端已就绪：
+
+```bash
+curl -fsS http://localhost:8081/health/ready
+```
+
+日常开发可用 `make dev.console`、`make dev.api`、`make dev.worker` 热重载。Worker 需要启用队列或 Scheduler；后台可管理的计划任务还需要数据库和已执行的迁移。
+
+## 创建一个业务模块
+
+在新项目中，从字段定义生成前后端基础代码：
+
+```bash
+go run ./cmd/grove make:module Invoice --label 发票 \
+  --fields "title:string:required,amount:int,paid:bool,due_at:time"
+```
+
+生成内容包括：
+
+- PostgreSQL/MySQL 迁移、共享模型、分页 CRUD service 与测试。
+- Handler、路由注册、权限名称和 OpenAPI 声明。
+- 前端 API、契约登记、管理页面和菜单路由（保留 Console 前端时）。
+
+生成器读取目标项目的 `go.mod`，支持 fork 后改 module path。生成后还需补充业务规则、审查并执行迁移，以及验证页面和权限。具体步骤见[新增 Console 模块](docs/03-console-新增模块指南.md)。
+
+## 项目结构
 
 ```text
-app/api/                         对外 API 服务
-app/console/                     管理后台后端
-app/worker/                      队列和计划任务
-cmd/grove/                       迁移、seed、RBAC、代码生成 CLI
-internal/config/                 严格配置加载和服务校验
-internal/provider/               启动装配和资源生命周期
-internal/model/                  共享 GORM 模型
-pkg/                             基础层（跨服务复用的技术能力）
-database/migrations/{postgres,mysql}/ 正反向 SQL 迁移
-database/seeds/{postgres,mysql}/     bootstrap/demo seed
-web/admin-vben/apps/console/     Vue 管理后台
-docs/                            canonical 指南、运行手册和历史计划
+app/
+  api/                  对外 API；服务入口与内部代码
+  console/              管理后台后端
+  worker/               队列消费者与计划任务
+cmd/grove/              迁移、种子、代码生成等 CLI
+internal/               仓库内配置、装配、模型、观测和测试辅助
+pkg/                    跨服务共用的技术组件
+database/               按 PostgreSQL/MySQL 分层的迁移与种子
+web/admin-vben/         管理后台前端工作区
+docs/                   当前实现的开发与运行指南
 ```
 
-## 开发与验证
+请求通常沿着 `router → handler → service → model/database` 执行；依赖在启动层显式装配。`pkg/` 不对外发布，也不得反向依赖 `internal/` 或 `app/`。详见[架构](docs/architecture.md)与[目录职责](docs/guide/structure.md)。
+
+## 验证与部署
 
 ```bash
-make help
-make test
-make build
-make verify
+make help              # 全部开发命令
+make verify            # Go 测试、二进制构建、前端类型检查
+make contracts         # 路由 / OpenAPI / 前端接口契约
+make ci                # 完整本地质量门禁，先安装前端依赖
 ```
 
-后端 CLI 统一入口：
+真实数据库与 Redis 集成测试需要单独运行，见[测试指南](docs/development/testing.md)。`make ci` 不包含容器构建或完整浏览器验收。
 
 ```bash
-go run ./cmd/grove --help
-go run ./cmd/grove about
+docker build --build-arg SERVICE=console -t grove-console:local .
 ```
 
-关键变更额外运行：
+`SERVICE` 支持 `api`、`console`、`worker`。运行时挂载自己的 `config.yaml`；镜像以非 root 用户运行。生产配置、反向代理、前端发布和数据回退要求见[部署指南](docs/deployment/deploy.md)。
 
-```bash
-go test -race ./...
-go vet ./...
-make quality.govuln
-```
+## 参与项目
 
-路由、权限、OpenAPI、迁移和认证的验证要求见 [AI 变更检查清单](docs/ai/change-checklist.md)。
+欢迎提交可复现的问题、文档修正和有明确使用场景的改进：
 
-## 文档导航
+- [Issues](https://github.com/zhimma/grove/issues)：问题反馈与需求讨论。
+- [Pull requests](https://github.com/zhimma/grove/pulls)：代码和文档贡献，提交前请阅读[贡献指南](CONTRIBUTING.md)。
+- [Fork 指南](docs/guide/fork.md)：更换项目标识、处理示例、维护上游修复。
 
-- [文档中心](docs/README.md)
-- [当前状态与下一步](docs/status.md)
-- [架构](docs/architecture.md)
-- [命令](docs/commands.md)
-- [配置](docs/guide/configuration.md)
-- [数据库](docs/guide/database.md)
-- [Console 架构与权限](docs/02-console-架构与权限.md)
-- [新增 Console 模块](docs/03-console-新增模块指南.md)
-- [部署与运维](docs/operations.md)
-- [升级清单与历史背景](docs/plans/README.md)
+## 致谢与许可
+
+感谢 [Gin](https://github.com/gin-gonic/gin)、[GORM](https://github.com/go-gorm/gorm)、[Casbin](https://github.com/casbin/casbin)、[Asynq](https://github.com/hibiken/asynq)、[Vben Admin](https://github.com/vbenjs/vue-vben-admin) 及其他依赖项目。
+
+管理后台保留 Vben Admin 的 [MIT 许可证](web/admin-vben/LICENSE)。Grove 根目录尚未声明整体项目许可证；各依赖的许可证与版权归原作者所有。

@@ -62,7 +62,7 @@ GitLab CI 会安装并强制执行这两个检查；具备相同工具和前端�
 ### 1. 获取代码并构建
 
 ```bash
-git clone ssh://git@gitlab.hulumibao.com:10022/huluxiaobao/apis/grove.git
+git clone https://github.com/zhimma/grove.git
 cd grove
 go mod download
 make build

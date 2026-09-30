@@ -83,7 +83,7 @@ bin/grove --config /opt/grove/config.yaml migrate status
 
 ## 6. 扫描、监控与结论
 
-- 在推广前运行 [镜像扫描](../../docker/README.md#镜像扫描)；当前 repository 文档提供命令，但本轮不声称它已经在本地或 GitLab CI 中执行。
+- 在推广前运行 [镜像扫描](../../docker/README.md#镜像扫描)；当前 CI 不自动执行镜像漏洞扫描，需要在发布环境保存实际扫描结果。
 - 检查错误率、数据库/Redis 指标、worker 失败和重试指标；`/metrics` 不应泄露 SQL、密码或 token。
 - 若任何一项失败，停止推广，保留无 secret 的日志片段、请求 ID、task ID、镜像 digest 和 migration status。不要通过关闭 readiness、跳过权限或删除 volume 来“让验收通过”。
 - 只有每一项都有本次外部环境证据时，发布记录才能标记为“staging 已验证”；否则只能标记为“本地/CI 已验证，staging 待验收”。

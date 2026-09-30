@@ -1,6 +1,6 @@
 # Grove Repository Instructions
 
-本文件是仓库级开发与 AI 协作约定。项目事实以当前代码、配置、Makefile 和 CI 为准；历史计划只用于理解决策背景，不能替代现场代码检查。
+本文件是仓库级开发与 AI 协作约定。项目事实以当前代码、配置、Makefile 和 CI 为准；历史决策通过 Git 查询，不能替代现场代码检查。
 
 ## 项目定位
 
@@ -57,8 +57,8 @@ Grove 是一个 console-first 的中大型 Go 单体脚手架，借鉴 Laravel �
 
 ## AI 工作顺序
 
-1. 先读本文件和 [docs/ai/project-context.md](docs/ai/project-context.md)。
+1. 先读本文件和 [文档入口](docs/README.md)。
 2. 再读 [docs/architecture.md](docs/architecture.md)、[docs/commands.md](docs/commands.md) 和对应领域指南。
 3. 使用 `rg` 搜索真实符号、路由、配置键和测试；不要只根据旧计划推断。
 4. 先判断是诊断、文档更新还是代码实现，再选择最小改动范围。
-5. 交付前遵循 [docs/ai/change-checklist.md](docs/ai/change-checklist.md)。
+5. 交付前遵循 [贡献指南](CONTRIBUTING.md) 的检查要求。

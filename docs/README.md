@@ -1,71 +1,40 @@
-# Grove 文档中心
+# Grove 开发文档
 
-Grove 文档按“先理解项目，再开发功能，最后运行验证”的顺序组织。当前行为查阅下列指南；完成范围和下一步查阅[状态页](status.md)。`docs/plans/` 中的工作清单和历史讨论不能替代源码事实。
+先按 [README](../README.md) 启动项目，再按当前任务查阅下表。文档描述现有代码的行为；源码、配置、Makefile 和实际执行结果是最终依据。
 
-## 事实与进度的读取顺序
+## 入门与开发
 
-1. 当前源码、配置、Makefile、CI 和实际执行结果是事实依据。
-2. 架构、开发与运行指南解释当前行为；发生冲突时修正文档。
-3. [当前状态](status.md)区分已实现、部分完成、暂缓和待验收。
-4. [升级清单](plans/2026-08-29-grove-framework-upgrade-plan.md)保留任务 ID、勾选状态和退出条件；旧审计与历史计划只作背景。
+| 任务 | 文档 |
+| --- | --- |
+| 第一次启动、改用 MySQL、排查环境问题 | [快速上手](guide/quickstart.md) |
+| 通过 fork / clone 建立业务项目 | [Fork 指南](guide/fork.md) |
+| 理解服务边界与请求链路 | [架构](architecture.md)、[目录职责](guide/structure.md) |
+| 了解已有能力与项目边界 | [项目范围](status.md) |
+| 编码与提交流程 | [开发规范](01-开发规范.md)、[贡献指南](../CONTRIBUTING.md) |
+| 新增一个前后端模块 | [Console 新增模块](03-console-新增模块指南.md) |
+| 使用 CLI 和开发命令 | [命令参考](commands.md) |
 
-## 推荐阅读路径
+## 基础能力
 
-### 第一次接触项目
+| 任务 | 文档 |
+| --- | --- |
+| 修改配置与密钥 | [配置](guide/configuration.md) |
+| 数据库、事务、迁移与回滚 | [数据库](guide/database.md) |
+| 身份、Session、角色、菜单和 API 权限 | [Console 架构与权限](02-console-架构与权限.md) |
+| 响应、错误码与请求校验 | [响应与错误](04-响应与错误处理规范.md) |
+| 查找基础组件入口 | [组件索引](guide/pkg-components.md) |
+| 缓存、进程内事件、外部 HTTP | [缓存](guide/cache.md)、[事件](guide/event.md)、[HTTP Client](guide/httpclient.md) |
+| 队列与计划任务 | [队列](guide/queue.md)、[Scheduler](guide/scheduler.md) |
+| 操作日志与登录审计 | [审计日志](guide/logging.md) |
 
-1. [项目架构](architecture.md)
-2. [命令参考](commands.md)
-3. [快速上手](guide/quickstart.md)
-4. [项目结构](guide/structure.md)
-5. [开发规范](01-开发规范.md)
+## 测试与运行
 
-### 基于 Grove 建立新项目
+- [测试指南](development/testing.md)：本地门禁、数据库/Redis 集成和生成器测试边界。
+- [部署指南](deployment/deploy.md)：二进制、容器、反向代理和前端发布。
+- [运行与观测](operations.md)：健康探针、日志、指标、追踪和关闭行为。
+- [发布验收清单](deployment/staging-checklist.md)：在自己的环境逐项验证。
+- [后端镜像](../docker/README.md)：构建参数、运行约束和镜像扫描。
 
-[fork 指南](guide/fork.md)：改 module path、示例代码去留、必改配置。
+## 维护约定
 
-Grove 的[升级清单与历史背景](plans/README.md)用于本仓库维护；下游项目的接入步骤以 fork 指南为准。
-
-### 开发 Console 模块
-
-1. [Console 架构与权限](02-console-架构与权限.md)
-2. [新增 Console 模块](03-console-新增模块指南.md)
-3. [路由与控制器](guide/routing.md)
-4. [响应与错误处理](04-响应与错误处理规范.md)
-5. [权限控制](guide/permission.md)
-
-### 使用基础设施
-
-- [配置](guide/configuration.md)
-- [数据库与迁移](guide/database.md)
-- [基础组件](guide/pkg-components.md)
-- [缓存](guide/cache.md)
-- [事件](guide/event.md)
-- [队列](guide/queue.md)
-- [计划任务](guide/scheduler.md)
-- [HTTP Client](guide/httpclient.md)
-- [Console 日志与审计](guide/logging.md)
-
-### 测试、部署与维护
-
-- [命令参考](commands.md)
-- [测试策略](development/testing.md)
-- [错误处理实践](development/error-handling.md)
-- [部署与运行](deployment/deploy.md)
-- [Staging smoke 清单](deployment/staging-checklist.md)
-- [运行状态与可观测性](operations.md)
-
-### AI 协作
-
-- [AI 文档入口](ai/README.md)
-- [项目上下文](ai/project-context.md)
-- [变更检查清单](ai/change-checklist.md)
-- 仓库级短规则：[AGENTS.md](../AGENTS.md)
-
-## 文档维护规则
-
-- 代码、配置、Makefile、CI 是运行事实源；文档不能创造与代码不一致的命令。
-- 新增稳定能力先更新对应 canonical guide，再在需要时补充设计计划。
-- 指南记录“现在怎么使用”；状态页记录完成范围；工作清单记录尚待完成的动作和验收条件。
-- 按用户要求保留可勾选的升级清单及任务 ID，已完成条目链接到源码或指南；旧计划中的数字、版本和验证记录不作为当前基线。
-- 修改能力、验证边界或任务状态时，同步相关指南、状态页与清单；没有实际执行证据的检查不能勾选。
-- 文档示例不得包含真实密码、token、固定 JWT secret 或需要猜测的隐式前置条件。
+修改行为时更新负责该主题的页面，避免多个文档重复维护同一份 API 示例。完成后的计划、临时审计和执行记录不留作使用手册；历史方案通过 Git 查询。AI 协作规则统一在 [AGENTS.md](../AGENTS.md)。

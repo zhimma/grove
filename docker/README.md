@@ -28,7 +28,7 @@ docker build --build-arg SERVICE=worker -t grove-worker:local .
 
 ## 镜像扫描
 
-当前 GitLab CI 会构建三个服务镜像，但**尚未在 pipeline 中执行镜像漏洞扫描**：GitLab Runner 的镜像仓库、扫描器缓存和漏洞例外策略尚未作为本仓库配置确认。因此不能声称本轮已经完成镜像扫描。
+当前 GitLab CI 会构建三个服务镜像，但**尚未在 pipeline 中执行镜像漏洞扫描**：GitLab Runner 的镜像仓库、扫描器缓存和漏洞例外策略尚未作为本仓库配置确认。请将实际镜像扫描作为发布检查执行。
 
 在推广镜像前，由具备 Docker socket 且已批准扫描器来源的环境执行至少一次高危/严重漏洞门禁。例如（命令中的镜像和版本应纳入组织镜像信任策略）：
 

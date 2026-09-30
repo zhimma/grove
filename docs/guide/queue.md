@@ -1,25 +1,13 @@
 # 队列任务
 
-本文档说明 Grove 中基于 Asynq 的队列任务能力。
+`pkg/job` 基于 Asynq，通过 Redis 投递、延迟和重试任务，由 Worker 消费。任务名与 payload 放在 `internal/jobtask` 等生产者/消费者共同可见的位置，处理逻辑放在 `app/worker/internal/handler`。
 
-## 适用范围
-
-队列系统适用于：
-
-- 异步任务投递
-- 延迟任务
-- 重试任务
-- worker 独立消费
-
-## 最短路径
-
-### 启用配置
+## 启用
 
 ```yaml
 redis:
   enabled: true
   addr: 127.0.0.1:6379
-
 job:
   enabled: true
   concurrency: 10
@@ -29,38 +17,37 @@ job:
     low: 1
 ```
 
-### 投递任务
+启用队列必须启用 Redis，再运行 `make run.worker`。只使用 Scheduler 的 Worker 可以不启用队列；多实例调度另有[共享锁要求](scheduler.md#多实例)。
+
+## 投递
+
+在装配层把 `*job.Client` 注入 service，调用时携带 context：
 
 ```go
-task, err := job.NewTask("echo", map[string]any{"message": "hello"})
+id, err := client.Enqueue(ctx, jobtask.TaskEcho, jobtask.EchoPayload{
+    Message: "hello",
+}, asynq.Queue("default"), asynq.MaxRetry(3))
 if err != nil {
-	return err
-}
-
-_, err = p.JobClient.Enqueue(task)
-if err != nil {
-	return err
+    return err
 }
 ```
 
-### worker 处理任务
+`jobtask` 指 `internal/jobtask`，队列选项来自 `github.com/hibiken/asynq`。入队失败应由业务明确处理，不能把尚未成功投递的任务告知客户端为成功。
 
-任务处理逻辑放在 `app/worker/internal/handler`，并由 worker 服务启动时注册。
+## 消费
 
-## 使用约定
+注册示例见 `app/worker/internal/handler/echo.go`：
 
-- 任务名应稳定，统一放在 `internal/jobtask/echo.go` 或对应任务定义位置。
-- 主流程是否忽略入队失败，应由业务明确决定。
-- 需要重试、延迟或指定队列时，应显式传入任务选项。
-- 未启用 Redis 时不应启动 worker。
+```go
+err := server.Register(jobtask.TaskEcho, func(ctx context.Context, task *asynq.Task) error {
+    var payload jobtask.EchoPayload
+    if err := job.ParsePayload(task, &payload); err != nil {
+        return err
+    }
+    return handleMessage(ctx, payload.Message)
+})
+```
 
-## 边界
+任务处理返回 error，由队列按选项决定重试。需要幂等的写入由业务保证；队列不是业务事务的一部分，数据库提交和入队之间的失败窗口需按场景处理。
 
-- 队列系统不负责业务补偿策略。
-- 任务 payload 应保持紧凑，避免传入过大对象。
-- 需要幂等的任务必须由业务层自行保证幂等。
-
-## 相关文档
-
-- [计划任务](./scheduler.md)
-- [事件系统](./event.md)
+Payload 保持紧凑，不放长期凭据或完整业务文件。需要同步执行当前请求的扩展逻辑时使用[事件](event.md)，需要按时间触发时使用[计划任务](scheduler.md)。

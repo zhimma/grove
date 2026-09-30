@@ -122,11 +122,12 @@ CLI 在 `cmd/grove` 中按命令拆为 `migrate.go`、`seed.go`、`make_module.g
 `docs/` 按维护职责分为：
 
 - `architecture.md`、`commands.md`、`operations.md`：canonical 总览和运行手册
-- `guide/`：配置、数据库、路由、组件和领域指南
+- `guide/`：配置、数据库、组件和领域指南
 - 根目录编号文档：开发规范与 Console 核心约定
-- `deployment/`、`development/`：部署、测试和错误处理专题
-- `ai/`：AI 项目上下文与变更清单
-- `plans/`：设计计划、历史决策和完成审计
+- `deployment/`、`development/`：部署、验收和测试专题
+- `status.md`：当前能力边界和后续方向
+
+贡献流程统一在根目录 `CONTRIBUTING.md`，AI 约定在 `AGENTS.md`。完成后的计划与审计记录通过 Git 历史追溯，不继续占据文档目录。
 
 ## 组织原则
 

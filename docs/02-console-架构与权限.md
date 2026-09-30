@@ -1,259 +1,80 @@
-# Console 架构与权限
+# Console 认证与权限
 
-本文档是 Console 领域的 canonical 设计说明。仓库整体边界见 [项目架构](architecture.md)，新增模块按 [新增 Console 模块指南](03-console-新增模块指南.md) 执行。
+本文说明管理后台的身份、Session、API 权限与菜单授权。实现入口是 `app/console/internal/middleware/admin_auth.go`、`service/session.go`、`service/auth_state.go` 与 `pkg/rbac`；新增功能见[模块指南](03-console-新增模块指南.md)。
 
-本文档说明当前基础框架中 `console` 的整体设计，重点覆盖：
+## 请求链路
 
-- 请求如何完成认证与授权
-- API 权限和菜单权限分别由谁负责
-- 角色授权数据存在哪里
-- 新增接口后，为什么不再需要同步
+1. 从 `Authorization: Bearer <token>` 提取访问令牌。
+2. 校验签名算法、issuer、audience、有效期和 Console 身份字段。
+3. 用 `admin_id`、`session_id` 验证数据库中的会话状态。
+4. 回库恢复管理员状态、当前角色和超管标志。
+5. 对受保护接口，以 `METHOD + Gin full path` 检查权限。
+6. Handler 绑定参数并调用 service。
 
-## 1. 设计目标
+token 不是授权快照。管理员禁用、角色状态和会话吊销以数据库当前状态为准；Casbin 策略在各实例内存中维护，跨实例存在重载延迟。缺少 Session 服务时拒绝访问；普通管理员缺少权限执行器时返回 503。超管在通过身份和 Session 校验后按超管规则放行，生产配置仍要求启用 Console 执行器。
 
-当前 `console` 采用的是“运行时自洽”的权限模型。
+## Token 与 Session
 
-设计目标包括：
+后台使用 access/refresh token：access claims 包含 `admin_id`、`session_id`、`user_type` 等身份字段；数据库 `console_sessions` 只保存 refresh token 哈希。
 
-1. token 一旦签发后，角色变更、禁用状态能够立即生效
-2. 新增后端接口后，不需要手工同步权限清单
-3. 前端菜单显示和后端 API 安全边界严格分离
+刷新会轮换令牌，退出、修改密码及强制下线会吊销对应会话。请求期必须经过 Session 校验，不能只检查 JWT 是否过期。
 
-模型约束如下：
+API 与 Console 使用不同的 issuer 后缀和 audience，令牌不可混用。浏览器以 `sessionStorage` 保存 token，刷新页面可恢复；这些值仍可被页面脚本读取，前端存储不是 XSS 防护边界。
 
-- token 不承载授权快照
-- API 权限清单来自后端运行时路由
-- 菜单权限树来自前端本地路由
+## API 权限与菜单权限
 
-## 2. 当前模块边界
+| 数据 | 标识与来源 | 保存位置 |
+| --- | --- | --- |
+| API 权限目录 | 已注册的受保护路由，如 `PUT /console/v1/roles/:id` | 实例级 route Catalog，由运行时构建 |
+| API 授权 | Casbin `p: role → permission`、`g: admin → role` | `console_casbin_rules` |
+| 菜单目录 | 前端本地路由树 | `src/router/routes/modules/` |
+| 菜单授权 | 路由 `name`，如 `ConsoleRoles` | `console_roles.menu_keys` |
 
-### 后端
-
-- `app/console/internal/handler`
-  负责 HTTP Request / Response
-- `app/console/internal/service`
-  负责业务逻辑
-- `app/console/internal/middleware`
-  负责认证、权限、审计
-- `app/console/internal/router`
-  负责路由注册与中间件链路
-
-### 前端
-
-- `web/admin-vben/apps/console/src/router`
-  负责本地路由与菜单过滤
-- `web/admin-vben/apps/console/src/store/permission.ts`
-  负责当前用户权限状态
-- `web/admin-vben/apps/console/src/views/system/roles`
-  负责角色授权页面
-
-## 3. 请求执行流程
-
-当前 `console` 的请求链路如下：
-
-1. 客户端携带 `Bearer access_token`
-2. `AdminAuthn` 校验 token 有效性
-3. `AdminAuthStateResolver` 按 `admin_id` 回库恢复当前授权态
-4. 将当前身份写入 `request.Identity`
-5. `AdminPermission` 生成 `METHOD + path`
-6. Casbin 根据 `admin -> role -> permission` 判断是否放行
-7. 业务 handler / service 执行
-
-请求期授权链路的核心约束如下：
-
-- token 只证明“你是谁”
-- 当前是否可用、当前角色是谁、是否超管，必须回数据库看
-
-## 4. Token 模型
-
-当前后台使用 `access + refresh`：
-
-- `access_token`
-- `refresh_token`
-- `expires_in`
-- `token_type`
-
-`access_token` 当前只把最小身份放进 claims：
-
-- `admin_id`
-- `user_type`
-
-即使 claims 里还保留少量历史字段，也不应作为请求期最终授权依据。
-
-### 4.1 浏览器存储边界
-
-Console 使用显式 SPA token 策略：access token、refresh token 与权限缓存保存在 `sessionStorage`，页面刷新可恢复，关闭浏览器会话后需要重新登录。浏览器侧不把加密存储当作 XSS 防护；生产环境仍必须通过 CSP、依赖治理、最小化第三方脚本和 HTTPS 降低 XSS 风险。
-
-服务端会为实际 `api` / `console` 进程使用不同的 JWT issuer suffix 与 audience，两个 surface 的 access token 不可互换。
-
-## 5. API 权限模型
-
-### 5.1 权限标识
-
-API 权限统一使用：
-
-```text
-METHOD + 空格 + gin full path
-```
-
-例如：
-
-```text
-GET /console/v1/roles
-POST /console/v1/roles
-PUT /console/v1/roles/:id
-```
-
-### 5.2 目录来源
-
-API 权限清单不是数据库真相源，而是运行时从已注册路由扫描得到：
-
-1. 路由全部注册完成
-2. 扫描 `engine.Routes()`
-3. 只收集 `console` 受保护路由
-4. 忽略 `.Ignore()` 路由
-5. 生成树形权限选项
-
-### 5.3 展示文案
-
-接口展示名来自：
+没有需要人工同步的菜单表或权限目录表。`.Name("角色权限.角色列表")` 提供展示文案，不改变权限 key；`.Ignore()` 只排除目录登记，不替代身份校验。
 
 ```go
-catalog := route.NewCatalog() // 生产环境复用当前 HTTP engine 的 catalog
-roles := route.Wrap(group, catalog)
-roles.GET(...).Name("角色权限.角色列表")
+roles := route.Wrap(protected.Group("/roles"), catalog)
+roles.GET("", h.List).Name("角色权限.角色列表")
+roles.POST("", h.Create).Name("角色权限.创建角色")
 ```
 
-`Name(...)` 只影响展示，不影响真正鉴权。
+前端菜单显隐使用路由 name，按钮使用对应的 API 权限：
 
-真正鉴权永远只认：
-
-```text
-METHOD + path
+```ts
+permissionStore.hasApiPermission('POST', '/console/v1/roles')
 ```
 
-## 6. 菜单权限模型
+隐藏菜单或按钮不是授权措施，后端仍需独立鉴权。物理文件移动可以保持路由 name 不变；更名需要考虑数据库中已经保存的菜单 key。
 
-### 6.1 菜单真相源
+## 配置与多实例
 
-`console` 菜单真相源是前端本地路由，不在后端。
-
-当前约定：
-
-- 菜单授权 key = 前端路由 `name`
-- 菜单展示 title = 前端路由 `meta.title`
-
-### 6.2 后端职责
-
-后端只负责代存储角色勾选结果：
-
-- 存到 `console_roles.menu_keys`
-- 读取时保留历史 key，避免静默修改授权数据
-- 保存时只校验 key 的数量、长度和字符格式
-
-后端不再负责：
-
-- 菜单表维护
-- 菜单同步
-
-该模型采用前端路由与后端授权结果分离的方式：
-
-- 菜单清单真相源在前端路由
-- 后端仅负责菜单 key 基础格式校验与持久化，不维护路由白名单
-
-## 7. Casbin 数据职责
-
-当前 `console` Casbin 只负责 API 权限：
-
-- `p`：`role -> permission_identifier`
-- `g`：`admin -> role`
-
-约束如下：
-
-- 菜单权限不进 Casbin
-- 菜单权限只在角色表里保存
-
-## 8. 角色授权页面的数据来源
-
-角色授权页会同时消费两类数据：
-
-### 接口权限树
-
-来自：
-
-```text
-GET /console/v1/permissions/apis
+```yaml
+casbin:
+  enforcers:
+    console:
+      enabled: true
+      database: default
+      mode: rbac
+      table_name: console_casbin_rules
+      auto_load_seconds: 30
 ```
 
-特点：
+每个实例启动时加载策略，再按 `auto_load_seconds` 重载；设为 `0` 会关闭自动重载。多实例变更不会即时传播，数据库连接或重载失败也可能延长延迟，部署时需监控。生产 Console 必须启用默认数据库和权限执行器。
 
-- 节点展示名来自后端 `Name(...)`
-- 节点 key 就是 `METHOD + path`
+API 可以启用独立的 `api` enforcer，但不共用 Console 的菜单模型。
 
-### 菜单权限树
+## 修改授权与一致性
 
-来自前端本地路由：
+- 授予的 API 权限必须出现在运行时目录中。
+- 菜单 key 由后端校验数量、长度和格式；后端不复制整棵前端路由树。
+- 业务表和 Casbin adapter 的写入不能假定属于同一个数据库事务。当前 service 对管理员/角色写入进行补偿，策略集合通过 adapter 原子替换。
+- 如果主操作及补偿都失败，先运行 `go run ./cmd/grove rbac check` 排查，再审查 `rbac repair --dry-run` 的结果；修复命令不自动授权新增接口。
 
-- 不请求后端菜单表
-- 由本地路由树直接转换
+排查权限问题时同时核对管理员、角色、Session、路由 key 和实例策略，不要通过移除中间件绕过错误。
 
-## 9. 为什么新增接口不需要同步
+## 相关入口
 
-因为接口目录不是存表后再读取，而是运行时直接扫描路由。
-
-所以新增一个接口，只要：
-
-1. 路由被注册
-2. 这个路由受保护
-3. 最好补上 `Name(...)`
-
-它就会自动出现在：
-
-- `/console/v1/permissions/apis`
-- 角色授权页接口树
-
-该设计的直接结果是新增接口无需同步权限目录。
-
-## 10. 当前 Console 基础业务
-
-当前 `console` 已经覆盖这些基础业务：
-
-- 登录 / 刷新 / 登出
-- 当前管理员 / 更新资料 / 修改密码
-- 工作台
-- 管理员管理
-- 终端用户管理
-- 角色管理
-- 角色 API 权限
-- 角色菜单权限
-- 系统配置 / 站点配置
-- 文章管理
-- 文件上传
-- 登录日志 / 操作日志
-
-## 11. 当前模型的取舍
-
-### 优点
-
-- 授权变更立即生效
-- 不再依赖权限同步
-- 后端 API 安全边界明确
-- 前后端职责更清晰
-
-### 有意保留的简单性
-
-- 菜单权限由前端负责识别和渲染
-- 后端只做菜单 key 基础格式校验，不做菜单表或路由目录持久化
-- 当前只聚焦 `console`
-
-### 暂不解决的问题
-
-- 多后台域统一抽象
-- 更复杂的数据权限 DSL
-- 插件化模块系统
-- 前后端共享菜单 manifest
-
-## 12. 推荐阅读
-
-- [01-开发规范.md](./01-%E5%BC%80%E5%8F%91%E8%A7%84%E8%8C%83.md)
-- [03-console-新增模块指南.md](./03-console-%E6%96%B0%E5%A2%9E%E6%A8%A1%E5%9D%97%E6%8C%87%E5%8D%97.md)
+- [模块开发](03-console-新增模块指南.md)
+- [统一响应与错误](04-响应与错误处理规范.md)
+- [配置](guide/configuration.md)
+- [发布验收](deployment/staging-checklist.md)

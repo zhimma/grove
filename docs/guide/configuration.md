@@ -32,7 +32,7 @@ databases:
     port: 5432
     user: postgres
     password: ""
-    dbname: grove
+    dbname: grove_dev
     ssl_mode: disable
 
 jwt:
@@ -101,7 +101,7 @@ MySQL 使用 `driver: mysql`，并建议配置 `charset: utf8mb4`、`parse_time:
 
 ### `redis`
 
-Redis 连接配置。启用缓存、队列或 worker 时需要。
+Redis 连接配置。使用 Redis 缓存或 Asynq 队列时需要；内存缓存和只运行代码内调度的单 Worker 可以不启用 Redis。
 
 ### `job`
 
@@ -175,6 +175,16 @@ security:
 该字段只用于首次 `make seed.bootstrap`。CLI 会将它转换为 bcrypt 哈希后写入 `console_admins.password`，不会把明文写入数据库；已有 root 管理员也不会被重复 bootstrap 覆盖。
 
 留空时可临时兼容 `GROVE_ROOT_PASSWORD`，两者都未提供时生成一次性随机密码并只输出一次。生产环境应使用强密码，并在首次登录后修改。
+
+## 业务配置敏感值
+
+系统配置中的 `is_secret` 只适用于业务配置，不用于托管数据库、Redis、JWT 或对象存储的长期密钥。实现位于 `pkg/secretbox` 和 `app/console/internal/service/system_config.go`。
+
+- 使用独立的 `security.config_encryption_key`；CLI `key:generate` 输出 `base64:` 格式的随机密钥。已写入密文后不可直接替换密钥。
+- secret 的值以 AES-256-GCM 加密后保存，带随机 nonce 和版本前缀；配置密钥缺失或密文损坏时明确返回错误。
+- API 返回掩码，已有 secret 编辑通过 `keep_secret=true` 保持原值；关闭保持时提交新值。创建后不能通过编辑切换 `is_secret`。
+- 内部业务使用配置 service 的 `ResolveEffectiveValue` 读取解密后的有效值；模型不自动解密。
+- 审计只记录配置 key、是否变化和 secret 标记，不记录明文或密文。
 
 ## 使用约定
 
