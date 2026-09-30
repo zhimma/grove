@@ -83,7 +83,7 @@ catalog:
   cz-git: ^1.12.0
   czg: ^1.12.0
   dayjs: ^1.11.19
-  defu: ^6.1.4
+  defu: ^6.1.7
   depcheck: ^1.4.7
   dotenv: ^16.6.1
   echarts: ^6.0.0
