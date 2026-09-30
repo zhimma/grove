@@ -43,8 +43,8 @@ func (s *UserAuthSet) authenticate(required bool) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		header := strings.TrimSpace(c.GetHeader("Authorization"))
-		if header == "" {
+		tokenString, ok := auth.ExtractBearer(c.GetHeader("Authorization"))
+		if !ok {
 			if required {
 				response.Fail(c, errx.Unauthorized().WithMessage("缺少访问令牌"))
 				c.Abort()
@@ -54,11 +54,7 @@ func (s *UserAuthSet) authenticate(required bool) gin.HandlerFunc {
 			return
 		}
 
-		tokenString := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
-		if tokenString == header && strings.HasPrefix(strings.ToLower(header), "bearer ") {
-			tokenString = strings.TrimSpace(header[7:])
-		}
-		if tokenString == "" || s.tokens == nil {
+		if s.tokens == nil {
 			if required {
 				response.Fail(c, errx.Unauthorized().WithMessage("访问令牌无效"))
 				c.Abort()

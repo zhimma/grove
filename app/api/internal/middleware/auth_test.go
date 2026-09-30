@@ -10,7 +10,51 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/zhimma/grove/pkg/auth"
+	"github.com/zhimma/grove/pkg/request"
 )
+
+func TestUserAuthRequiresBearerScheme(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tokens, err := auth.NewTokens(auth.Config{Secret: "test-secret", Issuer: "test-issuer", AccessExpiry: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := tokens.IssueAccessToken("user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := gin.New()
+	engine.GET("/private", NewUserAuthSet(tokens).Required(), func(c *gin.Context) {
+		if request.UserID(c) != "user-1" {
+			t.Error("authenticated identity was not preserved")
+		}
+		c.Status(http.StatusNoContent)
+	})
+	engine.GET("/optional", NewUserAuthSet(tokens).Optional(), func(c *gin.Context) {
+		if request.UserID(c) != "" {
+			t.Error("invalid scheme authenticated an optional request")
+		}
+		c.Status(http.StatusNoContent)
+	})
+	for _, tc := range []struct {
+		path, header string
+		status       int
+	}{
+		{"/private", "bEaReR " + token, http.StatusNoContent},
+		{"/private", token, http.StatusUnauthorized},
+		{"/private", "Basic " + token, http.StatusUnauthorized},
+		{"/private", "Bearer ", http.StatusUnauthorized},
+		{"/optional", "Basic " + token, http.StatusNoContent},
+	} {
+		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+		req.Header.Set("Authorization", tc.header)
+		resp := httptest.NewRecorder()
+		engine.ServeHTTP(resp, req)
+		if resp.Code != tc.status {
+			t.Fatalf("%s expected %d, got %d", tc.path, tc.status, resp.Code)
+		}
+	}
+}
 
 func TestUserAuthRejectsConsoleTokenOnAPISurface(t *testing.T) {
 	gin.SetMode(gin.TestMode)

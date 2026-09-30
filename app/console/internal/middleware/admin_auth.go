@@ -1,8 +1,6 @@
 package middleware
 
 import (
-	"strings"
-
 	"github.com/gin-gonic/gin"
 
 	consoleservice "github.com/zhimma/grove/app/console/internal/service"
@@ -39,18 +37,14 @@ func writeAdminIdentity(c *gin.Context, result adminAuthResult) {
 }
 
 func authenticateAdmin(c *gin.Context, tokens *auth.Tokens, sessions *consoleservice.SessionService, resolver consoleservice.AdminAuthStateResolver) (*adminAuthResult, bool) {
-	header := strings.TrimSpace(c.GetHeader("Authorization"))
-	if header == "" {
+	tokenString, ok := auth.ExtractBearer(c.GetHeader("Authorization"))
+	if !ok {
 		response.Fail(c, errx.Unauthorized().WithMessage("缺少访问令牌"))
 		c.Abort()
 		return nil, false
 	}
 
-	tokenString := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
-	if tokenString == header && strings.HasPrefix(strings.ToLower(header), "bearer ") {
-		tokenString = strings.TrimSpace(header[7:])
-	}
-	if tokenString == "" || tokens == nil {
+	if tokens == nil {
 		response.Fail(c, errx.Unauthorized().WithMessage("访问令牌无效"))
 		c.Abort()
 		return nil, false

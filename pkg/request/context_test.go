@@ -162,3 +162,21 @@ func TestRequestMetaFromABareContextIsZero(t *testing.T) {
 		t.Fatalf("meta = %+v, want zero", got)
 	}
 }
+
+func TestErrorMetaRoundtrip(t *testing.T) {
+	c := newTestContext(t)
+	meta := ErrorMeta{HTTPStatus: 403, Code: "forbidden", Message: "无权限"}
+	SetErrorMeta(c, meta)
+	if got := ErrorMetaOf(c); got != meta {
+		t.Fatalf("error meta = %+v, want %+v", got, meta)
+	}
+}
+
+func TestAuditMetaRoundtrip(t *testing.T) {
+	c := newTestContext(t)
+	SetAuditMeta(c, AuditMeta{TargetType: "role", TargetID: "r_1", Detail: map[string]any{"code": "admin"}})
+	got := AuditMetaOf(c)
+	if got.TargetType != "role" || got.TargetID != "r_1" || got.Detail["code"] != "admin" {
+		t.Fatalf("audit fields were not preserved: %+v", got)
+	}
+}
