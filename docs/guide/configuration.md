@@ -6,9 +6,9 @@
 
 Grove 只维护一个本地配置文件：`config.yaml`。
 
-`config.example.yaml` 是模板，不参与运行。复制后直接编辑 `config.yaml`。Grove 不会自动读取 `.env` 文件；如需在受控启动环境覆盖配置，可使用代码支持的 `${ENV}` / `${ENV:default}` 语法或对应的显式环境变量覆盖项。模板本身不放环境变量占位符或可用凭据。
+`config.example.yaml` 是模板，不参与运行。复制后直接编辑 `config.yaml`。Grove 不会自动读取 `.env` 文件；如需在受控启动环境覆盖配置，可使用代码支持的 `${ENV}`、`${ENV:default}` 语法或对应的显式环境变量覆盖项。模板本身不放环境变量占位符或可用凭据。
 
-YAML 使用严格字段校验：未知字段、字段拼写错误和多个 YAML document 都会导致启动失败。
+YAML 使用严格字段校验：未知字段、字段拼写错误和多个 YAML 文档都会导致启动失败。
 
 ## 最短路径
 
@@ -59,11 +59,11 @@ if err != nil {
 - `env`：运行环境
 - `debug`：调试开关；直接在 `config.yaml` 设置。未显式配置时，`production` 默认为 `false`，其他环境默认为 `true`。
 
-### `port` / `console_port`
+### 服务端口
 
 - `port`：`api` 服务端口
 - `console_port`：`console` 服务端口
-- `worker_port`：`worker` 的 health/metrics 端口；Worker 不提供业务 API
+- `worker_port`：Worker 的健康检查与指标端口；Worker 不提供业务 API
 
 ### `server`
 
@@ -119,7 +119,7 @@ Redis 连接配置。使用 Redis 缓存或 Asynq 队列时需要；内存缓存
 ### `jwt`
 
 - `secret`：签名密钥
-- `issuer`：签发者基名。运行时会为实际 `api` / `console` 服务追加 `:api` / `:console`，使两类 access token 不能互换使用。
+- `issuer`：签发者基名。运行时为 API 和 Console 服务分别追加 `:api` 和 `:console`，使两类访问令牌不能互换使用。
 - `access_expiry_hours`
 - `refresh_expiry_hours`
 
@@ -131,20 +131,20 @@ Redis 连接配置。使用 Redis 缓存或 Asynq 队列时需要；内存缓存
 
 定义默认存储磁盘与各磁盘配置。
 
-本地磁盘不提供“只靠 query 参数”的临时签名 URL，私有对象必须通过已授权的下载接口读取。`public` 只表示可返回直链；对于 `local` 磁盘，还必须同时设置 `serve_static: true`，应用才会注册静态目录并在上传结果中返回 URL。S3 等对象存储的公开端点由存储服务自身负责。
+本地磁盘不提供仅通过查询参数授权的临时签名 URL，私有对象必须通过已授权的下载接口读取。`public` 只表示可返回直链；对于 `local` 磁盘，还必须同时设置 `serve_static: true`，应用才会注册静态目录并在上传结果中返回 URL。S3 等对象存储的公开端点由存储服务自身负责。
 
 ### `observability`
 
 - `enabled`：是否启用观测运行时
-- `metrics_enabled`：是否暴露 Prometheus metrics
-- `metrics_path`：metrics 路径，默认 `/metrics`
-- `readiness_timeout`：readiness 依赖检查超时
-- `trace_sample_ratio`：Trace 采样比例
-- `otlp_trace_endpoint`、`otlp_insecure`：OTLP HTTP trace 导出配置
+- `metrics_enabled`：是否暴露 Prometheus 指标
+- `metrics_path`：指标路径，默认 `/metrics`
+- `readiness_timeout`：就绪检查的依赖检查超时
+- `trace_sample_ratio`：追踪采样比例
+- `otlp_trace_endpoint`、`otlp_insecure`：通过 OpenTelemetry 协议（OTLP）的 HTTP 接口导出追踪数据
 
 ### `docs`
 
-控制 Scalar/OpenAPI 文档：
+控制 Scalar 文档页面和 OpenAPI 文档：
 
 - API 文档页面：`/docs`
 - API OpenAPI JSON：`/docs/openapi.json`
@@ -156,7 +156,7 @@ Redis 连接配置。使用 Redis 缓存或 Asynq 队列时需要；内存缓存
 
 - `cors`：跨域开关、来源、方法、请求头和凭据策略
 - `api`：API 前缀、默认分页和最大分页大小；所有 Console 列表服务都会使用这两个值，超出上限时服务端截断
-- `demo`：开发/测试演示接口；production 始终忽略
+- `demo`：开发或测试环境的演示接口；生产环境始终忽略
 - `security.trusted_proxies`：显式信任的代理地址或 CIDR
 - `security.hsts_enabled`：是否启用 HSTS
 - `security.config_encryption_key`：系统配置敏感值加密密钥
@@ -181,20 +181,20 @@ security:
 系统配置中的 `is_secret` 只适用于业务配置，不用于托管数据库、Redis、JWT 或对象存储的长期密钥。实现位于 `pkg/secretbox` 和 `app/console/internal/service/system_config.go`。
 
 - 使用独立的 `security.config_encryption_key`；CLI `key:generate` 输出 `base64:` 格式的随机密钥。已写入密文后不可直接替换密钥。
-- secret 的值以 AES-256-GCM 加密后保存，带随机 nonce 和版本前缀；配置密钥缺失或密文损坏时明确返回错误。
-- API 返回掩码，已有 secret 编辑通过 `keep_secret=true` 保持原值；关闭保持时提交新值。创建后不能通过编辑切换 `is_secret`。
+- 敏感值以 AES-256-GCM 加密后保存，带随机数（nonce）和版本前缀；配置密钥缺失或密文损坏时明确返回错误。
+- API 返回掩码，编辑已有敏感值时通过 `keep_secret=true` 保持原值；关闭保持时提交新值。创建后不能通过编辑切换 `is_secret`。
 - 内部业务使用配置 service 的 `ResolveEffectiveValue` 读取解密后的有效值；模型不自动解密。
-- 审计只记录配置 key、是否变化和 secret 标记，不记录明文或密文。
+- 审计只记录配置键、是否变化和敏感值标记，不记录明文或密文。
 
 ## 使用约定
 
 - 生产环境必须替换 `jwt.secret`。
-- `api`、`console`、`worker` 使用各自的服务级配置校验，未知 service 名不会被静默接受。
-- production Console 必须启用默认数据库和 `casbin.enforcers.console`。
+- `api`、`console`、`worker` 使用各自的服务级配置校验，不接受未知服务名。
+- 生产环境的 Console 必须启用默认数据库和 `casbin.enforcers.console`。
 - Worker 必须至少启用 Job 或 Scheduler；启用 Job 时必须同时启用 Redis。
 - 已启用的数据库必须配置 `driver`、`host`、`port`、`user` 和 `dbname`。
 - `driver` 只能是 `postgres` 或 `mysql`；MySQL 必须配置 `charset` 和 `loc`。
-- 已启用的 Casbin enforcer 必须引用已启用的数据库。
+- 已启用的 Casbin 权限执行器必须引用已启用的数据库。
 - 生产环境必须保持 `app.debug=false`，避免响应体暴露底层错误信息。
 - 本地开发直接编辑未提交的 `config.yaml`；生产环境挂载受保护的、已填写敏感值的配置文件。
 - 多数据库资源命名应体现业务语义，例如 `orders`、`crm`。

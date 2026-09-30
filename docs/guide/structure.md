@@ -42,7 +42,7 @@ grove/
 
 `cmd/` 用于放置独立 CLI。当前保留：
 
-- `cmd/grove`：迁移、seed、RBAC 一致性检查、代码生成与环境信息查看
+- `cmd/grove`：迁移、种子、RBAC 一致性检查、代码生成与环境信息查看
 
 ### `internal/`
 
@@ -54,7 +54,7 @@ grove/
 - `middleware/`：通用 Gin 中间件
 - `model/`：共享 GORM 模型
 - `datatype/`：数据库字段类型
-- `jobtask/`：生产者和消费者共用的任务名与 payload，不放队列实现
+- `jobtask/`：生产者和消费者共用的任务名与载荷，不放队列实现
 - `testkit/`：共享数据库测试夹具
 - `observability/`：OpenTelemetry 追踪与指标
 - `provider/`：数据库、缓存、存储、认证等资源装配
@@ -63,7 +63,7 @@ grove/
 
 ### `pkg/`
 
-`pkg/` 是本仓库的基础层：跨 api / console / worker 复用的技术能力。它**不是对外发布的通用库**，因此允许出现 console、admin 这类本仓库的领域词（例如 `auth.UserTypeConsole`、`rbac.CheckConsolePermission`）和中文文案。
+`pkg/` 是本仓库的基础层，提供 API、Console 和 Worker 共用的技术能力。它**不是对外发布的通用库**，因此允许出现 `console`、`admin` 这类本仓库的领域词（例如 `auth.UserTypeConsole`、`rbac.CheckConsolePermission`）和中文文案。
 
 仍然成立的唯一硬约束：**不得反向依赖 `internal/` 或 `app/`**，用来固定依赖方向。当前包含（具体 API 见[基础组件](pkg-components.md)）：
 
@@ -104,7 +104,7 @@ grove/
 
 - `web/admin-vben`：管理后台前端 monorepo
 
-主应用为 `web/admin-vben/apps/console`。Vben workspace 保留，业务源码位于 `src/`：
+主应用为 `web/admin-vben/apps/console`。保留 Vben 工作区，业务源码位于 `src/`：
 
 - `api/`：按资源拆分，`request.ts` 是传输入口，`console-contract.*` 是接口登记。
 - `types/pagination.ts`：唯一的列表参数、元数据和分页结果类型。
@@ -113,7 +113,7 @@ grove/
 - `views/content/articles/index.vue`、`views/dashboard/overview/index.vue`：内容与工作台。
 - `views/<模块复数>/index.vue`：生成的新业务模块。
 - `components/resource-page/`：通用列表和编辑行为，自定义表单通过组件参数传入。
-- `router/routes/modules/`：按业务域注册页面；系统管理保持唯一父路由，路由名是菜单授权 key。
+- `router/routes/modules/`：按业务域注册页面；系统管理保持唯一父路由，路由名是菜单授权标识。
 
 CLI 在 `cmd/grove` 中按命令拆为 `migrate.go`、`seed.go`、`make_module.go`、`key.go` 等；`main.go` 只启动 Cobra。所有文件仍属于 `package main`。
 
@@ -121,7 +121,7 @@ CLI 在 `cmd/grove` 中按命令拆为 `migrate.go`、`seed.go`、`make_module.g
 
 `docs/` 按维护职责分为：
 
-- `architecture.md`、`commands.md`、`operations.md`：canonical 总览和运行手册
+- `architecture.md`、`commands.md`、`operations.md`：架构总览、命令参考和运行手册
 - `guide/`：配置、数据库、组件和领域指南
 - 根目录编号文档：开发规范与 Console 核心约定
 - `deployment/`、`development/`：部署、验收和测试专题

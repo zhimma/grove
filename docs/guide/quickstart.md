@@ -54,7 +54,7 @@ jwt:
   secret: <at-least-32-random-characters>
 ```
 
-`jwt.secret` 与 `security.config_encryption_key` 不用手造：`go run ./cmd/grove key:generate` 打印一组强随机值，粘进 `config.yaml` 即可。
+运行 `go run ./cmd/grove key:generate` 生成强随机值，再填入 `config.yaml` 已有的 `jwt.secret` 与 `security.config_encryption_key` 字段。
 
 模板已经启用 Console 权限执行器。保留以下配置，普通管理员接口依赖它完成授权：
 
@@ -95,7 +95,7 @@ make seed.bootstrap
 
 数据库中不会保存明文密码。已有 root 账号不会因修改配置或重复执行 bootstrap 而改变密码，请登录后台后通过账号设置修改。
 
-开发/测试环境如需要演示数据：
+开发或测试环境如需要演示数据：
 
 ```bash
 make seed.demo
@@ -127,7 +127,7 @@ make run.worker
 
 - API：`http://127.0.0.1:8080`
 - Console：`http://127.0.0.1:8081`
-- Worker health：`http://127.0.0.1:8082`
+- Worker 健康检查：`http://127.0.0.1:8082`
 
 健康检查：
 

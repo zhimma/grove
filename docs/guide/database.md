@@ -8,7 +8,7 @@
 
 - 默认数据库连接
 - 命名数据库资源
-- SQL 迁移与 seeds
+- SQL 迁移与种子数据
 - 共享模型定义
 
 `*database.Connections` 表示默认连接和命名连接的集合，是具体类型而非接口（只有一种实现，测试直接用 `database.NewConnectionsFromDBs`）。它只管理连接生命周期，不提供通用 Repository 抽象；方法对 nil 接收者安全。
@@ -48,7 +48,9 @@ databases:
     tls: false
 ```
 
-### 在服务层获取连接
+### 在装配层获取连接
+
+以下示例中的 `p` 是启动或路由装配层的 Provider。获取连接后，将业务所需的数据库依赖注入 service。
 
 ```go
 db := p.DB.Default()
@@ -81,7 +83,7 @@ type Article struct {
 go run ./cmd/grove migrate up
 ```
 
-迁移和 seed 按数据库方言分层：
+迁移和种子按数据库方言分层：
 
 ```text
 database/migrations/postgres/
@@ -95,10 +97,10 @@ database/seeds/mysql/
 ## 使用约定
 
 - 共享模型放在 `internal/model`。
-- 服务层通过 `p.DB` 获取数据库连接，不在 handler 中直接操作数据库。
+- 装配层从 `p.DB` 获取数据库资源，将所需的 `*database.Connections` 或 `*gorm.DB` 注入 service；handler 不直接操作数据库。
 - 需要多数据源时使用 `databases.resources`，不要在业务代码里手工创建连接。
 - 迁移文件使用正反向 SQL，按时间戳命名。
-- 生产环境只通过 migration 和 seed 初始化数据库，不使用 AutoMigrate 替代迁移。
+- 生产环境只通过迁移和种子初始化数据库，不使用 AutoMigrate 替代迁移。
 
 ## 模型边界
 
@@ -113,6 +115,10 @@ database/seeds/mysql/
 
 ## 回滚与数据前置条件
 
-回滚应在备份完成、应用写入停止的维护窗口中执行。版本 `202604150009` 会恢复包含软删除行的旧唯一约束，当前 CLI 先检查 users.email、console_roles.code、console_admins.account、配置分组/键，以及 PostgreSQL 旧管理员邮箱/手机号约束。存在冲突则在执行 DDL、标记 dirty 前拒绝，并只说明表和字段，不回显数据值；应用不会自动删除或改名数据。
+回滚应在备份完成、应用写入停止的维护窗口中执行。版本 `202604150009` 会恢复包含软删除行的旧唯一约束。当前 CLI 会先检查 `users.email`、`console_roles.code`、`console_admins.account`、配置分组与键，以及 PostgreSQL 旧管理员邮箱和手机号约束。
 
-维护人员须依据业务规则显式处理冲突，或继续运行兼容当前 schema 的应用；不要跳过检查、直接执行 down SQL。该检查不阻止并发业务写入，所以不能替代停写。加密配置的 `is_secret` 回滚同样有数据保护检查。依据：`pkg/migrate/preflight.go` 与 `tests/integration/rollback_test.go`。
+存在冲突时，CLI 会在执行数据定义语句（DDL）、标记迁移未完成状态（dirty）前拒绝回滚。错误只说明表和字段，不回显数据值；应用不会自动删除或改名数据。
+
+维护人员须依据业务规则显式处理冲突，或继续运行兼容当前数据库结构的应用；不要跳过检查、直接执行回滚 SQL。该检查不阻止并发业务写入，所以不能替代停写。
+
+加密配置的 `is_secret` 回滚同样有数据保护检查。实现与测试分别见 `pkg/migrate/preflight.go` 和 `tests/integration/rollback_test.go`。

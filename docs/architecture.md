@@ -2,7 +2,7 @@
 
 ## 一句话理解
 
-Grove 是一个 `api / console / worker` 三入口的 Go 单体脚手架：启动入口负责配置和依赖装配，业务入口负责路由与流程，共享能力放在 `internal` 和 `pkg`，管理后台前端与后端同仓维护。
+Grove 是一个包含 API、Console 和 Worker 三个入口的 Go 单体脚手架。启动入口负责配置和依赖装配，业务入口负责路由与流程，共享能力放在 `internal/` 和 `pkg/`，管理后台前端与后端同仓维护。
 
 ## 运行拓扑
 
@@ -36,7 +36,7 @@ CoreServer → middleware → router → handler → service → model / databas
 
 位置：`app/console`，前端位置：`web/admin-vben/apps/console`
 
-当前主线服务，包含管理员认证、Session、RBAC、终端用户管理、系统/站点配置、文章管理、文件上传、审计日志和管理页面。
+当前主线服务，包含管理员认证、会话、基于角色的访问控制（RBAC）、终端用户管理、系统与站点配置、文章管理、文件上传、审计日志和管理页面。
 
 ### Worker
 
@@ -51,23 +51,23 @@ CoreServer → middleware → router → handler → service → model / databas
 - `provider.APIOptions()`：API 所需依赖
 - `provider.ConsoleOptions()`：Console 所需依赖
 - `provider.WorkerOptions()`：Worker 所需依赖
-- Provider 负责按逆序关闭资源，并暴露 readiness checks。初始化失败时回滚已创建的资源，关闭路径幂等并汇总错误。
+- Provider 负责按逆序关闭资源，并提供就绪检查。初始化失败时回滚已创建的资源，关闭操作支持重复调用并汇总错误。
 - handler、service、job 不应接收完整 Provider，只接收实际需要的依赖。
 
 ## 请求链路
 
 ### 通用链路
 
-1. CoreServer 创建 Gin engine、基础中间件和健康端点。
+1. CoreServer 创建 Gin 引擎、基础中间件和健康端点。
 2. 服务 router 注册公开和受保护路由。
-3. middleware 处理 request id、鉴权、body limit、观测和错误出口；登录链路另有登录保护，当前没有覆盖所有接口的通用限流中间件。
+3. middleware 处理请求 ID、鉴权、请求体大小限制、观测和错误输出；登录链路另有登录保护，当前没有覆盖所有接口的通用限流中间件。
 4. handler 绑定请求并调用 service。
 5. service 使用数据库、缓存、事件或任务组件完成业务流程。
-6. response 统一输出成功或失败 envelope。
+6. response 统一输出成功或失败响应。
 
 ### Console 鉴权链路
 
-1. `AdminAuthn` 验证 access token 和 Session。
+1. `AdminAuthn` 验证访问令牌和会话。
 2. 请求期从数据库恢复管理员状态和当前授权态。
 3. `AdminPermission` 生成 `METHOD + full path`。
 4. Console Casbin 根据 `admin -> role -> API permission` 判断放行。
@@ -75,12 +75,12 @@ CoreServer → middleware → router → handler → service → model / databas
 
 ## 数据与配置边界
 
-- `config.yaml` 是唯一的本地配置文件；默认值直接写在 YAML 中。启动时支持代码明确列出的环境变量覆盖和 `${ENV}` / `${ENV:default}` 展开，但不会自动读取 `.env` 文件。
-- PostgreSQL 是默认数据库；MySQL 8.0.16+ 通过同一 GORM/Connections 抽象提供支持。迁移、用户、文章、管理员、角色、Session、系统配置和审计数据的持久化真相源仍是配置选定的关系数据库。
-- migration 和 seed 按数据库 driver 分目录，版本号保持一致。
-- Redis 是缓存和队列后端，不替代 Session 数据库真相源。
+- `config.yaml` 是唯一的本地配置文件；默认值直接写在 YAML 中。启动时支持代码明确列出的环境变量覆盖，以及 `${ENV}` 和 `${ENV:default}` 展开，但不会自动读取 `.env` 文件。
+- PostgreSQL 是默认数据库；MySQL 8.0.16+ 通过相同的 GORM 和 `database.Connections` 提供支持。迁移、用户、文章、管理员、角色、会话、系统配置和审计数据均以配置选定的关系数据库为准。
+- 迁移和种子按数据库驱动分目录，版本号保持一致。
+- Redis 是缓存和队列后端，会话状态仍以数据库为准。
 - `console_casbin_rules` 保存 API 权限；菜单不进入 Casbin。
-- 敏感系统配置使用加密存储；基础设施密钥必须来自配置文件保护区、环境变量或外部 secret manager。
+- 敏感系统配置使用加密存储；基础设施密钥必须来自受保护的配置文件、环境变量或外部密钥管理服务。
 
 ## 代码放置规则
 

@@ -1,6 +1,6 @@
 # 队列任务
 
-`pkg/job` 基于 Asynq，通过 Redis 投递、延迟和重试任务，由 Worker 消费。任务名与 payload 放在 `internal/jobtask` 等生产者/消费者共同可见的位置，处理逻辑放在 `app/worker/internal/handler`。
+`pkg/job` 基于 Asynq，通过 Redis 投递、延迟和重试任务，由 Worker 消费。任务名与载荷放在 `internal/jobtask` 等生产者和消费者共同可见的位置，处理逻辑放在 `app/worker/internal/handler`。
 
 ## 启用
 
@@ -21,7 +21,7 @@ job:
 
 ## 投递
 
-在装配层把 `*job.Client` 注入 service，调用时携带 context：
+在装配层把 `*job.Client` 注入 service，调用时携带上下文：
 
 ```go
 id, err := client.Enqueue(ctx, jobtask.TaskEcho, jobtask.EchoPayload{
@@ -48,6 +48,6 @@ err := server.Register(jobtask.TaskEcho, func(ctx context.Context, task *asynq.T
 })
 ```
 
-任务处理返回 error，由队列按选项决定重试。需要幂等的写入由业务保证；队列不是业务事务的一部分，数据库提交和入队之间的失败窗口需按场景处理。
+任务处理返回 `error`，由队列按选项决定重试。需要幂等的写入由业务保证；队列不是业务事务的一部分，数据库提交和入队之间的失败窗口需按场景处理。
 
-Payload 保持紧凑，不放长期凭据或完整业务文件。需要同步执行当前请求的扩展逻辑时使用[事件](event.md)，需要按时间触发时使用[计划任务](scheduler.md)。
+任务载荷保持紧凑，不放长期凭据或完整业务文件。需要同步执行当前请求的扩展逻辑时使用[事件](event.md)，需要按时间触发时使用[计划任务](scheduler.md)。

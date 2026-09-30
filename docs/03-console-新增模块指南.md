@@ -1,15 +1,15 @@
 # Console 新增模块指南
 
-本文档是新增 Console 业务模块的 canonical 流程。目标是让一个模块从数据库、后端接口、权限、OpenAPI 到前端页面形成完整闭环。
+本文说明新增 Console 业务模块的标准流程，覆盖数据库、后端接口、权限、OpenAPI 和前端页面。
 
 ## 先判断模块范围
 
-不要求每个模块都做完整 CRUD。先明确本次变更属于哪一种：
+不要求每个模块都提供完整的增删改查（CRUD）。先明确本次变更属于哪一种：
 
 - 只有后端接口：完成 service、handler、路由、权限和 OpenAPI。
 - 只有后台页面：完成前端 API、页面、本地路由和菜单权限。
 - 完整业务模块：按本文全部步骤执行。
-- 仅内部任务：放入 worker/job，不强行增加 Console 页面。
+- 仅内部任务：由 Worker 处理，不强行增加 Console 页面。
 
 ## 后端实施顺序
 
@@ -41,7 +41,7 @@ app/console/internal/service/
 
 - 一个明确的 `XxxService`，只接收实际依赖。
 - 方法接收 `context.Context`。
-- 使用 `Input / Output` 表达复杂输入输出。
+- 使用 `Input` 和 `Output` 表达复杂输入输出。
 - 在 service 中编排事务、缓存、事件和队列。
 - 预期业务错误使用 `pkg/errx`，底层错误用 `WithCause` 保留原因。
 
@@ -57,10 +57,10 @@ app/console/internal/handler/
 
 handler 只负责：
 
-- 使用 `validation.BindJSON/BindQuery/BindURI` 绑定参数。
-- 从 request context 读取当前身份。
+- 使用 `validation.BindJSON`、`validation.BindQuery` 或 `validation.BindURI` 绑定参数。
+- 从请求上下文读取当前身份。
 - 调用 service。
-- 使用 `response.Success/Fail` 输出统一响应。
+- 使用 `response.Success` 或 `response.Fail` 输出统一响应。
 
 不要在 handler 中直接创建数据库、Redis、Job 或 Casbin 实例。
 
@@ -89,11 +89,11 @@ func RegisterArticleRoutes(protected *gin.RouterGroup, dbs *database.Connections
 handler.RegisterArticleRoutes(protected, r.p.DB, pages, catalog)
 ```
 
-`Provider` 只在 router/server 装配边界出现。handler 和 service 只接收实际依赖；如果模块只使用一个数据库，也可以进一步把 `*database.Connections` 收窄为具体的 `*gorm.DB`。列表服务另收 router 里建好的同一份 `pages pagination.Policy`。
+`Provider` 只在路由或服务启动的装配边界出现。handler 和 service 只接收实际依赖；如果模块只使用一个数据库，也可以进一步把 `*database.Connections` 收窄为具体的 `*gorm.DB`。列表服务另接收路由装配层创建的同一份 `pages pagination.Policy`。
 
-所有需要进入 API 权限目录的接口必须注册在 `protected` 组，且不能使用 `.Ignore()`。`route.Name("模块.动作")` 只影响角色授权页的展示文案，不改变实际权限 key。
+所有需要进入 API 权限目录的接口必须注册在 `protected` 组，且不能使用 `.Ignore()`。`route.Name("模块.动作")` 只影响角色授权页的展示文案，不改变实际权限标识。
 
-API 权限 key 固定为：
+API 权限标识固定为：
 
 ```text
 METHOD + 空格 + gin full path
@@ -110,8 +110,8 @@ Console 的文档入口是：
 
 新增或修改接口时同步更新：
 
-1. `app/console/internal/docs/contract.go` 的请求、响应 schema 和 operation。
-2. 路由 contract test，确保 Gin 路由与 OpenAPI 没有缺失或多余。
+1. `app/console/internal/docs/contract.go` 的请求与响应结构（schema）、接口操作（operation）。
+2. 路由契约测试，确保 Gin 路由与 OpenAPI 没有缺失或多余。
 3. 响应结构、状态码和字段错误说明。
 
 不要只让接口能运行而不更新 OpenAPI；文档契约是接口变更的回归门槛。
@@ -134,7 +134,7 @@ web/admin-vben/apps/console/src/api/
 
 列表页优先用 `components/resource-page`：列、搜索、表单和增删改接口都用配置声明。页面特有的部分用插槽补，不必整页手写：
 
-- `#cell="{ column, record }"`：接管某些列的渲染（如状态 Tag）；没接管的列仍按布尔（是/否）或原值显示。
+- `#cell="{ column, record }"`：接管某些列的渲染（如状态标签）；未接管的列仍显示布尔值（是或否）或原值。
 - `#actions="{ record }"`：在操作列追加按钮，按钮多时配合 `action-width`。
 - 表单字段的 `help`、`placeholder`：字段说明与占位提示。
 - 组件 ref 的 `reload()`：自定义操作完成后刷新列表。
@@ -189,14 +189,14 @@ permissionStore.hasApiPermission('DELETE', '/console/v1/articles/:id')
 - 未登录 `401` 和无权限 `403`。
 - 角色授权后可访问，未授权时被拒绝。
 - 资源不存在、唯一冲突和数据库异常。
-- 路由与 OpenAPI contract。
+- 路由与 OpenAPI 契约。
 
 前端至少覆盖：
 
 - API 类型与错误解析。
 - 菜单过滤和默认首页。
 - 按钮权限显隐。
-- 页面 typecheck 和 production build。
+- 页面类型检查和生产构建。
 
 推荐命令：
 
@@ -209,7 +209,11 @@ make verify
 
 ## 用生成器起步
 
-新模块优先从生成器开始，一条命令生成前后端代码；生成模板有回归检查，具体模块仍需验证业务规则、门禁和运行行为：
+新模块优先从生成器开始。生成模板有回归检查；具体模块仍须通过质量检查，并验证业务规则和运行行为。
+
+### 生成代码
+
+以下命令生成前后端基础代码：
 
 ```bash
 go run ./cmd/grove make:module Invoice --label 发票 \
@@ -229,7 +233,9 @@ go run ./cmd/grove make:module Invoice --label 发票 \
 | 菜单路由（顶级菜单 + 列表页） | `src/router/routes/modules/invoices.ts` |
 | 前端契约登记 | 追加到 `src/api/console-contract.json` |
 
-前端部分只在 `console-contract.json` 存在时生成，删掉后台前端的 fork 只拿到后端切片。生成后会用 `web/admin-vben` 自带的 prettier 格式化前端文件；前端依赖还没装时会提示，装好后在 `web/admin-vben` 运行 `pnpm format`。菜单来自前端路由，角色授权页的菜单树直接列出新页面，无需后端登记。
+前端部分只在 `console-contract.json` 存在时生成；已删除后台前端的项目只生成后端代码。生成后会用 `web/admin-vben` 自带的 Prettier 格式化前端文件。如果尚未安装前端依赖，生成器会提示先安装，再到 `web/admin-vben` 运行 `pnpm format`。
+
+菜单来自前端路由，角色授权页的菜单树直接列出新页面，无需后端登记。
 
 字段写法 `name:type[:required]`：
 
@@ -252,11 +258,13 @@ go run ./cmd/grove make:module Invoice --label 发票 \
 2. 按业务补充校验（唯一性、状态流转等）。
 3. 把页面里的列名、表单 `label` 换成中文，按需换菜单图标与排序（默认 `lucide:folder`、`order: 1000`）。
 
-生成器自身有回归测试：在仓库副本里生成模块后，执行后端 `go vet`、Console 路由/OpenAPI/前端契约比对、生成出的 CRUD 测试和方言迁移文件规则，且前端接口模块只调用已登记的 operation。这些测试不执行 Vue typecheck/build、真实数据库迁移或浏览器操作；生成后仍须按本指南完成相应门禁。测试入口与范围见[测试策略](development/testing.md#生成器回归的范围)。
+生成器回归测试会在仓库副本中生成模块，再运行后端 `go vet`、生成的 CRUD 测试、Console 路由与 OpenAPI 及前端契约比对，并检查方言迁移文件规则。前端接口模块也会检查是否只调用已登记的 operation。
+
+这些测试不执行 Vue 类型检查、生产构建、真实数据库迁移或浏览器操作。生成后仍须按本指南完成相应检查，测试入口与范围见[测试策略](development/testing.md#生成器回归的范围)。
 
 ### 命名与自定义表单
 
-`HTTPClient` 生成 `http_client.go`、`http_clients` 和 `http-clients`；字段 `user_id` / `api_url` 生成为 `UserID` / `APIURL`。`InvoiceTest`、`InvoiceLinux` 等名称会生成 Go 特殊后缀，命令会在写文件前拒绝。字段不能与 `Base`、`TableName`、模块更新请求的 ID 字段或其他转换后的字段重名。
+`HTTPClient` 生成 `http_client.go`、`http_clients` 和 `http-clients`；字段 `user_id` 和 `api_url` 分别生成为 `UserID` 和 `APIURL`。`InvoiceTest`、`InvoiceLinux` 等名称会生成 Go 特殊后缀，命令会在写文件前拒绝。字段不能与 `Base`、`TableName`、模块更新请求的 ID 字段或其他转换后的字段重名。
 
 API 统一引用 `types/pagination.ts` 的 `PageParams`、`PageData<T>`，不从某个业务 API 文件借用分页类型。自定义编辑页直接导入组件并传入 `:form-component="ConfigForm"`；组件暴露 `getFormStateData()` 返回提交数据。页面可通过 `transformPayload` 调整载荷，`fixedParams` 固定查询条件。示例见 `views/configs/`。
 
@@ -277,7 +285,7 @@ API 统一引用 `types/pagination.ts` 的 `PageParams`、`PageData<T>`，不从
 
 ### 按钮显隐不正确
 
-- method 没有转为大写或 path 不是完整 `/console/v1/...`。
+- HTTP 方法没有转为大写，或路径不是完整的 `/console/v1/...`。
 - 使用了旧字符串权限，而不是 `hasApiPermission`。
 - 只做了前端隐藏，没有同步后端受保护路由。
 
@@ -287,7 +295,7 @@ API 统一引用 `types/pagination.ts` 的 `PageParams`、`PageData<T>`，不从
 
 1. 迁移和模型（如需要）。
 2. service、handler、受保护路由和 `route.Name`。
-3. OpenAPI schema/operation 和 contract test。
-4. 前端 API、页面、本地路由和菜单 key。
+3. OpenAPI 数据结构、接口操作和契约测试。
+4. 前端 API、页面、本地路由和菜单标识。
 5. 按钮权限和错误回填。
 6. 后端、前端和关键权限路径验证记录。

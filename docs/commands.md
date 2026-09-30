@@ -19,7 +19,7 @@ make help
 - `make run.api`：启动 API，默认监听 `:8080`
 - `make run.console`：启动 Console，默认监听 `:8081`
 - `make run.worker`：启动 Worker，默认监听 `:8082`
-- `make dev.api` / `make dev.console` / `make dev.worker`：同上，但改 Go 代码或 `config.yaml` 后自动重新编译并重启。用 `go run` 固定版本的 air，不进 `go.mod`；首次运行会下载 air，编译产物在 `tmp/`（已忽略）
+- `make dev.api`、`make dev.console`、`make dev.worker`：启动对应服务，并在修改 Go 代码或 `config.yaml` 后自动重新编译和重启。通过 `go run` 使用固定版本的 Air，不写入 `go.mod`；首次运行会下载 Air，编译产物在 `tmp/`（已忽略）
 - `make admin.dev`：启动管理后台前端，开发配置默认监听 `:5666`
 
 Worker 只有在启用 Job 或 Scheduler 后才应启动；默认配置不会让 Worker 空运行。
@@ -30,9 +30,9 @@ Worker 只有在启用 Job 或 Scheduler 后才应启动；默认配置不会让
 - `make migrate.down`：回滚最近一个迁移
 - `make migrate.status`：查看迁移状态
 - `make seed.bootstrap`：创建基础配置和 root 管理员；初始密码读取 `config.yaml` 的 `security.initial_root_password`，不覆盖已有 root 密码
-- `make seed.demo`：写入开发/测试演示数据，production 环境拒绝执行
+- `make seed.demo`：写入开发或测试环境的演示数据，生产环境拒绝执行
 
-迁移和 seed 会根据 `databases.default.driver` 选择对应方言目录：
+迁移和种子会根据 `databases.default.driver` 选择对应方言目录：
 
 ```text
 database/migrations/postgres 或 database/migrations/mysql
@@ -53,18 +53,18 @@ make seed.bootstrap
 - `make test`：Go 全量测试
 - `make fmt`：格式化 Go 代码
 - `make tidy`：整理 Go modules；只在依赖变更后使用
-- `make build`：构建 `bin/api`、`bin/console`、`bin/worker` 与迁移/管理 CLI `bin/grove`
-- `make verify`：Go 测试、后端构建、Console typecheck
-- `make docs.check`：检查 canonical 文档中的 Provider、路由目录和依赖注入示例
-- `make quality`：Go 格式与 vet、文档一致性、前端 lint、循环依赖和当前 diff 空白检查
+- `make build`：构建 `bin/api`、`bin/console`、`bin/worker`，以及用于迁移和管理的 CLI `bin/grove`
+- `make verify`：Go 测试、后端构建、Console 类型检查
+- `make docs.check`：检查当前文档中的 Provider、路由目录和依赖注入示例
+- `make quality`：Go 格式与 `go vet`、文档一致性、前端代码检查、循环依赖和当前差异的空白检查
 - `make ci`：完整质量门禁；先执行 `make admin.install`
 - `make quality.go.lint`：运行 `.golangci.yml` 中配置的 Go lint；经 `go run` 固定为 CI 的 v2.14.0，不必安装
 - `make quality.govuln`：运行 Go 漏洞检查；经 `go run` 固定为 CI 的 v1.6.0。标准库漏洞取决于实际执行的 Go 版本；`go.mod` 声明最低版本，`.mise.toml` 与 CI 固定验证版本
-- `make contracts`：检查 API/Console 路由与 OpenAPI 合同
-- `make admin.install`：按 lockfile 安装前端依赖
+- `make contracts`：检查 API 和 Console 路由与 OpenAPI 契约
+- `make admin.install`：按依赖锁文件安装前端依赖
 - `make admin.typecheck`：Console TypeScript 类型检查
-- `make admin.build`：Console production build
-- `make admin.lint`、`make admin.circular`、`make admin.contract`、`make admin.test`：分别运行前端 lint、循环依赖、Console API 合同检查和 unit 测试
+- `make admin.build`：Console 生产构建
+- `make admin.lint`、`make admin.circular`、`make admin.contract`、`make admin.test`：分别运行前端代码检查、循环依赖检查、Console API 契约检查和单元测试
 
 高风险或合并前建议额外运行：
 
@@ -76,9 +76,16 @@ make quality.govuln
 go test -tags=integration ./tests/integration -v
 ```
 
-GitLab 是 canonical CI，`.github/workflows/ci.yml` 是镜像门禁。GitLab 会安装 `golangci-lint` 和 `govulncheck`，并运行 Go/前端质量检查、PostgreSQL/MySQL Testcontainers 集成测试、Redis contract 与三个后端镜像构建。Testcontainers 与镜像构建要求 GitLab Runner 使用已启用 privileged Docker executor；该条件不满足时应修复 Runner，而不是跳过 Job。
+GitLab 是主要的持续集成（CI）平台，`.github/workflows/ci.yml` 为 GitHub 镜像仓库提供质量检查。GitLab 会安装 `golangci-lint` 和 `govulncheck`，并运行以下检查：
 
-Redis contract 集成测试可单独执行：
+- Go 与前端质量检查。
+- 由 Testcontainers 启动的 PostgreSQL 与 MySQL 集成测试。
+- Redis 契约测试。
+- 三个后端服务的镜像构建。
+
+Testcontainers 与镜像构建要求 GitLab Runner 使用启用特权模式的 Docker 执行器。不满足条件时应修复 Runner 配置，不能跳过任务。
+
+Redis 契约集成测试可单独执行：
 
 ```bash
 CACHE_REDIS_ADDR=127.0.0.1:6379 CACHE_REDIS_DB=15 \
@@ -102,8 +109,8 @@ go run ./cmd/grove rbac repair --dry-run
 
 - `migrate create` 为 postgres 与 mysql 各建一对**同版本**迁移，两棵方言目录始终保持一致，不再依赖 `config.yaml`。
 - `make:module` 生成可运行的后台模块，前后端一起，见 [新增模块指南](03-console-新增模块指南.md#用生成器起步)。
-- `key:generate` 打印新的 `jwt.secret` 与 `security.config_encryption_key`，只输出不改文件：替换已有密钥会让签发过的 token 失效、已加密的系统配置无法解密。
-- `rbac repair` 默认是 dry-run，只有显式传入 `--dry-run=false` 才会修改派生 RBAC 数据。
+- `key:generate` 打印新的 `jwt.secret` 与 `security.config_encryption_key`，只输出不改文件：替换已有密钥会让签发过的令牌失效、已加密的系统配置无法解密。
+- `rbac repair` 默认只预览修复结果，只有显式传入 `--dry-run=false` 才会修改派生 RBAC 数据。
 
 ## 健康与观测端点
 
@@ -111,8 +118,8 @@ go run ./cmd/grove rbac repair --dry-run
 
 - `/health/live`：只表示进程存活
 - `/health/ready`：检查当前服务已启用的依赖
-- `/health`：兼容入口，等价于 live
-- `/metrics`：Prometheus exposition（启用 observability 时）
+- `/health`：兼容入口，等价于存活检查
+- `/metrics`：Prometheus 指标（启用观测能力时）
 
 文档入口：
 

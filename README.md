@@ -6,7 +6,7 @@
 
 **一个带管理后台的 Go 单体脚手架，让新项目从业务开始。**
 
-Grove 把后台开发常用的认证、权限、数据库、上传、日志、队列和管理界面放在同一个仓库。借鉴 Laravel 的开发体验，采用 Go 的显式组合和按需抽象，通过完整 fork / clone 接入新项目。
+Grove 把后台开发常用的认证、权限、数据库、上传、日志、队列和管理界面放在同一个仓库。借鉴 Laravel 的开发体验，采用 Go 的显式组合和按需抽象，通过派生（fork）或克隆（clone）整个仓库接入新项目。
 
 [快速上手](#快速上手) · [开发文档](docs/README.md) · [创建业务模块](docs/03-console-新增模块指南.md) · [参与贡献](CONTRIBUTING.md) · [反馈问题](https://github.com/zhimma/grove/issues)
 
@@ -14,13 +14,13 @@ Grove 把后台开发常用的认证、权限、数据库、上传、日志、�
 
 | 能力 | 已有实现 |
 | --- | --- |
-| 管理后台 | 管理员、终端用户、角色、会话、系统/站点配置、文章示例、审计日志、计划任务页面 |
-| 认证与授权 | JWT access/refresh token、持久化 Session、刷新轮换、强制下线、Casbin API 权限与前端菜单授权 |
+| 管理后台 | 管理员、终端用户、角色、会话、系统与站点配置、文章示例、审计日志、计划任务页面 |
+| 认证与授权 | JWT 访问令牌与刷新令牌、持久化会话、刷新轮换、强制下线、Casbin API 权限与前端菜单授权 |
 | HTTP 开发 | Gin 路由、参数校验、统一响应和错误、分页、请求 ID、OpenAPI 与路由契约检查 |
-| 数据层 | GORM、PostgreSQL/MySQL、命名连接、事务传递、双方言 SQL 迁移、基础与演示种子 |
-| 文件与配置 | Local/S3 存储、上传策略、私有下载、业务配置敏感值加密 |
-| 后台任务 | Asynq 队列、同步/异步事件、Cron 调度、后台启停与手动执行 |
-| 运维基础 | 结构化日志与轮转、readiness、Prometheus、OpenTelemetry、服务镜像 |
+| 数据层 | GORM、PostgreSQL 与 MySQL、命名连接、事务传递、双方言 SQL 迁移、基础与演示种子 |
+| 文件与配置 | 本地与 S3 存储、上传策略、私有下载、业务配置敏感值加密 |
+| 后台任务 | Asynq 队列、同步与异步事件、Cron 调度、后台启停与手动执行 |
+| 运维基础 | 结构化日志与轮转、就绪检查、Prometheus、OpenTelemetry、服务镜像 |
 | 开发工具 | 前后端模块生成、密钥生成、RBAC 检查、热重载、本地依赖 Compose、统一 Makefile 命令 |
 
 后端为 **Go + Gin + GORM**；管理后台为 **Vue 3 + TypeScript + Vite + Ant Design Vue**，基于 Vben Admin。
@@ -35,7 +35,7 @@ Grove 把后台开发常用的认证、权限、数据库、上传、日志、�
 
 ### 1. 准备环境
 
-需要 Go、Node.js/Corepack，以及 PostgreSQL/Redis。仓库固定 Go **1.27.1**、Node.js **20.19.5**；pnpm 由前端 `packageManager` 字段固定。版本分别见 [.mise.toml](.mise.toml) 和 [前端 package.json](web/admin-vben/package.json)。
+需要 Go、Node.js、Corepack、PostgreSQL 和 Redis。仓库固定 Go **1.27.1**、Node.js **20.19.5**；pnpm 由前端 `packageManager` 字段固定。版本分别见 [.mise.toml](.mise.toml) 和[前端 package.json](web/admin-vben/package.json)。
 
 ```bash
 git clone https://github.com/zhimma/grove.git
@@ -49,7 +49,7 @@ mise install
 
 ### 2. 启动依赖并配置
 
-已安装 Docker / OrbStack 时：
+已安装 Docker 或 OrbStack 时：
 
 ```bash
 make deps.up
@@ -84,7 +84,7 @@ make admin.dev
 | --- | --- | --- |
 | Console | `http://localhost:8081` | 管理后台 API |
 | API | `http://localhost:8080` | 对外业务 API 起点，另行执行 `make run.api` |
-| Worker | `http://localhost:8082` | 队列/调度进程的健康端点，另行执行 `make run.worker` |
+| Worker | `http://localhost:8082` | 队列与调度进程的健康端点，另行执行 `make run.worker` |
 | OpenAPI | `http://localhost:8081/console/docs` | Console 接口文档，受 `docs.enabled` 控制 |
 
 确认后端已就绪：
@@ -106,11 +106,11 @@ go run ./cmd/grove make:module Invoice --label 发票 \
 
 生成内容包括：
 
-- PostgreSQL/MySQL 迁移、共享模型、分页 CRUD service 与测试。
+- PostgreSQL 与 MySQL 迁移、共享模型、分页增删改查（CRUD）服务与测试。
 - Handler、路由注册、权限名称和 OpenAPI 声明。
 - 前端 API、契约登记、管理页面和菜单路由（保留 Console 前端时）。
 
-生成器读取目标项目的 `go.mod`，支持 fork 后改 module path。生成后还需补充业务规则、审查并执行迁移，以及验证页面和权限。具体步骤见[新增 Console 模块](docs/03-console-新增模块指南.md)。
+生成器读取目标项目的 `go.mod`，支持派生项目后修改 Go 模块路径。生成后还需补充业务规则、审查并执行迁移，以及验证页面和权限。具体步骤见[新增 Console 模块](docs/03-console-新增模块指南.md)。
 
 ## 项目结构
 

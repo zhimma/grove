@@ -13,7 +13,7 @@ if err := p.Event.ListenFunc("order.created", func(ctx context.Context, raw even
 }
 ```
 
-事件名、listener 和 handler 都会校验。Dispatcher 关闭后不能再注册监听器。
+事件名、监听器和处理函数都会校验。`Dispatcher` 关闭后不能再注册监听器。
 
 ## 同步分发
 
@@ -23,9 +23,9 @@ if err := p.Event.Dispatch(ctx, OrderCreated{OrderID: orderID}); err != nil {
 }
 ```
 
-`Dispatch` 按注册顺序执行当前监听器快照。一个 listener 失败或 panic 不会阻止后续 listener；最终通过 `errors.Join` 返回完整错误集合。
+`Dispatch` 按注册顺序执行当前监听器快照。一个监听器失败或触发 panic 不会阻止后续监听器；最终通过 `errors.Join` 返回完整错误集合。
 
-listener panic 会转换为 `*event.ListenerPanicError`：
+监听器的 panic 会转换为 `*event.ListenerPanicError`：
 
 ```go
 var panicErr *event.ListenerPanicError
@@ -46,7 +46,7 @@ if err := p.Event.DispatchAsync(ctx, OrderCreated{OrderID: orderID}); err != nil
 }
 ```
 
-`DispatchAsync` 会等待有界队列可写；队列持续满时由传入 context 控制等待上限。返回 nil 只表示当前进程已经接受事件，不表示监听器执行成功。
+`DispatchAsync` 会等待有界队列可写；队列持续满时由传入的 `context` 控制等待上限。返回 `nil` 只表示当前进程已经接受事件，不表示监听器执行成功。
 
 ### 非阻塞尝试
 
@@ -61,13 +61,13 @@ if errors.Is(err, event.ErrQueueFull) {
 
 ### Context 语义
 
-异步任务通过 `context.WithoutCancel` 保留 request ID、trace 等 values，但不继承 HTTP 请求的 cancel 和 deadline。已成功入队的事件不会因为响应结束立即取消。
+异步任务通过 `context.WithoutCancel` 保留请求 ID、追踪信息等上下文值，但不继承 HTTP 请求的取消信号和截止时间。已成功入队的事件不会因为响应结束立即取消。
 
-监听器仍应自行设置外部调用 timeout，不能把请求 context 的 deadline 当作后台任务期限。
+监听器仍应自行设置外部调用的超时，不能把请求上下文的截止时间当作后台任务期限。
 
 ## 异步错误观察
 
-异步 listener 的执行错误无法通过入队调用返回。需要指标、告警或测试观察时，创建 Dispatcher 时配置 ErrorHandler：
+异步监听器的执行错误无法通过入队调用返回。需要指标、告警或测试观察时，创建 `Dispatcher` 时配置 `ErrorHandler`：
 
 ```go
 dispatcher := event.New(event.Config{
@@ -80,7 +80,7 @@ dispatcher := event.New(event.Config{
 })
 ```
 
-默认 ErrorHandler 写结构化错误日志。ErrorHandler 自身 panic 会被隔离，不会终止 worker。
+默认 `ErrorHandler` 写入结构化错误日志。`ErrorHandler` 自身的 panic 会被隔离，不会终止事件处理协程。
 
 ## 关闭
 
@@ -94,20 +94,20 @@ if err := dispatcher.Close(); err != nil {
 
 - 拒绝新的注册和分发；
 - 排空已经接受的异步事件；
-- 等待正在执行的同步 Dispatch；
-- 等待所有 worker 退出；
+- 等待正在执行的同步 `Dispatch`；
+- 等待所有事件处理协程退出；
 - 支持并发和重复调用。
 
-Provider 会在关闭基础设施依赖前关闭 Event Dispatcher。
+Provider 会在关闭基础设施依赖前关闭事件分发器。
 
 ## 使用边界
 
 - 异步队列只存在于当前进程，进程崩溃会丢失未处理事件。
-- 同一个事件内的 listener 按注册顺序执行，不同事件可由多个 worker 并行处理。
-- 事件对象入队后不得继续修改；Dispatcher 复制 listener 列表，不复制业务 payload。
-- `Close` 只应由应用生命周期调用，不要在 listener 或 ErrorHandler 内重入关闭同一个 Dispatcher。
+- 同一个事件内的监听器按注册顺序执行，不同事件可由多个协程并行处理。
+- 事件对象入队后不得继续修改；`Dispatcher` 复制监听器列表，不复制业务载荷。
+- `Close` 只应由应用生命周期调用，不要在监听器或 `ErrorHandler` 内重入关闭同一个 `Dispatcher`。
 - 事务提交前不要发送不可撤销事件，避免事务回滚后监听器已经执行。
-- 需要持久化、重试、削峰或跨服务投递时使用队列/Outbox。
+- 需要持久化、重试、削峰或跨服务投递时使用队列；如需 Outbox，须另行实现。
 
 ## 相关文档
 

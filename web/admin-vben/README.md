@@ -1,6 +1,6 @@
 # Grove Console 前端
 
-基于 Vben Admin 的 Vue 3 / TypeScript 管理后台。此工作区只交付 `apps/console`；启动整个项目请从仓库根目录的 [README](../../README.md) 开始。
+基于 Vben Admin 的管理后台，使用 Vue 3 和 TypeScript。此工作区只交付 `apps/console`；启动整个项目请从仓库根目录的 [README](../../README.md) 开始。
 
 ## 开发
 
@@ -23,7 +23,7 @@ make admin.dev
 - `packages/`：Vben UI、状态、请求等工作区包。
 - `internal/`：构建、类型与代码检查配置。
 
-业务模块接入见[新增 Console 模块](../../docs/03-console-新增模块指南.md)，路由 name 是菜单授权 key，不随文件移动而改变。
+业务模块接入见[新增 Console 模块](../../docs/03-console-新增模块指南.md)。路由 `name` 是菜单授权标识，不随文件移动而改变。
 
 ## 验证与发布
 

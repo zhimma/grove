@@ -61,4 +61,4 @@ Grove 是一个 console-first 的中大型 Go 单体脚手架，借鉴 Laravel �
 2. 再读 [docs/architecture.md](docs/architecture.md)、[docs/commands.md](docs/commands.md) 和对应领域指南。
 3. 使用 `rg` 搜索真实符号、路由、配置键和测试；不要只根据旧计划推断。
 4. 先判断是诊断、文档更新还是代码实现，再选择最小改动范围。
-5. 交付前遵循 [贡献指南](CONTRIBUTING.md) 的检查要求。
+5. 交付前遵循[贡献指南](CONTRIBUTING.md)的检查要求；中文文档遵循其中的[写作约定](CONTRIBUTING.md#中文文档写作)。

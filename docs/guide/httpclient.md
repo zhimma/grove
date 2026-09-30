@@ -1,6 +1,6 @@
 # HTTP 客户端
 
-`pkg/httpclient` 用于调用第三方 HTTP API。共享 `Client` 只保存 Transport、基础 URL 和默认超时；header、query、body、retry 和 hook 都属于单次 Request。
+`pkg/httpclient` 用于调用第三方 HTTP API。共享 `Client` 只保存传输层（Transport）、基础 URL 和默认超时；请求头、查询参数、请求体、重试策略和钩子都属于单次 `Request`。
 
 ## 快速开始
 
@@ -39,7 +39,7 @@ resp, err := client.NewRequest(http.MethodPost, "/users").
     DoWithContext(ctx)
 ```
 
-`Post/Put/Patch` 便捷方法仍可直接接收结构体并编码为 JSON：
+`Post`、`Put` 和 `Patch` 便捷方法仍可直接接收结构体并编码为 JSON：
 
 ```go
 resp, err := client.PostWithContext(ctx, "/users", CreateUserRequest{Name: "grove"})
@@ -58,7 +58,7 @@ resp, err := client.NewRequest(http.MethodPost, "/login").
 
 ### Multipart 流式上传
 
-文件路径在发送请求时打开，并通过 pipe 流式写入，不会先完整读入内存：
+文件在发送请求时按路径打开，并通过管道流式写入，不会先完整读入内存：
 
 ```go
 resp, err := client.NewRequest(http.MethodPost, "/upload").
@@ -67,17 +67,17 @@ resp, err := client.NewRequest(http.MethodPost, "/upload").
     DoWithContext(ctx)
 ```
 
-小文件或已有字节内容可使用 `AddFile`。普通 JSON/body 不能和 multipart 文件混用。
+小文件或已有字节内容可使用 `AddFile`。普通 JSON 或其他请求体不能和 multipart 文件混用。
 
 ## 重试与幂等性
 
 - GET、HEAD、OPTIONS 默认最多重试 2 次。
-- 默认重试 transport error 和 5xx，不重试 4xx。
+- 默认重试传输错误和 5xx 响应，不重试 4xx 响应。
 - POST、PUT、PATCH、DELETE 默认不重试。
-- 非幂等请求必须显式设置 retry policy 或 idempotency key。
-- backoff 会响应 context 取消。
+- 非幂等请求必须显式设置重试策略或幂等键。
+- 重试间隔的等待会响应上下文取消。
 
-显式 retry policy：
+显式设置重试策略：
 
 ```go
 resp, err := client.NewRequest(http.MethodPost, "/jobs").
@@ -86,7 +86,7 @@ resp, err := client.NewRequest(http.MethodPost, "/jobs").
     DoWithContext(ctx)
 ```
 
-幂等 key 会写入 `Idempotency-Key`，并允许使用默认 retry policy：
+幂等键会写入 `Idempotency-Key`，并允许使用默认重试策略：
 
 ```go
 resp, err := client.NewRequest(http.MethodPost, "/orders").
@@ -95,7 +95,7 @@ resp, err := client.NewRequest(http.MethodPost, "/orders").
     DoWithContext(ctx)
 ```
 
-任意 `io.Reader` body 默认只可消费一次；如果请求需要重试，会返回 `ErrBodyNotReplayable`。字符串、字节、JSON、Form 和 multipart 文件路径可重新创建请求体。
+任意 `io.Reader` 请求体默认只可消费一次；如果请求需要重试，会返回 `ErrBodyNotReplayable`。字符串、字节、JSON、表单和 multipart 文件路径可用于重新创建请求体。
 
 ## 响应大小限制
 
@@ -110,7 +110,7 @@ if errors.Is(err, httpclient.ErrResponseTooLarge) {
 }
 ```
 
-4xx 返回可检查的 `Response` 和 nil error。5xx 重试耗尽后同时返回最后一个 `Response` 和 error。
+4xx 响应返回可检查的 `Response`，错误为 `nil`。5xx 响应重试耗尽后，同时返回最后一个 `Response` 和错误。
 
 ## 流式读取和下载
 
@@ -130,7 +130,7 @@ err := client.NewRequest(http.MethodGet, "/report").
     DownloadToFile(ctx, "/tmp/report.pdf")
 ```
 
-无请求级 header/query 时，也可使用：
+无需设置单次请求的请求头或查询参数时，也可使用：
 
 ```go
 err := client.DownloadToFile("https://example.com/file.pdf", "/tmp/file.pdf")
@@ -167,4 +167,4 @@ client := httpclient.New(httpclient.Config{
 })
 ```
 
-默认 Transport 已配置环境代理、连接池、dial timeout、TLS handshake timeout、response header timeout 和 idle timeout。
+默认 Transport 已配置环境代理、连接池，以及连接、TLS 握手、响应头读取和空闲连接超时。
