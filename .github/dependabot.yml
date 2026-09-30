@@ -1,20 +1,22 @@
 version: 2
 
+# Version-update PRs are paused to keep automated update branches from being
+# recreated after cleanup. CI vulnerability scanning remains enabled.
 updates:
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
 
   - package-ecosystem: npm
     directory: /web/admin-vben
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
